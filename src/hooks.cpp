@@ -130,6 +130,18 @@ volatile uint64_t *Flag(const char *name)
 
 const void *ImageBase() { return gImage; }
 
+bool IsCallTo(uint32_t retOffset, const char *mangledName)
+{
+	const auto *base = reinterpret_cast<const uint8_t *>(gImage);
+	const auto *fn = static_cast<const uint8_t *>(dlsym(RTLD_MAIN_ONLY, mangledName));
+	if (!base || !fn)
+		return false;
+	uint32_t insn;
+	memcpy(&insn, base + retOffset - 4, 4);
+	const int32_t imm = int32_t(insn << 6) >> 6;
+	return (insn & 0xFC000000) == 0x94000000 && base + retOffset - 4 + intptr_t(imm) * 4 == fn;
+}
+
 void UninstallAll()
 {
 	if (!gTable)

@@ -3,11 +3,14 @@
 #include "game.h"
 #include "hooks.h"
 #include "log.h"
+#include "menu.h"
+#include "text.h"
 
 #include <algorithm>
+#include <cmath>
 #include <cstdio>
+#include <cstdlib>
 #include <cstring>
-#include <dlfcn.h>
 
 using namespace game;
 
@@ -31,6 +34,10 @@ constexpr float kStarScale = 0.5f;
 constexpr float kClockScale = 0.3f; // relative to the vanilla clock
 constexpr CRGBA kClockText{240, 242, 245, 255};
 constexpr CRGBA kClockBox{0, 0, 0, 190};
+constexpr float kPillTextScale = 0.36f; // relative to the vanilla clock
+constexpr CRGBA kPillFill{0, 0, 0, 205};
+constexpr float kShopRadius = 9.0f;     // around Ammu-Nation counter pickups
+constexpr float kPropertyRadius = 3.0f; // around a "for sale" pickup
 
 void (*orig_PrintString)(float, float, uint16_t *);
 void (*orig_SetScale)(float, float);
@@ -47,6 +54,9 @@ float gStarMinX = 1e9f, gStarMaxX = -1e9f, gStarY; // vanilla star anchors (righ
 int gStarScreenW;
 Vec2 gClockScaleXY;
 bool gHaveClockScale;
+float gMoneyAlpha;     // money pill fade, 0..1
+bool gTestMoney;       // VCMINIMAP_TEST_MONEY: always show the money pill
+uint32_t gLastPillMs;
 
 template <size_t N>
 Site Find(const CallSite (&sites)[N], const void *ret)
@@ -62,16 +72,11 @@ Site Find(const CallSite (&sites)[N], const void *ret)
 template <size_t N>
 bool Verify(const CallSite (&sites)[N], const char *symbol)
 {
-	const auto *fn = static_cast<const uint8_t *>(dlsym(RTLD_MAIN_ONLY, symbol));
-	for (const CallSite &s : sites) {
-		uint32_t insn;
-		memcpy(&insn, gText + s.ret - 4, 4);
-		const int32_t imm = int32_t(insn << 6) >> 6;
-		if ((insn & 0xFC000000) != 0x94000000 || gText + s.ret - 4 + intptr_t(imm) * 4 != fn) {
+	for (const CallSite &s : sites)
+		if (!hooks::IsCallTo(s.ret, symbol)) {
 			Log("hud: call site 0x%x is not a call to %s", s.ret, symbol);
 			return false;
 		}
-	}
 	return true;
 }
 
@@ -99,9 +104,57 @@ bool StarSource(Vec2 &src)
 	return true;
 }
 
+// Standing at an Ammu-Nation counter or a property for sale.
+bool MoneyUsableHere()
+{
+	const uint8_t *ped = api.FindPlayerPed();
+	if (!ped || PedInVehicle(ped))
+		return false;
+	const CVector &me = EntityPos(ped);
+	for (int i = 0; i < kNumPickups; i++) {
+		const uint8_t *p = Pickup(i);
+		const uint8_t type = p[0x36];
+		const bool shop = type == kPickupInShop || type == kPickupInShopOutOfStock;
+		if ((!shop && type != kPickupPropertyForSale) || p[0x37] /* removed */)
+			continue;
+		const CVector &at = PickupPos(p);
+		const float radius = shop ? kShopRadius : kPropertyRadius;
+		const float dx = at.x - me.x, dy = at.y - me.y;
+		if (dx * dx + dy * dy < radius * radius && fabsf(at.z - me.z) < 3.0f)
+			return true;
+	}
+	return false;
+}
+
+// "$1,234,567"
+void FormatMoney(int32_t money, char *out, size_t size)
+{
+	char digits[16];
+	snprintf(digits, sizeof digits, "%lld", std::llabs(static_cast<long long>(money)));
+	const size_t n = strlen(digits);
+	size_t o = 0;
+	if (money < 0 && o + 1 < size)
+		out[o++] = '-';
+	if (o + 1 < size)
+		out[o++] = '$';
+	for (size_t i = 0; i < n && o + 1 < size; i++) {
+		if (i > 0 && (n - i) % 3 == 0 && o + 2 < size)
+			out[o++] = ',';
+		out[o++] = digits[i];
+	}
+	out[o] = '\0';
+}
+
+text::Style HudText(float scale, CRGBA colour, bool proportional)
+{
+	return {2, gClockScaleXY.x * scale, gClockScaleXY.y * scale, colour, proportional};
+}
+
 __attribute__((noinline)) void Hook_PrintString(float x, float y, uint16_t *str)
 {
-	switch (gActive ? Find(kPrintSites, __builtin_return_address(0)) : kNone) {
+	const void *ret = __builtin_return_address(0);
+	menu::AdjustText(ret, x, y);
+	switch (gActive ? Find(kPrintSites, ret) : kNone) {
 	case kMoney:
 		return;
 	case kClock:
@@ -140,7 +193,9 @@ __attribute__((noinline)) void Hook_PrintString(float x, float y, uint16_t *str)
 
 __attribute__((noinline)) void Hook_SetScale(float sx, float sy)
 {
-	switch (gActive ? Find(kScaleSites, __builtin_return_address(0)) : kNone) {
+	const void *ret = __builtin_return_address(0);
+	menu::AdjustScale(ret, sx, sy);
+	switch (gActive ? Find(kScaleSites, ret) : kNone) {
 	case kAmmo:
 		sx *= kWeaponScale;
 		sy *= kWeaponScale;
@@ -184,6 +239,7 @@ __attribute__((noinline)) void Hook_DrawUV(const CSprite2d *sprite, const float 
 bool Install()
 {
 	gText = reinterpret_cast<const uint8_t *>(hooks::ImageBase());
+	gTestMoney = getenv("VCMINIMAP_TEST_MONEY") != nullptr;
 	if (!gText || !Verify(kPrintSites, "_ZN5CFont11PrintStringEffPt") || !Verify(kScaleSites, "_ZN5CFont8SetScaleEff") ||
 	    !Verify(kDrawSites, "_ZN9CSprite2d4DrawERK5CRectRK5CRGBAffffffff"))
 		return false;
@@ -203,38 +259,48 @@ void DrawClock(Canvas &canvas, float mapX, float mapY, float mapW, float mapH)
 {
 	if (!gActive || !gHaveClockScale)
 		return;
-	char ascii[8];
-	snprintf(ascii, sizeof ascii, "%02d:%02d", *api.clockHours, *api.clockMinutes);
-	uint16_t text[8];
-	api.AsciiToUnicode(ascii, text);
+	char label[8];
+	snprintf(label, sizeof label, "%02d:%02d", *api.clockHours, *api.clockMinutes);
+	const text::Style style = HudText(kClockScale, kClockText, false);
 
-	api.FontSetBackgroundOff();
-	api.FontSetBackGroundOnlyTextOff();
-	api.FontSetPropOff();
-	api.FontSetFontStyle(2);
-	api.FontSetJustifyOff();
-	api.FontSetCentreOff();
-	api.FontSetRightJustifyOn();
-	api.FontSetRightJustifyWrap(0.0f);
-	api.FontSetDropShadowPosition(0);
-	api.FontSetScale(gClockScaleXY.x * kClockScale, gClockScaleXY.y * kClockScale);
-	api.FontSetColor(kClockText);
-
-	// Box hugging the text: width from the font, height from its text rect
-	// (whose horizontal extent runs to the wrap edge, so it isn't used).
+	// A box hugging the text, in the map's top-right corner.
 	const float inset = std::max(3.0f, mapH * 0.03f);
 	const float right = mapX + mapW - inset * 2.0f, top = mapY + inset * 2.0f;
-	const float width = api.FontGetStringWidth(text, true);
-	float rect[4];
-	api.FontGetTextRect(rect, right, top, text);
-	const float padX = std::max(2.0f, (std::max(rect[1], rect[3]) - std::min(rect[1], rect[3])) * 0.2f);
-	const float y0 = std::min(rect[1], rect[3]), y1 = std::max(rect[1], rect[3]);
+	const float left = right - text::Width(label, style);
+	float y0, y1;
+	text::LineExtent(style, top, y0, y1);
+	const float padX = std::max(2.0f, (y1 - y0) * 0.2f);
 	canvas.SetTexture(nullptr);
-	canvas.Quad({right - width - padX, y0}, {right + padX, y0}, {right + padX, y1}, {right - width - padX, y1},
-	            kClockBox);
+	canvas.Quad({left - padX, y0}, {right + padX, y0}, {right + padX, y1}, {left - padX, y1}, kClockBox);
 	canvas.Flush();
 	// Queued for CFont::DrawFonts later this frame, so it lands on the box.
-	api.FontPrintString(right, top, text);
+	text::Draw(left, top, label, style);
+}
+
+void DrawPills(Canvas &canvas, float mapX, float mapY, float mapW, float mapH)
+{
+	const uint32_t now = *api.timeMs;
+	const float dt = gLastPillMs && now >= gLastPillMs ? std::min(now - gLastPillMs, 100u) / 1000.0f : 0.0f;
+	gLastPillMs = now;
+	const bool want = gActive && gConfig.moneyPill && (gTestMoney || MoneyUsableHere());
+	gMoneyAlpha = want ? std::min(1.0f, gMoneyAlpha + dt / 0.2f) : std::max(0.0f, gMoneyAlpha - dt / 0.35f);
+	if (!gActive || !gHaveClockScale || gMoneyAlpha <= 0.0f)
+		return;
+
+	char label[24];
+	FormatMoney(VisibleMoney(PlayerInfo()), label, sizeof label);
+	const auto fade = [](uint8_t a) { return uint8_t(a * gMoneyAlpha); };
+	const text::Style style = HudText(kPillTextScale, {255, 255, 255, fade(255)}, true);
+	float t, b;
+	text::LineExtent(style, 0.0f, t, b);
+	// Pills stack upwards from the map's bottom edge, just right of it.
+	const float h = (b - t) * 1.25f;
+	const float w = text::Width(label, style) + h; // half a height of padding per rounded end
+	const float x = mapX + mapW + std::max(4.0f, mapH * 0.035f), y = mapY + mapH - h;
+	canvas.SetTexture(nullptr);
+	canvas.Pill(x, y, w, h, {kPillFill.r, kPillFill.g, kPillFill.b, fade(kPillFill.a)});
+	canvas.Flush();
+	text::Draw(x + h * 0.5f, y + h * 0.5f - (t + b) * 0.5f, label, style);
 }
 
 } // namespace hud

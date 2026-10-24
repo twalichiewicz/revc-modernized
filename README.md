@@ -5,7 +5,8 @@ A GTA VI-style HUD for the native Apple Silicon port of **Grand Theft Auto: Vice
 - a rectangular, tilted 3D minimap with real building shapes,
 - GPS guidance to your waypoint or mission objective,
 - health, armour and stamina bars under the map,
-- a cleaner HUD around it.
+- a cleaner HUD around it,
+- a GTA IV-style pause menu that opens straight on the map.
 
 ![In game](docs/hud.jpg)
 
@@ -30,11 +31,18 @@ A GTA VI-style HUD for the native Apple Silicon port of **Grand Theft Auto: Vice
   top-right.
 - **HUD layout.**
   - The clock moves onto the map.
-  - Money is hidden.
+  - Money only shows where you can spend it: a small Red Dead 2-style pill to the right of the map appears
+    at an Ammu-Nation counter or a property for sale.
   - The weapon and ammo are half size in the top-right corner.
   - Wanted stars appear centred at the top, only while you are wanted.
-- **Controller fix.** On the pause-menu map, A (Xbox) or ✕ (PlayStation) places a waypoint without also
-  closing the map.
+- **Pause menu, GTA IV style.**
+  - Pausing opens the map directly. Brief, Stats, Game (resume, load, quit) and Options are tabs across the
+    top: switch with LB/RB, Q/E or a click.
+  - Back on a tab returns to the game. With a controller, Back is Circle (B on Xbox) instead of the PS2's
+    Triangle (Y).
+  - The map legend is a small panel in the bottom-right corner instead of covering the map.
+  - On the map, A (Xbox) or ✕ (PlayStation) places a waypoint without also closing it. LT and RT zoom,
+    since RB now switches tabs.
 
 ## Requirements
 
@@ -94,6 +102,10 @@ This restores the original binary and removes the plugin. Your saves are never t
   | `BuildingHeight` | 0.6 | 1 is true height |
   | `Bars` | 1 | health/armour/stamina under the map |
   | `Hud` | 1 | clock on the map, no money, small weapon and stars |
+  | `MoneyPill` | 1 | money next to the map in shops and at property for sale |
+  | `PauseTabs` | 1 | pause menu opens on the map, other pages as tabs |
+  | `CompactLegend` | 1 | small map legend in the corner of the pause map |
+  | `CircleBack` | 1 | Circle (B) goes back in menus; 0 restores Triangle (Y) |
   | `Margin` | 0.025 | gap to the screen corner (fraction of screen height) |
   | `Tilt` | 50 | degrees of 3D tilt; 0 is flat |
   | `Zoom` | 1.5 | higher is closer |
@@ -115,6 +127,9 @@ hooks are written to disk:
   missing (it is loaded as a weak dylib), the slots stay empty and the game runs its original code.
 - **HUD elements.** Two "skip" patches hide the top-right health and armour. Other HUD elements are recognised
   by where they are called from in `CHud::Draw`.
+- **Pause menu.** `src/menu.cpp` opens the frontend on the map page, draws the tabs after each frontend frame
+  and switches pages through the game's own `CMenuManager::SwitchToNewScreen`. The legend's drawing calls
+  in `CMenuManager::PrintMap` and `CRadar::DrawLegend` are moved and scaled into the corner.
 
 The plugin (`src/`) replaces `CRadar::DrawRadarMap` with its own scene (`src/scene.cpp`):
 
@@ -150,9 +165,10 @@ Developer switches (environment variables, e.g. `open --env VAR=value "Grand The
 - `VCMINIMAP_DUMP_ROADS=path` writes the game's road network, which the preview uses for routing.
 - `VCMINIMAP_TEST_WAYPOINT=dx,dy` places a waypoint relative to the player.
 - `VCMINIMAP_TEST_WANTED=n` sets a wanted level.
+- `VCMINIMAP_TEST_MONEY=1` always shows the money pill.
 
 Struct offsets, symbols and call sites were read from the 1.0.5217 binary. Supporting another build means
-re-deriving them; see `src/game.h`, `src/hud.cpp` and `tools/patch_macvc.py`.
+re-deriving them; see `src/game.h`, `src/hud.cpp`, `src/menu.cpp` and `tools/patch_macvc.py`.
 
 ## Disclaimer
 

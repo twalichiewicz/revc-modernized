@@ -18,6 +18,10 @@ const char kDefaultIni[] = "; GTA VI-style minimap for macVC. Delete this file t
                            "BuildingHeight=0.6   ; 1 = true height\n"
                            "Bars=1               ; health/armour/stamina under the map\n"
                            "Hud=1                ; clock on the map, no money, small weapon + stars\n"
+                           "MoneyPill=1          ; show money next to the map in shops / at property for sale\n"
+                           "PauseTabs=1          ; pause menu opens on the map; Q/E or LB/RB switch tabs\n"
+                           "CompactLegend=1      ; small map legend in the corner of the pause map\n"
+                           "CircleBack=1         ; Circle (B on Xbox) goes back in menus; 0 = Triangle (Y) like the PS2\n"
                            "Margin=0.025         ; distance from the screen corner\n"
                            "Tilt=50              ; degrees of 3D tilt, 0 = flat\n"
                            "Zoom=1.5             ; higher = closer\n"
@@ -42,6 +46,14 @@ void Apply(const char *key, const char *value)
 		gConfig.bars = b;
 	else if (!strcasecmp(key, "Hud"))
 		gConfig.hud = b;
+	else if (!strcasecmp(key, "MoneyPill"))
+		gConfig.moneyPill = b;
+	else if (!strcasecmp(key, "PauseTabs"))
+		gConfig.pauseTabs = b;
+	else if (!strcasecmp(key, "CompactLegend"))
+		gConfig.compactLegend = b;
+	else if (!strcasecmp(key, "CircleBack"))
+		gConfig.circleBack = b;
 	else if (!strcasecmp(key, "Margin") && f >= 0.0f && f < 0.3f)
 		gConfig.margin = f;
 	else if (!strcasecmp(key, "Tilt"))

@@ -23,6 +23,10 @@ void UninstallAll();
 // The running game's Mach-O header (= its __TEXT base); valid after Init.
 const void *ImageBase();
 
+// For hooks that recognise their caller by return address: true if the
+// instruction before image base + `retOffset` is a `bl` to `mangledName`.
+bool IsCallTo(uint32_t retOffset, const char *mangledName);
+
 template <typename Fn>
 bool Install(const char *mangledName, Fn replacement, Fn &original)
 {

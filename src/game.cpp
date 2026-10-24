@@ -104,12 +104,28 @@ bool Resolve()
 	Bind(api.FontGetStringWidth, "_ZN5CFont14GetStringWidthEPtb");
 	Bind(api.FontGetTextRect, "_ZN5CFont11GetTextRectEP5CRectffPt");
 	Bind(api.AsciiToUnicode, "_Z14AsciiToUnicodePKcPt");
+	Bind(api.FontSetPropOn, "_ZN5CFont9SetPropOnEv");
+	Bind(api.FontSetWrapx, "_ZN5CFont8SetWrapxEf");
+	Bind(api.fontDetails, "_ZN5CFont7DetailsE");
+	Bind(api.FontDrawFonts, "_ZN5CFont9DrawFontsEv");
+	Bind(api.menuScreens, "aScreens");
+	Bind(api.menuFrame, "menuBg");
+	Bind(api.SwitchToNewScreen, "_ZN12CMenuManager17SwitchToNewScreenEa");
+	Bind(api.RequestFrontEndShutDown, "_ZN12CMenuManager23RequestFrontEndShutDownEv");
+	Bind(api.GetOptionCount, "_Z14GetOptionCounti");
+	Bind(api.dmAudio, "DMAudio");
+	Bind(api.PlayFrontEndSound, "_ZN8cDMAudio17PlayFrontEndSoundEtj");
+	Bind(api.newKeyState, "_ZN4CPad11NewKeyStateE");
+	Bind(api.oldKeyState, "_ZN4CPad11OldKeyStateE");
+	Bind(api.newMouseState, "_ZN4CPad23NewMouseControllerStateE");
+	Bind(api.oldMouseState, "_ZN4CPad23OldMouseControllerStateE");
 	Bind(api.clockHours, "_ZN6CClock18ms_nGameClockHoursE");
 	Bind(api.clockMinutes, "_ZN6CClock20ms_nGameClockMinutesE");
 
 	Bind(api.FindPlayerPed, "_Z13FindPlayerPedv");
 	Bind(api.worldPlayers, "_ZN6CWorld7PlayersE");
 	Bind(api.playerInFocus, "_ZN6CWorld13PlayerInFocusE");
+	Bind(api.pickups, "_ZN8CPickups8aPickUpsE");
 	return gOk;
 }
 

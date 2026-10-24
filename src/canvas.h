@@ -26,4 +26,6 @@ public:
 	void Fan(const Vtx *v, int n, CRGBA col);
 	void Quad(Vec2 a, Vec2 b, Vec2 c, Vec2 d, CRGBA col);
 	void VerticalGradient(float x, float y, float w, float h, CRGBA top, CRGBA bottom);
+	// Rectangle with fully rounded ends (a circle when w <= h).
+	void Pill(float x, float y, float w, float h, CRGBA col);
 };

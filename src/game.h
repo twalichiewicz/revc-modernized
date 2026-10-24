@@ -159,12 +159,28 @@ struct Api {
 	float (*FontGetStringWidth)(uint16_t *text, bool spaces);
 	void (*FontGetTextRect)(float *rect, float x, float y, uint16_t *text); // CRect*
 	void (*AsciiToUnicode)(const char *, uint16_t *);
+	void (*FontSetPropOn)();
+	void (*FontSetWrapx)(float);
+	uint8_t *fontDetails; // CFont::Details: wrap x at +0x2c
+	void (*FontDrawFonts)();
 	uint8_t *clockHours, *clockMinutes;
+
+	// frontend
+	uint8_t *menuScreens; // aScreens (CMenuScreen[], see MenuPageEntry)
+	float *menuFrame;     // menuBg: the pause screens' slanted frame, 4 corners in 640x448 units
+	void (*SwitchToNewScreen)(uint8_t *menu, int8_t page); // 0: the current entry's target, -2: back
+	void (*RequestFrontEndShutDown)(uint8_t *menu);
+	int (*GetOptionCount)(int page);
+	uint8_t *dmAudio;
+	void (*PlayFrontEndSound)(uint8_t *audio, uint16_t sound, uint32_t volume);
+	uint8_t *newKeyState, *oldKeyState;     // CKeyboardState: int16 F[12], then VK_KEYS[256]
+	uint8_t *newMouseState, *oldMouseState; // CMouseControllerState: LMB at +0
 
 	// player
 	uint8_t *(*FindPlayerPed)();
 	uint8_t *worldPlayers; // CWorld::Players, CPlayerInfo[] with stride 0x1a0
 	uint8_t *playerInFocus;
+	uint8_t *pickups;      // CPickups::aPickUps, CPickup[kNumPickups]
 };
 
 extern Api api;
@@ -172,15 +188,67 @@ extern Api api;
 bool Resolve();
 
 inline bool MenuMapActive() { return api.frontEndMenuManager[0x35] != 0; }
-constexpr int32_t kMenuPageMap = 6; // CMenuManager::m_nCurrScreen (+0x16c)
+
+// --- frontend (CMenuManager, aScreens) ---------------------------------------
+enum MenuPage : int32_t {
+	kPageStats = 0,
+	kPageStartGame = 1, // new / load / delete game
+	kPageBriefs = 2,
+	kPageMap = 6,
+	kPageOptions = 27,
+	kPagePause = 32,
+	kPageNone = 33, // as a previous page: the pause menu in game, else the main menu
+};
+constexpr size_t kMenuPageSize = 752; // CMenuScreen
+constexpr int kMenuEntries = 18;
+constexpr size_t kMenuEntrySize = 40; // CMenuEntry: action at +0, name[8] at +4, target page at +28
+inline uint8_t *MenuPageEntry(int32_t page, int entry)
+{
+	return api.menuScreens + size_t(page) * kMenuPageSize + 32 + size_t(entry) * kMenuEntrySize;
+}
+inline int32_t MenuPreviousPage(int32_t page)
+{
+	return *reinterpret_cast<const int32_t *>(api.menuScreens + size_t(page) * kMenuPageSize + 8);
+}
+inline int32_t &MenuScreen(uint8_t *menu) { return *reinterpret_cast<int32_t *>(menu + 0x16c); }
 inline int32_t MenuScreen(const uint8_t *menu) { return *reinterpret_cast<const int32_t *>(menu + 0x16c); }
-inline int ScreenWidth() { return *reinterpret_cast<const int32_t *>(api.rsGlobal + 8); }
-inline int ScreenHeight() { return *reinterpret_cast<const int32_t *>(api.rsGlobal + 0xc); }
-// CPad: NewState then OldState (CControllerState, 0x2a bytes); Cross at +0x20.
+inline int32_t &MenuOption(uint8_t *menu) { return *reinterpret_cast<int32_t *>(menu + 0x30); }
+inline int32_t &MenuOptionCount(uint8_t *menu) { return *reinterpret_cast<int32_t *>(menu + 0x6f8); }
+inline bool MenuActive(const uint8_t *menu) { return menu[0x38] != 0; }
+inline bool MenuGameNotLoaded(const uint8_t *menu) { return menu[0x6c] != 0; }
+inline int MenuMouseX(const uint8_t *menu) { return *reinterpret_cast<const int32_t *>(menu + 0x1a0); }
+inline int MenuMouseY(const uint8_t *menu) { return *reinterpret_cast<const int32_t *>(menu + 0x1a4); }
+constexpr uint16_t kSoundMenuHighlight = 0xc3;
+
+// --- input -------------------------------------------------------------------
+inline bool KeyDown(const uint8_t *state, int c) { return *reinterpret_cast<const int16_t *>(state + 24 + 2 * c) != 0; }
+// VK_KEYS is indexed by character, and the game checks both cases.
+inline bool CharJustDown(char upper)
+{
+	const char lower = char(upper - 'A' + 'a');
+	return (KeyDown(api.newKeyState, upper) && !KeyDown(api.oldKeyState, upper)) ||
+	       (KeyDown(api.newKeyState, lower) && !KeyDown(api.oldKeyState, lower));
+}
+inline bool LeftClickJustDown() { return api.newMouseState[0] && !api.oldMouseState[0]; }
+// CPad: NewState then OldState (CControllerState, 0x2a bytes of int16 buttons).
+enum PadButton : int {
+	kPadLB = 0x8,
+	kPadLT = 0xa,
+	kPadRB = 0xc,
+	kPadTriangle = 0x1e,
+	kPadCross = 0x20,
+	kPadCircle = 0x22,
+};
+constexpr int kPadOldState = 0x2a;
+inline int16_t &PadNew(uint8_t *pad, PadButton b) { return *reinterpret_cast<int16_t *>(pad + b); }
+inline int16_t &PadOld(uint8_t *pad, PadButton b) { return *reinterpret_cast<int16_t *>(pad + kPadOldState + b); }
 inline bool CrossJustDown(const uint8_t *pad)
 {
-	return *reinterpret_cast<const int16_t *>(pad + 0x20) && !*reinterpret_cast<const int16_t *>(pad + 0x4a);
+	auto at = [pad](int off) { return *reinterpret_cast<const int16_t *>(pad + off); };
+	return at(kPadCross) && !at(kPadOldState + kPadCross);
 }
+inline int ScreenWidth() { return *reinterpret_cast<const int32_t *>(api.rsGlobal + 8); }
+inline int ScreenHeight() { return *reinterpret_cast<const int32_t *>(api.rsGlobal + 0xc); }
 // CPed / CPlayerPed / CPlayerInfo fields (see CHud::Draw, CPlayerPed::UseSprintEnergy,
 // CPlayerInfo::SavePlayerInfo).
 inline float PedField(const uint8_t *ped, int off) { return *reinterpret_cast<const float *>(ped + off); }
@@ -192,6 +260,13 @@ inline const uint8_t *PlayerInfo() { return api.worldPlayers + size_t(*api.playe
 inline bool InfiniteSprint(const uint8_t *info) { return info[0x16c] != 0; }
 inline int MaxHealth(const uint8_t *info) { return info[0x16f]; }
 inline int MaxArmour(const uint8_t *info) { return info[0x170]; }
+// The HUD's money, counting towards the real amount at +0xc8.
+inline int32_t VisibleMoney(const uint8_t *info) { return *reinterpret_cast<const int32_t *>(info + 0xcc); }
+// CPickup (64 bytes, see CPickups::GenerateNewOne): position at +0, type at +0x36, removed at +0x37.
+constexpr int kNumPickups = 336;
+enum PickupType : uint8_t { kPickupInShop = 1, kPickupInShopOutOfStock = 7, kPickupPropertyForSale = 18 };
+inline const uint8_t *Pickup(int i) { return api.pickups + size_t(i) * 64; }
+inline const CVector &PickupPos(const uint8_t *p) { return *reinterpret_cast<const CVector *>(p); }
 inline int32_t RadarMode() { return *reinterpret_cast<int32_t *>(api.frontEndMenuManager + 0xc); }
 inline const CSprite2d *RadarDiscSprite() { return reinterpret_cast<const CSprite2d *>(api.hudSprites + 0x190); }
 inline const CVector &EntityPos(const uint8_t *entity) { return *reinterpret_cast<const CVector *>(entity + 0x38); }

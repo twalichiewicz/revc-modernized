@@ -58,6 +58,12 @@ DEFAULT_HOOKS = [
     "_ZN5CFont11PrintStringEffPt",
     "_ZN5CFont8SetScaleEff",
     "_ZN9CSprite2d4DrawERK5CRectRK5CRGBAffffffff",
+    # pause menu: tabs, compact map legend
+    "_ZN12CMenuManager14DrawBackgroundEb",
+    "_ZN12CMenuManager9UserInputEv",
+    "_ZN9CSprite2d8DrawRectERK5CRectRK5CRGBA",
+    "_ZN9CSprite2d13Draw2DPolygonEffffffffRK5CRGBA",
+    "_ZN6CRadar10DrawLegendEiii",
 ]
 
 # Flag-controlled skips inside CHud::Draw: (name, instruction address, expected

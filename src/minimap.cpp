@@ -12,10 +12,9 @@
 //   CSprite2d::Draw                   -> skips the round radar ring
 //   CHud::Draw                        -> hides the top-right health/armour (skip
 //                                        patches) while our bars are shown
-//   CMenuManager::ProcessUserInput    -> Cross on the pause map only sets the
-//                                        waypoint instead of also picking "Back"
 // Everything falls through to the original whenever the pause-menu map is
 // open, the radar mode is not "map & blips", or the minimap is disabled.
+// The rest of the HUD is in hud.cpp, the pause menu in menu.cpp.
 #include "config.h"
 #include "draw.h"
 #include "game.h"
@@ -24,6 +23,7 @@
 #include "hud.h"
 #include "log.h"
 #include "mapdata.h"
+#include "menu.h"
 #include "projection.h"
 #include "scene.h"
 
@@ -49,7 +49,6 @@ void (*orig_DrawEntityBlip)(int);
 void (*orig_TransformRadarPointToScreenSpace)(CVector2D &, const CVector2D &);
 void (*orig_SpriteDraw)(const CSprite2d *, const CRect &, const CRGBA &);
 void (*orig_HudDraw)();
-void (*orig_ProcessUserInput)(uint8_t *, uint8_t, uint8_t, uint8_t, uint8_t, int8_t);
 volatile uint64_t *gHideHealth, *gHideArmour; // skip patches in CHud::Draw
 
 mapdata::Map gMap;      // baked by tools/bake at install time
@@ -223,6 +222,7 @@ bool MinimapActive() { return gConfig.enabled && !MenuMapActive() && RadarMode()
 // First HUD frame: log the layout once. Developer switches:
 //   VCMINIMAP_TEST_WAYPOINT=dx,dy  waypoint relative to the player
 //   VCMINIMAP_TEST_WANTED=n        wanted level
+//   VCMINIMAP_TEST_MONEY=1         money pill always shown (hud.cpp)
 //   VCMINIMAP_DUMP_ROADS=path      write the car path network (for tools/preview)
 void FirstFrame()
 {
@@ -300,6 +300,7 @@ void Hook_DrawRadarMap()
 	DrawScene(gCanvas, gProj, gScene);
 	DrawStatusBars();
 	hud::DrawClock(gCanvas, gProj.X(), gProj.Y(), gProj.W(), gProj.H());
+	hud::DrawPills(gCanvas, gProj.X(), gProj.Y(), gProj.W(), gProj.H());
 	gMapDrawn = true;
 	gLastMapMs = std::max(*api.timeMs, 1u);
 }
@@ -316,16 +317,8 @@ void Hook_HudDraw()
 	if (gHideArmour)
 		*gHideArmour = shown && gConfig.bars;
 	hud::BeginFrame(shown);
+	menu::OnGameplayFrame();
 	orig_HudDraw();
-}
-
-void Hook_ProcessUserInput(uint8_t *menu, uint8_t down, uint8_t up, uint8_t select, uint8_t back, int8_t change)
-{
-	// On the pause map Cross (A on Xbox pads) already toggles the waypoint in
-	// AdditionalOptionInput; it must not also select the page's only item, "Back".
-	if (select && MenuScreen(menu) == kMenuPageMap && CrossJustDown(api.GetPad(0)))
-		select = 0;
-	orig_ProcessUserInput(menu, down, up, select, back, change);
 }
 
 void Hook_DrawBlips()
@@ -393,6 +386,8 @@ void Hook_SpriteDraw(const CSprite2d *sprite, const CRect &rect, const CRGBA &co
 {
 	if (gMapDrawn && sprite == RadarDiscSprite())
 		return; // the round ring around the vanilla radar
+	if (menu::SpriteDraw(sprite, rect, col, __builtin_return_address(0)))
+		return;
 	orig_SpriteDraw(sprite, rect, col);
 }
 
@@ -413,8 +408,7 @@ __attribute__((constructor)) void Init()
 	    hooks::Install("_ZN6CRadar32TransformRadarPointToScreenSpaceER9CVector2DRKS0_",
 	                   Hook_TransformRadarPointToScreenSpace, orig_TransformRadarPointToScreenSpace) &&
 	    hooks::Install("_ZN9CSprite2d4DrawERK5CRectRK5CRGBA", Hook_SpriteDraw, orig_SpriteDraw) &&
-	    hooks::Install("_ZN4CHud4DrawEv", Hook_HudDraw, orig_HudDraw) &&
-	    hooks::Install("_ZN12CMenuManager16ProcessUserInputEhhhha", Hook_ProcessUserInput, orig_ProcessUserInput);
+	    hooks::Install("_ZN4CHud4DrawEv", Hook_HudDraw, orig_HudDraw);
 	gHideHealth = hooks::Flag("skip:hud_health");
 	gHideArmour = hooks::Flag("skip:hud_armour");
 	if (!ok || !gHideHealth || !gHideArmour) {
@@ -422,7 +416,10 @@ __attribute__((constructor)) void Init()
 		Log("a hook failed to install; staying vanilla (re-run install.sh)");
 		return;
 	}
-	Log(hud::Install() ? "minimap and HUD hooks installed" : "minimap hooks installed; HUD layout left as is");
+	const bool hudOk = hud::Install();
+	Log(hudOk ? "minimap and HUD hooks installed" : "minimap hooks installed; HUD layout left as is");
+	if (!menu::Install(orig_SpriteDraw, hudOk))
+		Log("pause menu hooks missing; menu left as is (re-run install.sh)");
 }
 
 } // namespace
