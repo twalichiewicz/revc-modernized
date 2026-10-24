@@ -1,0 +1,208 @@
+#pragma once
+// The slice of the game this plugin talks to, resolved by symbol name from the
+// main executable. Struct offsets were read from the disassembly of macVC
+// 1.0.5217 (LC_UUID below); hooks are refused on any other build.
+#include "types.h"
+
+#include <cstddef>
+#include <cstdint>
+
+struct CVector2D {
+	float x, y;
+};
+struct CVector {
+	float x, y, z;
+};
+struct CRect;
+struct CSprite2d;
+struct CPathNode;
+struct CVehicle;
+struct RwIm2DVertex; // rw::gl3::Im2DVertex, 28 bytes
+struct RwTexture;
+struct RwRaster;
+struct RwImage;
+struct RwTexDictionary;
+
+namespace game {
+
+extern const uint8_t kBuildUuid[16];
+
+// RenderWare render states / values (RwRenderStateSet takes RW enums).
+enum : int {
+	kStateTextureRaster = 1,
+	kStateTextureAddress = 2,
+	kStateZTest = 6,
+	kStateZWrite = 8,
+	kStateTextureFilter = 9,
+	kStateSrcBlend = 10,
+	kStateDestBlend = 11,
+	kStateVertexAlpha = 12,
+	kStateFog = 14,
+	kBlendSrcAlpha = 5,
+	kBlendInvSrcAlpha = 6,
+	kFilterLinear = 2,
+	kAddressClamp = 3,
+	kPrimTriList = 3,
+	kRasterTypeTexture = 0x04,
+	kRasterFormat8888 = 0x0500,
+	kRadarSpriteNorth = 3,
+};
+
+constexpr int kIm2DVertexSize = 28;
+constexpr int kNumBlips = 75;
+constexpr int kStreamTxdOffset = 6500; // CStreaming index of TXD slot 0
+constexpr int kRadarTiles = 8;         // the radar map is 8x8 tiles of 500 units
+constexpr float kRadarTileSize = 500.0f;
+constexpr float kWorldMin = -2000.0f;
+
+// tRadarTrace (stride 0x38)
+struct Blip {
+	uint32_t colour;
+	uint32_t type; // eBlipType
+	int32_t entityHandle;
+	CVector pos2D; // radar position
+	CVector pos;   // 3D marker position
+	uint16_t uniqueIndex;
+	uint8_t dim, inUse, shortRange;
+	uint8_t pad[3];
+	float radius;
+	int16_t scale;
+	uint16_t display; // eBlipDisplay: 2 = blip only, 3 = blip + marker
+	uint16_t sprite;  // 0 = plain coloured blip
+	uint16_t pad2;
+};
+static_assert(sizeof(Blip) == 0x38, "tRadarTrace layout");
+static_assert(__builtin_offsetof(Blip, pos) == 0x18 && __builtin_offsetof(Blip, shortRange) == 0x28 &&
+                  __builtin_offsetof(Blip, display) == 0x32 && __builtin_offsetof(Blip, sprite) == 0x34,
+              "tRadarTrace field offsets (see CRadar::DrawCoordBlip)");
+
+enum BlipType : uint32_t { kBlipCar = 1, kBlipChar = 2, kBlipObject = 3, kBlipCoord = 4, kBlipContact = 5 };
+
+struct Api {
+	// RenderWare / 2D drawing
+	void (*RwRenderStateSet)(int state, void *value);
+	void (*RwIm2DRenderPrimitive)(int prim, RwIm2DVertex *verts, int count);
+	void (*VertSetScreenX)(RwIm2DVertex *, float);
+	void (*VertSetScreenY)(RwIm2DVertex *, float);
+	void (*VertSetScreenZ)(RwIm2DVertex *, float);
+	void (*VertSetCameraZ)(RwIm2DVertex *, float);
+	void (*VertSetRecipCameraZ)(RwIm2DVertex *, float);
+	void (*VertSetIntRGBA)(RwIm2DVertex *, uint8_t, uint8_t, uint8_t, uint8_t);
+	void (*VertSetU)(RwIm2DVertex *, float u, float recipZ);
+	void (*VertSetV)(RwIm2DVertex *, float v, float recipZ);
+	RwRaster *(*RwTextureGetRaster)(const RwTexture *);
+	RwTexture *(*GetFirstTexture)(RwTexDictionary *);
+	RwImage *(*RwImageCreate)(int width, int height, int depth);
+	RwImage *(*RwImageAllocatePixels)(RwImage *);
+	uint8_t *(*RwImageGetPixels)(const RwImage *);
+	int (*RwImageGetStride)(const RwImage *);
+	void (*RwImageDestroy)(RwImage *);
+	RwRaster *(*RwRasterCreate)(int width, int height, int depth, int flags);
+	RwRaster *(*RwRasterSetFromImage)(RwRaster *, RwImage *);
+	void (*DrawRadarSprite)(uint16_t sprite, float x, float y, uint8_t alpha);
+	float *spriteNearScreenZ, *spriteNearCamZ, *spriteRecipNearClip;
+
+	// streaming
+	void (*RequestModel)(int index, int flags);
+	void (*RemoveModel)(int index);
+
+	// player / world
+	CVector *(*FindPlayerCentreOfWorld_NoSniperShift)();
+	uint8_t *(*PoolsGetPed)(int handle);
+	uint8_t *(*PoolsGetVehicle)(int handle);
+	uint8_t *(*PoolsGetObject)(int handle);
+
+	// paths
+	uint8_t *thePaths;
+	int (*FindNodeClosestToCoors)(void *self, CVector pos, uint8_t type, float distLimit, bool ignoreDisabled,
+	                              bool ignoreBetweenLevels, bool ignoreFlagB4, bool waterPath);
+	void (*DoPathSearch)(void *self, uint8_t type, CVector start, int startNode, CVector target, CPathNode **nodes,
+	                     int16_t *numNodes, int16_t maxNodes, CVehicle *vehicle, float *dist, float distLimit,
+	                     int forcedTargetNode);
+
+	// radar state
+	float *radarRange;
+	float *cachedCos, *cachedSin;
+	CVector2D *radarOrigin;
+	Blip *blips;
+	int32_t *targetMarkerId;
+	CVector2D *targetMarkerPos;
+	int32_t *radarTxdIds; // [64]
+	uint8_t **txdPool;    // CPool<TxdDef>*: entries at +0 (32-byte TxdDef, texDict first), size at +0x10
+	uint32_t (*GetRadarTraceColour)(uint32_t colour, bool dim);
+	void (*ToggleTargetMarker)(float x, float y);
+	uint8_t *playerInStadium;
+
+	// UI state
+	uint8_t *frontEndMenuManager;
+	uint8_t *hudSprites;
+	uint8_t *hudHideRadar;
+	uint32_t *timeMs;
+	uint8_t *rsGlobal; // RsGlobal: screen width/height at +8/+0xc
+	uint8_t *(*GetPad)(int index);
+
+	// text (CFont state applies to the next PrintString; text is queued for DrawFonts)
+	void (*FontPrintString)(float x, float y, uint16_t *text);
+	void (*FontSetScale)(float x, float y);
+	void (*FontSetColor)(CRGBA);
+	void (*FontSetFontStyle)(int16_t);
+	void (*FontSetPropOff)();
+	void (*FontSetJustifyOff)();
+	void (*FontSetCentreOff)();
+	void (*FontSetRightJustifyOn)();
+	void (*FontSetRightJustifyWrap)(float);
+	void (*FontSetBackgroundOn)();
+	void (*FontSetBackgroundOff)();
+	void (*FontSetBackgroundColor)(CRGBA);
+	void (*FontSetBackGroundOnlyTextOff)();
+	void (*FontSetDropShadowPosition)(int16_t);
+	float (*FontGetStringWidth)(uint16_t *text, bool spaces);
+	void (*FontGetTextRect)(float *rect, float x, float y, uint16_t *text); // CRect*
+	void (*AsciiToUnicode)(const char *, uint16_t *);
+	uint8_t *clockHours, *clockMinutes;
+
+	// player
+	uint8_t *(*FindPlayerPed)();
+	uint8_t *worldPlayers; // CWorld::Players, CPlayerInfo[] with stride 0x1a0
+	uint8_t *playerInFocus;
+};
+
+extern Api api;
+
+bool Resolve();
+
+inline bool MenuMapActive() { return api.frontEndMenuManager[0x35] != 0; }
+constexpr int32_t kMenuPageMap = 6; // CMenuManager::m_nCurrScreen (+0x16c)
+inline int32_t MenuScreen(const uint8_t *menu) { return *reinterpret_cast<const int32_t *>(menu + 0x16c); }
+inline int ScreenWidth() { return *reinterpret_cast<const int32_t *>(api.rsGlobal + 8); }
+inline int ScreenHeight() { return *reinterpret_cast<const int32_t *>(api.rsGlobal + 0xc); }
+// CPad: NewState then OldState (CControllerState, 0x2a bytes); Cross at +0x20.
+inline bool CrossJustDown(const uint8_t *pad)
+{
+	return *reinterpret_cast<const int16_t *>(pad + 0x20) && !*reinterpret_cast<const int16_t *>(pad + 0x4a);
+}
+// CPed / CPlayerPed / CPlayerInfo fields (see CHud::Draw, CPlayerPed::UseSprintEnergy,
+// CPlayerInfo::SavePlayerInfo).
+inline float PedField(const uint8_t *ped, int off) { return *reinterpret_cast<const float *>(ped + off); }
+inline float Health(const uint8_t *ped) { return PedField(ped, 0x44c); }
+inline float Armour(const uint8_t *ped) { return PedField(ped, 0x450); }
+inline float Stamina(const uint8_t *player) { return PedField(player, 0x78c); }    // sprinting needs > 0
+inline float MaxStamina(const uint8_t *player) { return PedField(player, 0x790); }
+inline const uint8_t *PlayerInfo() { return api.worldPlayers + size_t(*api.playerInFocus) * 0x1a0; }
+inline bool InfiniteSprint(const uint8_t *info) { return info[0x16c] != 0; }
+inline int MaxHealth(const uint8_t *info) { return info[0x16f]; }
+inline int MaxArmour(const uint8_t *info) { return info[0x170]; }
+inline int32_t RadarMode() { return *reinterpret_cast<int32_t *>(api.frontEndMenuManager + 0xc); }
+inline const CSprite2d *RadarDiscSprite() { return reinterpret_cast<const CSprite2d *>(api.hudSprites + 0x190); }
+inline const CVector &EntityPos(const uint8_t *entity) { return *reinterpret_cast<const CVector *>(entity + 0x38); }
+inline bool PedInVehicle(const uint8_t *ped) { return ped[0x4c0] != 0; }
+inline uint8_t *PedVehicle(const uint8_t *ped) { return *reinterpret_cast<uint8_t *const *>(ped + 0x4b8); }
+inline int32_t NumCarPathNodes() { return *reinterpret_cast<int32_t *>(api.thePaths + 0x54b7c); }
+inline CVector NodePos(const CPathNode *node)
+{
+	auto *p = reinterpret_cast<const int16_t *>(reinterpret_cast<const uint8_t *>(node) + 4);
+	return {p[0] / 8.0f, p[1] / 8.0f, p[2] / 8.0f};
+}
+RwTexture *RadarTileTexture(int x, int y);
+
+} // namespace game
