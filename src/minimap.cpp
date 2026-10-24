@@ -16,6 +16,7 @@
 // open, the radar mode is not "map & blips", or the minimap is disabled.
 // The rest of the HUD is in hud.cpp, the pause menu in menu.cpp.
 #include "aimcam.h"
+#include "driveby.h"
 #include "config.h"
 #include "controls.h"
 #include "draw.h"
@@ -26,11 +27,13 @@
 #include "log.h"
 #include "mapdata.h"
 #include "menu.h"
+#include "minimap.h"
 #include "projection.h"
 #include "scene.h"
 #include "wheel.h"
 
 #include <algorithm>
+#include <chrono>
 #include <cmath>
 #include <cstdio>
 #include <cstdlib>
@@ -72,6 +75,23 @@ struct BarsRect {
 	float x, y, w, h;
 } gBars;
 
+// The expanded minimap (D-pad down): further out and taller, eased in and out.
+using Clock = std::chrono::steady_clock;
+constexpr float kExpandedRange = 2.5f, kExpandedHeight = 1.4f;
+constexpr auto kExpandedFor = std::chrono::seconds(8);
+Clock::time_point gExpandedUntil, gLastExpandStep;
+float gExpand; // 0..1
+
+float ExpandStep()
+{
+	const Clock::time_point now = Clock::now();
+	const float dt = std::min(std::chrono::duration<float>(now - gLastExpandStep).count(), 0.1f);
+	gLastExpandStep = now;
+	const bool on = now < gExpandedUntil;
+	gExpand = on ? std::min(1.0f, gExpand + dt / 0.25f) : std::max(0.0f, gExpand - dt / 0.25f);
+	return gExpand * gExpand * (3 - 2 * gExpand);
+}
+
 Vec2 WorldToGround(float wx, float wy)
 {
 	const float dx = wx - gScene.origin.x, dy = wy - gScene.origin.y;
@@ -80,12 +100,12 @@ Vec2 WorldToGround(float wx, float wy)
 
 // Sized from the vanilla radar (so it follows the game's HUD scaling), placed
 // in the bottom-left corner with the status bars underneath, GTA V/VI style.
-void Layout()
+void Layout(float expand)
 {
 	CVector2D tl, br;
 	orig_TransformRadarPointToScreenSpace(tl, {-1.0f, 1.0f});
 	orig_TransformRadarPointToScreenSpace(br, {1.0f, -1.0f});
-	const float h = (br.y - tl.y) * gConfig.size;
+	const float h = (br.y - tl.y) * gConfig.size * (1.0f + (kExpandedHeight - 1.0f) * expand);
 	const float w = h * gConfig.aspect;
 	const float margin = std::max(8.0f, ScreenHeight() * gConfig.margin);
 	const float barH = gConfig.bars ? std::max(4.0f, h * 0.045f) : 0.0f;
@@ -274,11 +294,15 @@ void Hook_DrawRadarMap()
 		orig_DrawRadarMap();
 		return;
 	}
+	// CRadar::DrawMap sets the range afresh every frame, before this; the blips
+	// drawn later this frame use it too.
+	const float expand = ExpandStep();
+	*api.radarRange *= 1.0f + (kExpandedRange - 1.0f) * expand;
 	gScene.cos = *api.cachedCos;
 	gScene.sin = *api.cachedSin;
 	gScene.range = *api.radarRange;
 	gScene.origin = {api.radarOrigin->x, api.radarOrigin->y};
-	Layout();
+	Layout(expand);
 	LoadMapData();
 	BuildBase();
 	static bool firstFrame = true;
@@ -324,6 +348,7 @@ void Hook_HudDraw()
 	hud::BeginFrame(shown);
 	menu::OnGameplayFrame();
 	orig_HudDraw();
+	driveby::Draw();
 	wheel::Draw();
 }
 
@@ -430,6 +455,13 @@ __attribute__((constructor)) void Init()
 		Log("controller hooks missing; controls left as is (re-run install.sh)");
 	if (!aimcam::Install())
 		Log("camera hook missing; aiming camera left as is (re-run install.sh)");
+	if (!driveby::Install())
+		Log("drive-by hooks missing; drive-bys left as is (re-run install.sh)");
 }
 
 } // namespace
+
+void minimap::ToggleExpanded()
+{
+	gExpandedUntil = Clock::now() < gExpandedUntil ? Clock::time_point{} : Clock::now() + kExpandedFor;
+}

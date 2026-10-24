@@ -187,6 +187,7 @@ struct Api {
 	// weapons and models
 	uint8_t *(*GetWeaponInfo)(int32_t type); // CWeaponInfo: model id at +0x54
 	bool (*WeaponHasAmmoToBeUsed)(const uint8_t *weapon);
+	void (*SetCurrentWeapon)(uint8_t *ped, int slot); // at once, unlike PlayerWeaponSlotToSelect
 	uint8_t **modelInfoPtrs; // CModelInfo::ms_modelInfoPtrs: name at +8, TXD slot (int16) at +0x2e
 	RwTexture *(*TexDictionaryFindNamedTexture)(RwTexDictionary *, const char *);
 	int (*TxdFindSlot)(const char *name);
@@ -204,6 +205,18 @@ struct Api {
 	                              bool objects, bool dummies, bool ignoreSeeThrough, bool ignoreSomeObjects);
 	// A shot's line through the crosshair: source and a point `dist` along it.
 	void (*Find3rdPersonCamTargetVector)(uint8_t *camera, float dist, CVector pos, CVector &source, CVector &target);
+	// The first thing on a line: fills a CColPoint (the point first) and the entity hit.
+	bool (*ProcessLineOfSight)(const CVector &a, const CVector &b, uint8_t *colPoint, uint8_t *&entity, bool buildings,
+	                           bool vehicles, bool peds, bool objects, bool dummies, bool ignoreSeeThrough,
+	                           bool ignoreSomeObjects, bool ignoreShootThrough);
+	uint8_t **ignoreEntity; // CWorld::pIgnoreEntity: skipped by the line-of-sight checks
+
+	// ped skeletons (RpHAnim): world matrices per bone, keyframes in AnimBlendFrameData
+	uint8_t *(*GetAnimHierarchyFromSkinClump)(uint8_t *clump);
+	int (*HAnimIDGetIndex)(uint8_t *hierarchy, int boneTag);
+	float *(*HAnimMatrixArray)(uint8_t *hierarchy); // RwMatrix per bone
+	void (*UpdateRpHAnim)(uint8_t *entity);          // rebuilds those matrices from the keyframes
+	void *(*RtQuatRotate)(void *quat, const CVector *axis, float degrees, int combineOp);
 
 	// radio (see cMusicManager::ServiceGameMode)
 	int32_t *numRetunePresses; // stations to step on the next retune
@@ -286,9 +299,11 @@ enum PadButton : int {
 	kPadDPadDown = 0x12,
 	kPadDPadLeft = 0x14,
 	kPadDPadRight = 0x16,
+	kPadSquare = 0x1c,
 	kPadTriangle = 0x1e,
 	kPadCross = 0x20,
 	kPadCircle = 0x22,
+	kPadR3 = 0x26,
 };
 constexpr int kPadOldState = 0x2a, kPadJoyState = 0x96;
 inline int16_t &PadNew(uint8_t *pad, PadButton b) { return *reinterpret_cast<int16_t *>(pad + b); }
@@ -342,6 +357,16 @@ enum CamModeId : uint16_t {
 };
 
 inline int16_t EntityModel(const uint8_t *entity) { return *reinterpret_cast<const int16_t *>(entity + 0x6a); }
+// Helicopters (cars with heli handling in VC), planes and the RC aircraft, by model (data/default.ide).
+inline bool IsAircraft(const uint8_t *vehicle)
+{
+	switch (EntityModel(vehicle)) {
+	case 155: case 177: case 190: case 194: case 195: case 199: case 217: case 218: case 227: case 231:
+		return true;
+	default:
+		return *reinterpret_cast<const int32_t *>(vehicle + 0x348) == 4; // m_vehType: plane
+	}
+}
 
 // CPlayerPed weapons (see CPlayerPed::ProcessWeaponSwitch): 10 CWeapon slots of
 // 0x18 bytes at +0x550 (type, state, ammo in clip at +8, total ammo at +0xc),

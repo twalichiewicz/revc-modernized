@@ -68,6 +68,13 @@ DEFAULT_HOOKS = [
     "_ZN4CPad6UpdateEs",
     # over-the-shoulder aiming
     "_ZN4CCam26Process_FollowPedWithMouseERK7CVectorfff",
+    # free-aim drive-bys
+    "_ZN11CAutomobile18DoDriveByShootingsEv",
+    "_ZN5CBike18DoDriveByShootingsEv",
+    "_ZN5CBoat18DoDriveByShootingsEv",
+    "_ZN7CWeapon19DoDriveByAutoAimingEP7CEntityP8CVehicleP7CVectorS5_",
+    "_ZN4CCam20Process_FollowCar_SAERK7CVectorfff",
+    "_ZN4CPed9PreRenderEv",
 ]
 
 # Flag-controlled skips inside CHud::Draw: (name, instruction address, expected
@@ -80,6 +87,11 @@ DEFAULT_SKIPS = [
     # In CPlayerPed::ProcessPlayerWeapon: the M4, Ruger and M60 aim in first person
     # (as the sniper rifles do); when set, they take the third-person path instead.
     ("skip:rifle_first_person", 0x1001D480C, 0xAA1403E0, 0x1001D4794),  # mov x0, x20
+    # In CAutomobile/CBike/CBoat::DoDriveByShootings: only SMGs shoot from
+    # vehicles; when set, the weapon check is passed over (for pistols).
+    ("skip:driveby_pistol_car", 0x10024E138, 0x7100151F, 0x10024E140),  # cmp w8, #0x5
+    ("skip:driveby_pistol_bike", 0x100261924, 0x7100151F, 0x10026192C),
+    ("skip:driveby_pistol_boat", 0x10026A6A8, 0x7100151F, 0x10026A6B0),
 ]
 KIND_HOOK, KIND_SKIP = 0, 1
 

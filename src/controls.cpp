@@ -1,8 +1,10 @@
 #include "controls.h"
 #include "config.h"
+#include "driveby.h"
 #include "game.h"
 #include "hooks.h"
 #include "log.h"
+#include "minimap.h"
 #include "wheel.h"
 
 #include <algorithm>
@@ -32,6 +34,7 @@ constexpr int kMaxJoysticks = 16;
 
 constexpr auto kHoldToOpen = std::chrono::milliseconds(200);
 constexpr int kRetuneFrames = 20; // as for a press of the station button
+constexpr auto kSubMissionHold = std::chrono::milliseconds(300); // R3, as the scripts poll it
 constexpr float kMouseRange = 60.0f;    // mouse travel (pixels) that counts as a full stick push
 constexpr float kTriggerPressed = -0.7f; // GLFW triggers rest at -1 and are fully in at 1
 constexpr float kStickDeadZone = 0.12f;  // round, on the right stick
@@ -50,6 +53,10 @@ bool gLoggedGamepad;
 bool gTestWheel; // VCHUD_TEST_WHEEL: open the wheel once, without LB, to look at it
 Vec2 gMouse;     // the mouse's pointer on an open wheel, within kMouseRange
 Clock::time_point gLastFrame;
+Clock::time_point gSubMissionUntil; // R3 held for the scripts until then
+GamepadButton gDpadHeld = kButtons;  // D-pad left / right went down in a vehicle, not yet a hold
+Clock::time_point gDpadDownAt;
+bool gDpadWheel;                     // the radio wheel is open on a D-pad hold
 
 // The game's gamecontrollerdb.txt maps Sony's own pads (PS4 Controller, PS5
 // Controller, Sony DualSense) on macOS with the right stick's Y on axis 3,
@@ -164,14 +171,84 @@ void TriggersAimAndFire(uint8_t *pad, const Gamepad &now)
 		PadJoy(pad, fire) = 255;
 }
 
-// Camera look from the right stick, on foot. The game's own stick handling only
-// starts at 30% deflection, with a jump (CapturePad), and the scoped views look
-// with the left stick (CPad::SniperModeLookLeftRight). Instead the stick drives
-// the cameras' mouse input: a small round dead zone, a response curve, slower
-// while aiming, and as much slower in a scope as it magnifies. Mouse movement
-// turns the follow camera by x * -2.5 and y * 4 times the mouse sensitivity and
-// FOV / 80 (CCam::Process_FollowPedWithMouse), the scoped views by -3 and 4
-// (CCam::Process_Sniper); the vertical goes the way the game's own stick does.
+// In a car, bike or boat, RT accelerates and LT brakes or reverses, as far as
+// they're pulled, instead of looking left / right. CPad::GetAccelerate and
+// GetBrake read Cross and Square in controller modes 0-2. Aircraft keep their
+// controls (their triggers turn the tail).
+void TriggersDrive(uint8_t *pad, const Gamepad &now)
+{
+	if (*api.padAffectedByController && *reinterpret_cast<const uint16_t *>(pad + 0xec) == 3)
+		return;
+	PadJoy(pad, kPadLT) = PadJoy(pad, kPadRT) = 0;
+	const float gas = (now.rt + 1.0f) / 2.0f, brake = (now.lt + 1.0f) / 2.0f; // 0..1
+	if (gas > 0.05f)
+		PadJoy(pad, kPadCross) = std::max(PadJoy(pad, kPadCross), int16_t(gas * 255.0f));
+	if (brake > 0.05f)
+		PadJoy(pad, kPadSquare) = std::max(PadJoy(pad, kPadSquare), int16_t(brake * 255.0f));
+	// Looking back was both triggers (CPad::GetLookBehindForCar); it moves to R3,
+	// as in GTA V, whose own job (side missions) is on D-pad up.
+	if (gConfig.dpadActions) {
+		PadJoy(pad, kPadR3) = 0;
+		if (now.buttons[kRThumb])
+			PadJoy(pad, kPadLT) = PadJoy(pad, kPadRT) = 255;
+	}
+}
+
+// In a vehicle, D-pad left / right: a tap retunes to the previous / next
+// station, a hold opens the radio wheel, which letting go applies.
+void RadioDpad(const Gamepad &now, uint8_t *vehicle) // vehicle: null when not in one, or no control
+{
+	if (gDpadWheel && (!wheel::IsOpen() || (!now.buttons[kLeft] && !now.buttons[kRight]))) {
+		wheel::Close(true);
+		gDpadWheel = false;
+	}
+	if (!vehicle || wheel::IsOpen()) {
+		gDpadHeld = kButtons;
+		return;
+	}
+	for (GamepadButton b : {kLeft, kRight})
+		if (Pressed(now, b)) {
+			gDpadHeld = b;
+			gDpadDownAt = Clock::now();
+		}
+	if (gDpadHeld == kButtons)
+		return;
+	if (!now.buttons[gDpadHeld]) {
+		if (RadioUsable(vehicle))
+			RetuneBy(vehicle, gDpadHeld == kRight ? 1 : -1, kRetuneFrames);
+		gDpadHeld = kButtons;
+	} else if (Clock::now() - gDpadDownAt >= kHoldToOpen) {
+		gDpadHeld = kButtons;
+		if (gConfig.wheels) {
+			OpenWheel();
+			gDpadWheel = wheel::IsOpen();
+		}
+	}
+}
+
+// The right stick as turn rates (radians per second, to the right and up): a
+// small round dead zone, a response curve, slower while aiming. The game's own
+// stick handling only starts at 30% deflection, with a jump (CapturePad).
+bool StickRates(const Gamepad &now, bool precise, float &yaw, float &pitch)
+{
+	const float m = Length(now.rx, now.ry);
+	if (m <= kStickDeadZone)
+		return false;
+	const float n = std::min(1.0f, (m - kStickDeadZone) / (1.0f - kStickDeadZone));
+	float speed = std::pow(n, precise ? 2.0f : 1.7f) / m * gConfig.lookSensitivity;
+	if (precise)
+		speed *= gConfig.aimSensitivity;
+	yaw = now.rx * speed * kLookYaw;
+	pitch = (*api.invertLookForPad ? now.ry : -now.ry) * speed * kLookPitch; // the way the game's own stick goes
+	return true;
+}
+
+// Camera look from the right stick, on foot. The scoped views look with the
+// left stick (CPad::SniperModeLookLeftRight); instead the stick drives the
+// cameras' mouse input, at StickRates and as much slower in a scope as it
+// magnifies. Mouse movement turns the follow camera by x * -2.5 and y * 4 times
+// the mouse sensitivity and FOV / 80 (CCam::Process_FollowPedWithMouse), the
+// scoped views by -3 and 4 (CCam::Process_Sniper).
 void StickLook(uint8_t *pad, const Gamepad &now, bool aiming, float dt)
 {
 	const uint8_t *cam = ActiveCam();
@@ -185,23 +262,16 @@ void StickLook(uint8_t *pad, const Gamepad &now, bool aiming, float dt)
 	PadJoy(pad, kPadRightStickX) = PadJoy(pad, kPadRightStickY) = 0;
 	if (scoped)
 		PadJoy(pad, kPadLeftStickX) = PadJoy(pad, kPadLeftStickY) = 0;
-	const float m = Length(now.rx, now.ry);
-	if (m <= kStickDeadZone || *api.mouseAccelH <= 0.0f || *api.mouseAccelV <= 0.0f)
+	float yaw, pitch;
+	if (!StickRates(now, !follow || aiming, yaw, pitch) || *api.mouseAccelH <= 0.0f || *api.mouseAccelV <= 0.0f)
 		return;
-	const float n = std::min(1.0f, (m - kStickDeadZone) / (1.0f - kStickDeadZone));
-	const bool precise = !follow || aiming;
-	float speed = std::pow(n, precise ? 2.0f : 1.7f) / m * gConfig.lookSensitivity;
-	if (precise)
-		speed *= gConfig.aimSensitivity;
 	const float fov = CamFov(cam);
-	if (!follow)
-		speed *= fov / 70.0f;
+	const float zoom = follow ? 1.0f : fov / 70.0f;
 	const float perMouse = fov / 80.0f; // radians per unit of mouse movement, before the axis factor
 	const float yawPerMouse = (follow ? 2.5f : 3.0f) * *api.mouseAccelH * perMouse;
 	const float pitchPerMouse = 4.0f * *api.mouseAccelV * perMouse;
-	const float pitch = *api.invertLookForPad ? now.ry : -now.ry;
-	*reinterpret_cast<float *>(api.newMouseState + 8) += now.rx * speed * kLookYaw * dt / yawPerMouse;
-	*reinterpret_cast<float *>(api.newMouseState + 12) += pitch * speed * kLookPitch * dt / pitchPerMouse;
+	*reinterpret_cast<float *>(api.newMouseState + 8) += yaw * zoom * dt / yawPerMouse;
+	*reinterpret_cast<float *>(api.newMouseState + 12) += pitch * zoom * dt / pitchPerMouse;
 }
 
 void Hook_Update(uint8_t *pad, int16_t index)
@@ -218,7 +288,9 @@ void Hook_Update(uint8_t *pad, int16_t index)
 	const Gamepad now = Poll();
 	if (MenuActive(api.frontEndMenuManager)) { // the frontend keeps the D-pad and LB
 		wheel::Close(false);
-		gLBPending = false;
+		gLBPending = gDpadWheel = false;
+		gDpadHeld = kButtons;
+		driveby::SetInput(false, false, 0, 0);
 		gPrev = now;
 		orig_Update(pad, index);
 		return;
@@ -233,9 +305,29 @@ void Hook_Update(uint8_t *pad, int16_t index)
 		for (PadButton b : {kPadDPadUp, kPadDPadDown, kPadDPadLeft, kPadDPadRight})
 			PadJoy(pad, b) = 0;
 
+	uint8_t *vehicle = ped && PedInVehicle(ped) ? PedVehicle(ped) : nullptr;
+	const bool lbAims = driveby::Enabled() && vehicle && !IsAircraft(vehicle); // else LB is the wheel's
+
 	bool tapLB = false;
-	if (gConfig.modernTriggers && control && !PedInVehicle(ped))
-		TriggersAimAndFire(pad, now);
+	if (gConfig.modernTriggers && control) {
+		if (!vehicle)
+			TriggersAimAndFire(pad, now);
+		else if (!IsAircraft(vehicle))
+			TriggersDrive(pad, now);
+	}
+
+	// In a car, on a bike or a boat: hold LB to aim, the right stick turns the
+	// aim, RB shoots (otherwise the handbrake).
+	float aimYaw = 0, aimPitch = 0;
+	if (StickRates(now, true, aimYaw, aimPitch)) {
+		aimYaw *= dt;
+		aimPitch *= dt;
+	}
+	driveby::SetInput(lbAims && control && now.buttons[kLB] && !wheel::IsOpen(), now.buttons[kRB], aimYaw, aimPitch);
+	if (lbAims)
+		PadJoy(pad, kPadLB) = 0;
+	if (driveby::Aiming())
+		PadJoy(pad, kPadRB) = PadJoy(pad, kPadRightStickX) = PadJoy(pad, kPadRightStickY) = 0;
 
 	if (gTestWheel && control && !wheel::IsOpen()) {
 		gTestWheel = false;
@@ -243,7 +335,9 @@ void Hook_Update(uint8_t *pad, int16_t index)
 	}
 	if (gConfig.wheels) {
 		PadJoy(pad, kPadLB) = 0; // LB reaches the game only as a tap, below
-		if (Pressed(now, kLB)) {
+		if (lbAims)
+			gLBPending = false;
+		else if (Pressed(now, kLB)) {
 			gLBPending = true;
 			gLBDownAt = Clock::now();
 		}
@@ -252,8 +346,8 @@ void Hook_Update(uint8_t *pad, int16_t index)
 			if (control)
 				OpenWheel();
 		}
-		if (!now.buttons[kLB] && gPrev.buttons[kLB]) {
-			if (wheel::IsOpen())
+		if (!now.buttons[kLB] && gPrev.buttons[kLB] && !lbAims) {
+			if (wheel::IsOpen() && !gDpadWheel)
 				wheel::Close(true);
 			else if (gLBPending)
 				tapLB = true;
@@ -267,19 +361,29 @@ void Hook_Update(uint8_t *pad, int16_t index)
 		}
 	}
 
-	if (gConfig.aimCamera && control && !PedInVehicle(ped) && !wheel::IsOpen())
+	if (gConfig.aimCamera && control && !wheel::IsOpen() && !vehicle)
 		StickLook(pad, now, now.lt > kTriggerPressed, dt);
 
-	bool cycle = false; // weapon cycling: the game's own, on LT/RT
-	PadButton cycleButton = kPadRT;
-	if (gConfig.dpadActions && control && !wheel::IsOpen() && (Pressed(now, kLeft) || Pressed(now, kRight))) {
-		const int dir = Pressed(now, kRight) ? 1 : -1;
-		if (!PedInVehicle(ped)) {
-			cycle = true;
-			cycleButton = dir > 0 ? kPadRT : kPadLT;
-		} else if (uint8_t *vehicle = PedVehicle(ped); vehicle && RadioUsable(vehicle))
-			RetuneBy(vehicle, dir, kRetuneFrames);
+	// D-pad down: the expanded minimap; up, in a vehicle: its side mission (taxi,
+	// vigilante, paramedic, firefighter), which the scripts start on R3.
+	if (gConfig.dpadActions && control && !wheel::IsOpen()) {
+		if (Pressed(now, kDown))
+			minimap::ToggleExpanded();
+		if (Pressed(now, kUp) && PedInVehicle(ped))
+			gSubMissionUntil = Clock::now() + kSubMissionHold;
 	}
+
+	// D-pad left / right on foot: the next / previous weapon (the game's own
+	// cycling, on LT/RT).
+	bool cycle = false;
+	PadButton cycleButton = kPadRT;
+	if (gConfig.dpadActions && control && !vehicle && !wheel::IsOpen() &&
+	    (Pressed(now, kLeft) || Pressed(now, kRight))) {
+		cycle = true;
+		cycleButton = Pressed(now, kRight) ? kPadRT : kPadLT;
+	}
+	if (gConfig.dpadActions)
+		RadioDpad(now, control ? vehicle : nullptr);
 	gPrev = now;
 
 	orig_Update(pad, index);
@@ -289,13 +393,16 @@ void Hook_Update(uint8_t *pad, int16_t index)
 		PadNew(pad, kPadLB) = 255;
 	if (cycle)
 		PadNew(pad, cycleButton) = 255;
+	if (Clock::now() < gSubMissionUntil)
+		PadNew(pad, kPadR3) = 255;
 }
 
 } // namespace
 
 bool Install()
 {
-	if (!gConfig.wheels && !gConfig.dpadActions && !gConfig.modernTriggers)
+	if (!gConfig.wheels && !gConfig.dpadActions && !gConfig.modernTriggers && !gConfig.aimCamera &&
+	    !gConfig.driveByAim)
 		return true;
 	if (!api.glfwGetGamepadState || !api.glfwJoystickIsGamepad || !api.glfwGetJoystickName) {
 		Log("controls: GLFW gamepad functions not found; controller changes off");
@@ -304,7 +411,7 @@ bool Install()
 	if (!hooks::Install("_ZN4CPad6UpdateEs", Hook_Update, orig_Update))
 		return false;
 	gTestWheel = gConfig.wheels && getenv("VCHUD_TEST_WHEEL");
-	Log("controls: weapon/radio wheels %s, D-pad actions %s, LT aim / RT fire %s", gConfig.wheels ? "on" : "off",
+	Log("controls: weapon/radio wheels %s, D-pad actions %s, modern triggers %s", gConfig.wheels ? "on" : "off",
 	    gConfig.dpadActions ? "on" : "off", gConfig.modernTriggers ? "on" : "off");
 	return true;
 }

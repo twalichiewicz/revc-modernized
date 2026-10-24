@@ -22,10 +22,11 @@ const char kDefaultIni[] = "; VC Modern HUD for macVC. Delete this file to resto
                            "PauseTabs=1          ; pause menu opens on the map; Q/E or LB/RB switch tabs\n"
                            "CompactLegend=1      ; small map legend in the corner of the pause map\n"
                            "CircleBack=1         ; Circle (B) goes back in menus; 0 = Triangle (Y), as on the PS2\n"
-                           "Wheels=1             ; hold LB: weapon wheel on foot, radio wheel in a vehicle\n"
-                           "DpadActions=1        ; D-pad left/right switch weapons / radio stations instead of moving\n"
-                           "ModernTriggers=1     ; on foot LT aims and RT fires (instead of switching weapons)\n"
+                           "Wheels=1             ; hold LB: weapon wheel on foot; hold D-pad left/right: radio wheel\n"
+                           "DpadActions=1        ; D-pad: left/right weapons or radio, down big map, up side missions\n"
+                           "ModernTriggers=1     ; LT aims, RT fires; in a vehicle RT gas, LT brake, R3 look back\n"
                            "AimCamera=1          ; over-the-shoulder camera while aiming\n"
+                           "DriveByAim=1         ; in a vehicle hold LB to aim an SMG or pistol anywhere, RB shoots\n"
                            "LookSensitivity=1    ; right stick camera speed\n"
                            "AimSensitivity=0.45  ; right stick speed while aiming or scoped (1 = as when not aiming)\n"
                            "Margin=0.025         ; distance from the screen corner\n"
@@ -68,6 +69,8 @@ void Apply(const char *key, const char *value)
 		gConfig.modernTriggers = b;
 	else if (!strcasecmp(key, "AimCamera"))
 		gConfig.aimCamera = b;
+	else if (!strcasecmp(key, "DriveByAim"))
+		gConfig.driveByAim = b;
 	else if (!strcasecmp(key, "AimSensitivity") && f > 0.05f && f <= 2.0f)
 		gConfig.aimSensitivity = f;
 	else if (!strcasecmp(key, "LookSensitivity") && f > 0.05f && f <= 4.0f)
