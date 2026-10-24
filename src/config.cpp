@@ -25,6 +25,9 @@ const char kDefaultIni[] = "; VC Modern HUD for macVC. Delete this file to resto
                            "Wheels=1             ; hold LB: weapon wheel on foot, radio wheel in a vehicle\n"
                            "DpadActions=1        ; D-pad left/right switch weapons / radio stations instead of moving\n"
                            "ModernTriggers=1     ; on foot LT aims and RT fires (instead of switching weapons)\n"
+                           "AimCamera=1          ; over-the-shoulder camera while aiming\n"
+                           "LookSensitivity=1    ; right stick camera speed\n"
+                           "AimSensitivity=0.45  ; right stick speed while aiming or scoped (1 = as when not aiming)\n"
                            "Margin=0.025         ; distance from the screen corner\n"
                            "Tilt=50              ; degrees of 3D tilt, 0 = flat\n"
                            "Zoom=1.5             ; higher = closer\n"
@@ -63,6 +66,12 @@ void Apply(const char *key, const char *value)
 		gConfig.dpadActions = b;
 	else if (!strcasecmp(key, "ModernTriggers"))
 		gConfig.modernTriggers = b;
+	else if (!strcasecmp(key, "AimCamera"))
+		gConfig.aimCamera = b;
+	else if (!strcasecmp(key, "AimSensitivity") && f > 0.05f && f <= 2.0f)
+		gConfig.aimSensitivity = f;
+	else if (!strcasecmp(key, "LookSensitivity") && f > 0.05f && f <= 4.0f)
+		gConfig.lookSensitivity = f;
 	else if (!strcasecmp(key, "Margin") && f >= 0.0f && f < 0.3f)
 		gConfig.margin = f;
 	else if (!strcasecmp(key, "Tilt"))

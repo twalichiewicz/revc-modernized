@@ -50,7 +50,15 @@ A modern GTA-style HUD and controller layout for the native Apple Silicon port o
     still does what it always did (centre the camera, next station).
   - The D-pad no longer moves you. Left and right switch weapons on foot, and change the radio station in a
     vehicle.
-  - On foot, LT aims and RT fires, instead of switching weapons.
+  - On foot, LT aims and RT fires, instead of switching weapons. R1 and Circle no longer aim and fire, so they
+    are free for other things.
+- **Aiming, modern third-person style.** Holding LT with a gun eases the camera in over Tommy's right
+  shoulder and zooms in, with the crosshair in the middle of the screen, pointing where the small hip-fire
+  dot pointed before you aimed. The M4, Ruger and M60 aim this way too instead of switching to first person;
+  sniper rifles and the rocket launcher keep their scopes, now steered with the right stick.
+- **Precise right stick.** The camera follows the right stick smoothly from a small dead zone (the game's own
+  stick handling ignored the first 30% and then jumped), slower while aiming and slower still through a
+  zoomed scope.
   - PlayStation controllers work properly. The game's controller list maps the DualSense and DualShock 4 on
     macOS with the right stick's up/down on the same axis as L2, so the camera tilted when you pulled the
     left trigger. The mod corrects that at start-up, so turn Steam Input off for the game if you used it to
@@ -122,6 +130,9 @@ This restores the original binary and removes the plugin. Your saves are never t
   | `Wheels` | 1 | hold LB for the weapon / radio wheel |
   | `DpadActions` | 1 | D-pad left/right switch weapons / stations instead of moving you |
   | `ModernTriggers` | 1 | on foot LT aims and RT fires (instead of switching weapons) |
+  | `AimCamera` | 1 | over-the-shoulder aiming, the hip-fire dot and the precise right stick |
+  | `LookSensitivity` | 1 | right stick camera speed |
+  | `AimSensitivity` | 0.45 | right stick speed while aiming or scoped (1 = as when not aiming) |
   | `Margin` | 0.025 | gap to the screen corner (fraction of screen height) |
   | `Tilt` | 50 | degrees of 3D tilt; 0 is flat |
   | `Zoom` | 1.5 | higher is closer |
@@ -147,6 +158,9 @@ hooks are written to disk:
   into the pad state. It reads the gamepad through GLFW directly, takes the D-pad and LB out of the
   joystick's state, and drives the wheels (`src/wheel.cpp`). Weapons switch through the game's own
   `CPlayerPed::ProcessWeaponSwitch`, stations through its retune counter.
+- **Aiming.** `src/aimcam.cpp` hooks the PC follow camera (`CCam::Process_FollowPedWithMouse`) and moves it over
+  the shoulder while aiming. The game aims along that same camera and crosshair
+  (`CCamera::Find3rdPersonCamTargetVector`), so shots still go where the crosshair points.
 - **Pause menu.** `src/menu.cpp` opens the frontend on the map page, draws the tabs after each frontend frame
   and switches pages through the game's own `CMenuManager::SwitchToNewScreen`. The legend's drawing calls
   in `CMenuManager::PrintMap` and `CRadar::DrawLegend` are moved and scaled into the corner.
@@ -187,6 +201,7 @@ Developer switches (environment variables, e.g. `open --env VAR=value "Grand The
 - `VCHUD_TEST_WANTED=n` sets a wanted level.
 - `VCHUD_TEST_MONEY=1` always shows the money pill.
 - `VCHUD_TEST_WHEEL=1` opens the weapon or radio wheel once, without holding LB.
+- `VCHUD_TEST_AIM=1` shows the aiming camera whenever a gun is out.
 
 Struct offsets, symbols and call sites were read from the 1.0.5217 binary. Supporting another build means
 re-deriving them; see `src/game.h`, `src/hud.cpp`, `src/menu.cpp`, `src/controls.cpp` and `tools/patch_macvc.py`.

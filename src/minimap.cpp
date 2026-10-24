@@ -15,6 +15,7 @@
 // Everything falls through to the original whenever the pause-menu map is
 // open, the radar mode is not "map & blips", or the minimap is disabled.
 // The rest of the HUD is in hud.cpp, the pause menu in menu.cpp.
+#include "aimcam.h"
 #include "config.h"
 #include "controls.h"
 #include "draw.h"
@@ -226,6 +227,7 @@ bool MinimapActive() { return gConfig.enabled && !MenuMapActive() && RadarMode()
 //   VCHUD_TEST_WANTED=n        wanted level
 //   VCHUD_TEST_MONEY=1         money pill always shown (hud.cpp)
 //   VCHUD_TEST_WHEEL=1         open the weapon/radio wheel once (controls.cpp)
+//   VCHUD_TEST_AIM=1           the aiming camera whenever a gun is out (aimcam.cpp)
 //   VCHUD_DUMP_ROADS=path      write the car path network (for tools/preview)
 void FirstFrame()
 {
@@ -426,6 +428,8 @@ __attribute__((constructor)) void Init()
 		Log("pause menu hooks missing; menu left as is (re-run install.sh)");
 	if (!controls::Install())
 		Log("controller hooks missing; controls left as is (re-run install.sh)");
+	if (!aimcam::Install())
+		Log("camera hook missing; aiming camera left as is (re-run install.sh)");
 }
 
 } // namespace

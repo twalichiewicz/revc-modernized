@@ -34,6 +34,8 @@ constexpr auto kHoldToOpen = std::chrono::milliseconds(200);
 constexpr int kRetuneFrames = 20; // as for a press of the station button
 constexpr float kMouseRange = 60.0f;    // mouse travel (pixels) that counts as a full stick push
 constexpr float kTriggerPressed = -0.7f; // GLFW triggers rest at -1 and are fully in at 1
+constexpr float kStickDeadZone = 0.12f;  // round, on the right stick
+constexpr float kLookYaw = 3.5f, kLookPitch = 2.2f; // radians per second at full deflection
 
 struct Gamepad {
 	bool buttons[kButtons] = {};
@@ -47,6 +49,7 @@ Clock::time_point gLBDownAt;
 bool gLoggedGamepad;
 bool gTestWheel; // VCHUD_TEST_WHEEL: open the wheel once, without LB, to look at it
 Vec2 gMouse;     // the mouse's pointer on an open wheel, within kMouseRange
+Clock::time_point gLastFrame;
 
 // The game's gamecontrollerdb.txt maps Sony's own pads (PS4 Controller, PS5
 // Controller, Sony DualSense) on macOS with the right stick's Y on axis 3,
@@ -142,21 +145,63 @@ void OpenWheel()
 }
 
 // On foot, LT aims and RT fires (modern layout) instead of cycling weapons as on
-// the PS2. Done on the joystick's own state, so keyboard bindings are untouched.
-// The triggers are read directly: the game only reports LT while its binding
-// (previous weapon) applies, which stops being the case once the player aims,
-// so aiming through it would flicker on and off every frame.
+// the PS2, and R1 / Circle no longer aim / fire, so they are free. Done on the
+// joystick's own state, so keyboard bindings are untouched. The triggers are
+// read directly: the game only reports LT while its binding (previous weapon)
+// applies, which stops being the case once the player aims, so aiming through
+// it would flicker on and off every frame.
 void TriggersAimAndFire(uint8_t *pad, const Gamepad &now)
 {
 	// The buttons CPad::GetTarget / CPad::GetWeapon read in each controller mode.
 	const int mode = *api.padAffectedByController ? *reinterpret_cast<const uint16_t *>(pad + 0xec) : 0;
 	if (mode == 3) // aims with LB, which opens the wheels here
 		return;
-	PadJoy(pad, kPadLT) = PadJoy(pad, kPadRT) = 0; // no weapon cycling on the triggers
+	const PadButton aim = kPadRB, fire = mode == 2 ? kPadCross : kPadCircle;
+	PadJoy(pad, kPadLT) = PadJoy(pad, kPadRT) = PadJoy(pad, aim) = PadJoy(pad, fire) = 0;
 	if (now.lt > kTriggerPressed)
-		PadJoy(pad, kPadRB) = 255;
+		PadJoy(pad, aim) = 255;
 	if (now.rt > kTriggerPressed)
-		PadJoy(pad, mode == 2 ? kPadCross : kPadCircle) = 255;
+		PadJoy(pad, fire) = 255;
+}
+
+// Camera look from the right stick, on foot. The game's own stick handling only
+// starts at 30% deflection, with a jump (CapturePad), and the scoped views look
+// with the left stick (CPad::SniperModeLookLeftRight). Instead the stick drives
+// the cameras' mouse input: a small round dead zone, a response curve, slower
+// while aiming, and as much slower in a scope as it magnifies. Mouse movement
+// turns the follow camera by x * -2.5 and y * 4 times the mouse sensitivity and
+// FOV / 80 (CCam::Process_FollowPedWithMouse), the scoped views by -3 and 4
+// (CCam::Process_Sniper); the vertical goes the way the game's own stick does.
+void StickLook(uint8_t *pad, const Gamepad &now, bool aiming, float dt)
+{
+	const uint8_t *cam = ActiveCam();
+	const uint16_t mode = CamMode(cam);
+	const bool follow = mode == kCamFollowPed && *api.useMouse3rdPerson;
+	const bool runabout = mode >= kCamSniperRunabout && mode <= kCamM16RunaboutLast; // can walk: left stick moves
+	const bool scoped = mode == kCamSniper || mode == kCamRocketLauncher || mode == kCamM16FirstPerson ||
+	                    mode == kCamHeliCannon || mode == kCamCameraWeapon;
+	if (!follow && !runabout && !scoped)
+		return;
+	PadJoy(pad, kPadRightStickX) = PadJoy(pad, kPadRightStickY) = 0;
+	if (scoped)
+		PadJoy(pad, kPadLeftStickX) = PadJoy(pad, kPadLeftStickY) = 0;
+	const float m = Length(now.rx, now.ry);
+	if (m <= kStickDeadZone || *api.mouseAccelH <= 0.0f || *api.mouseAccelV <= 0.0f)
+		return;
+	const float n = std::min(1.0f, (m - kStickDeadZone) / (1.0f - kStickDeadZone));
+	const bool precise = !follow || aiming;
+	float speed = std::pow(n, precise ? 2.0f : 1.7f) / m * gConfig.lookSensitivity;
+	if (precise)
+		speed *= gConfig.aimSensitivity;
+	const float fov = CamFov(cam);
+	if (!follow)
+		speed *= fov / 70.0f;
+	const float perMouse = fov / 80.0f; // radians per unit of mouse movement, before the axis factor
+	const float yawPerMouse = (follow ? 2.5f : 3.0f) * *api.mouseAccelH * perMouse;
+	const float pitchPerMouse = 4.0f * *api.mouseAccelV * perMouse;
+	const float pitch = *api.invertLookForPad ? now.ry : -now.ry;
+	*reinterpret_cast<float *>(api.newMouseState + 8) += now.rx * speed * kLookYaw * dt / yawPerMouse;
+	*reinterpret_cast<float *>(api.newMouseState + 12) += pitch * speed * kLookPitch * dt / pitchPerMouse;
 }
 
 void Hook_Update(uint8_t *pad, int16_t index)
@@ -180,6 +225,9 @@ void Hook_Update(uint8_t *pad, int16_t index)
 	}
 	uint8_t *ped = api.FindPlayerPed();
 	const bool control = ped && !PadControlsDisabled(pad);
+	const Clock::time_point frame = Clock::now();
+	const float dt = std::min(std::chrono::duration<float>(frame - gLastFrame).count(), 0.1f);
+	gLastFrame = frame;
 
 	if (gConfig.dpadActions)
 		for (PadButton b : {kPadDPadUp, kPadDPadDown, kPadDPadLeft, kPadDPadRight})
@@ -218,6 +266,9 @@ void Hook_Update(uint8_t *pad, int16_t index)
 				SteerWheel(pad, now);
 		}
 	}
+
+	if (gConfig.aimCamera && control && !PedInVehicle(ped) && !wheel::IsOpen())
+		StickLook(pad, now, now.lt > kTriggerPressed, dt);
 
 	bool cycle = false; // weapon cycling: the game's own, on LT/RT
 	PadButton cycleButton = kPadRT;

@@ -17,6 +17,9 @@ struct Config {
 	bool wheels = true;         // hold LB: weapon wheel on foot, radio wheel in a vehicle
 	bool dpadActions = true;    // D-pad left/right: weapons on foot, radio in a vehicle (not movement)
 	bool modernTriggers = true; // on foot LT aims and RT fires, instead of cycling weapons
+	bool aimCamera = true;      // over-the-shoulder camera while aiming
+	float lookSensitivity = 1.0f; // right stick camera speed
+	float aimSensitivity = 0.45f; // ... while aiming or scoped, relative to that
 	float margin = 0.025f;      // gap to the screen's bottom-left corner, fraction of screen height
 	float buildingScale = 0.6f; // multiplier on real building heights
 	float size = 1.25f;         // minimap height relative to the vanilla radar

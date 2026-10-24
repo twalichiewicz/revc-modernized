@@ -176,6 +176,7 @@ struct Api {
 	uint8_t *newKeyState, *oldKeyState;     // CKeyboardState: int16 F[12], then VK_KEYS[256]
 	uint8_t *newMouseState, *oldMouseState; // CMouseControllerState: LMB at +0, movement x/y (floats) at +8/+0xc
 	uint8_t *padAffectedByController;       // pads use their controller mode (+0xec) when set
+	uint8_t *invertLookForPad;              // CPad::bInvertLook4Pad
 
 	// player
 	uint8_t *(*FindPlayerPed)();
@@ -193,6 +194,16 @@ struct Api {
 	bool (*TxdLoad)(int slot, const char *path);
 	void (*TxdAddRef)(int slot);
 	float *timeScale; // CTimer::ms_fTimeScale
+
+	// camera
+	uint8_t *theCamera;                      // CCamera: active cam index at +0x7e, CCam Cams[] at +0x190
+	float *mouseAccelH, *mouseAccelV;        // CCamera::m_fMouseAccelHorzntl / Vertical (mouse sensitivity)
+	uint8_t *useMouse3rdPerson;              // CCamera::m_bUseMouse3rdPerson: the PC free-aim follow camera
+	float *crosshairMultX, *crosshairMultY; // its crosshair, as a fraction of the screen
+	bool (*GetIsLineOfSightClear)(const CVector &a, const CVector &b, bool buildings, bool vehicles, bool peds,
+	                              bool objects, bool dummies, bool ignoreSeeThrough, bool ignoreSomeObjects);
+	// A shot's line through the crosshair: source and a point `dist` along it.
+	void (*Find3rdPersonCamTargetVector)(uint8_t *camera, float dist, CVector pos, CVector &source, CVector &target);
 
 	// radio (see cMusicManager::ServiceGameMode)
 	int32_t *numRetunePresses; // stations to step on the next retune
@@ -263,6 +274,8 @@ inline bool LeftClickJustDown() { return api.newMouseState[0] && !api.oldMouseSt
 // +0xc0) into NewState; the joystick's D-pad arrives as DPad* and drives the
 // player like the left stick (CPad::GetPedWalkLeftRight).
 enum PadButton : int {
+	kPadLeftStickX = 0x0,
+	kPadLeftStickY = 0x2,
 	kPadRightStickX = 0x4,
 	kPadRightStickY = 0x6,
 	kPadLB = 0x8,
@@ -312,6 +325,22 @@ inline const CSprite2d *RadarDiscSprite() { return reinterpret_cast<const CSprit
 inline const CVector &EntityPos(const uint8_t *entity) { return *reinterpret_cast<const CVector *>(entity + 0x38); }
 inline bool PedInVehicle(const uint8_t *ped) { return ped[0x4c0] != 0; }
 inline uint8_t *PedVehicle(const uint8_t *ped) { return *reinterpret_cast<uint8_t *const *>(ped + 0x4b8); }
+// The camera that is on screen (CCam, 0x1e0 bytes): mode at +0xc, field of view at +0xb4.
+inline uint8_t *ActiveCam() { return api.theCamera + 0x190 + size_t(api.theCamera[0x7e]) * 0x1e0; }
+inline uint16_t CamMode(const uint8_t *cam) { return *reinterpret_cast<const uint16_t *>(cam + 0xc); }
+inline float CamFov(const uint8_t *cam) { return *reinterpret_cast<const float *>(cam + 0xb4); }
+// CCam modes (see CCamera::SetNewPlayerWeaponMode, CHud::Draw)
+enum CamModeId : uint16_t {
+	kCamFollowPed = 4,
+	kCamSniper = 7,
+	kCamRocketLauncher = 8,
+	kCamM16FirstPerson = 34,
+	kCamSniperRunabout = 39, // 39-42: the PC's first-person weapon views you can walk in
+	kCamM16RunaboutLast = 42,
+	kCamHeliCannon = 45,
+	kCamCameraWeapon = 46,
+};
+
 inline int16_t EntityModel(const uint8_t *entity) { return *reinterpret_cast<const int16_t *>(entity + 0x6a); }
 
 // CPlayerPed weapons (see CPlayerPed::ProcessWeaponSwitch): 10 CWeapon slots of

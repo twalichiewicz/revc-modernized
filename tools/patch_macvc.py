@@ -66,6 +66,8 @@ DEFAULT_HOOKS = [
     "_ZN6CRadar10DrawLegendEiii",
     # controller: weapon/radio wheels, D-pad actions
     "_ZN4CPad6UpdateEs",
+    # over-the-shoulder aiming
+    "_ZN4CCam26Process_FollowPedWithMouseERK7CVectorfff",
 ]
 
 # Flag-controlled skips inside CHud::Draw: (name, instruction address, expected
@@ -75,6 +77,9 @@ DEFAULT_HOOKS = [
 DEFAULT_SKIPS = [
     ("skip:hud_health", 0x1001F8DEC, 0xF94033E8, 0x1001F8FB4),  # ldr x8, [sp, #0x60]
     ("skip:hud_armour", 0x1001F8FDC, 0xBD400108, 0x1001F91F8),  # ldr s8, [x8]
+    # In CPlayerPed::ProcessPlayerWeapon: the M4, Ruger and M60 aim in first person
+    # (as the sniper rifles do); when set, they take the third-person path instead.
+    ("skip:rifle_first_person", 0x1001D480C, 0xAA1403E0, 0x1001D4794),  # mov x0, x20
 ]
 KIND_HOOK, KIND_SKIP = 0, 1
 

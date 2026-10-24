@@ -120,6 +120,7 @@ bool Resolve()
 	Bind(api.newMouseState, "_ZN4CPad23NewMouseControllerStateE");
 	Bind(api.oldMouseState, "_ZN4CPad23OldMouseControllerStateE");
 	Bind(api.padAffectedByController, "_ZN4CPad22IsAffectedByControllerE");
+	Bind(api.invertLookForPad, "_ZN4CPad15bInvertLook4PadE");
 	Bind(api.clockHours, "_ZN6CClock18ms_nGameClockHoursE");
 	Bind(api.clockMinutes, "_ZN6CClock20ms_nGameClockMinutesE");
 
@@ -137,6 +138,14 @@ bool Resolve()
 	Bind(api.TxdLoad, "_ZN9CTxdStore7LoadTxdEiPKc");
 	Bind(api.TxdAddRef, "_ZN9CTxdStore6AddRefEi");
 	Bind(api.timeScale, "_ZN6CTimer13ms_fTimeScaleE");
+	Bind(api.theCamera, "TheCamera");
+	Bind(api.mouseAccelH, "_ZN7CCamera20m_fMouseAccelHorzntlE");
+	Bind(api.mouseAccelV, "_ZN7CCamera21m_fMouseAccelVerticalE");
+	Bind(api.useMouse3rdPerson, "_ZN7CCamera20m_bUseMouse3rdPersonE");
+	Bind(api.crosshairMultX, "_ZN7CCamera22m_f3rdPersonCHairMultXE");
+	Bind(api.crosshairMultY, "_ZN7CCamera22m_f3rdPersonCHairMultYE");
+	Bind(api.GetIsLineOfSightClear, "_ZN6CWorld21GetIsLineOfSightClearERK7CVectorS2_bbbbbbb");
+	Bind(api.Find3rdPersonCamTargetVector, "_ZN7CCamera28Find3rdPersonCamTargetVectorEf7CVectorRS0_S1_");
 
 	Bind(api.numRetunePresses, "gNumRetunePresses");
 	Bind(api.retuneCounter, "gRetuneCounter");

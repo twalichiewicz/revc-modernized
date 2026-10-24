@@ -1,5 +1,7 @@
 #include "hud.h"
+#include "aimcam.h"
 #include "config.h"
+#include "draw.h"
 #include "game.h"
 #include "hooks.h"
 #include "log.h"
@@ -28,6 +30,8 @@ struct CallSite {
 constexpr CallSite kPrintSites[] = {{0x1f8284, kMoney}, {0x1fa5b0, kClock}, {0x1f8b00, kAmmo}, {0x1f9674, kStars}};
 constexpr CallSite kScaleSites[] = {{0x1f89dc, kAmmo}, {0x1f94f0, kStars}, {0x1fa4b8, kClock}};
 constexpr CallSite kDrawSites[] = {{0x1f8800, kWeapon}, {0x1f8968, kWeapon}};
+// The third-person (free-aim camera) crosshair: the M4, Ruger and M60's, and every other gun's.
+constexpr uint32_t kCrosshairSites[] = {0x1f7be8, 0x1fc714};
 
 constexpr float kWeaponScale = 0.5f;
 constexpr float kStarScale = 0.5f;
@@ -45,6 +49,8 @@ void (*orig_DrawUV)(const CSprite2d *, const float *, const CRGBA *, float, floa
                     float);
 
 const uint8_t *gText;  // __TEXT base of the running game
+bool gCrosshairOnlyWhenAiming;
+Im2DCanvas gDotCanvas;
 bool gActive;          // HUD changes on this frame
 bool gHideClock;       // our clock replaces the vanilla one this frame
 bool gWeaponAnchorThisFrame;
@@ -217,6 +223,19 @@ __attribute__((noinline)) void Hook_SetScale(float sx, float sy)
 __attribute__((noinline)) void Hook_DrawUV(const CSprite2d *sprite, const float *rect, const CRGBA *col, float u0,
                                            float v0, float u1, float v1, float u3, float v3, float u2, float v2)
 {
+	// The full crosshair only while aiming; otherwise a small dot where it points.
+	const intptr_t site = static_cast<const uint8_t *>(__builtin_return_address(0)) - gText;
+	if (gCrosshairOnlyWhenAiming && (site == kCrosshairSites[0] || site == kCrosshairSites[1]) &&
+	    !aimcam::Aiming()) {
+		const float cx = (rect[0] + rect[2]) / 2, cy = (rect[1] + rect[3]) / 2;
+		const float r = std::max(1.5f, ScreenHeight() * 0.0022f);
+		SetHudRenderStates();
+		gDotCanvas.SetTexture(nullptr);
+		gDotCanvas.Pill(cx - r - 1, cy - r - 1, 2 * r + 2, 2 * r + 2, {0, 0, 0, 140});
+		gDotCanvas.Pill(cx - r, cy - r, 2 * r, 2 * r, {255, 255, 255, 230});
+		gDotCanvas.Flush();
+		return;
+	}
 	if (gActive && Find(kDrawSites, __builtin_return_address(0)) == kWeapon) {
 		// CRect: x at 0 and 8, y at 4 and 12 (whichever order the fields are in).
 		if (!gWeaponAnchorThisFrame) {
@@ -243,6 +262,10 @@ bool Install()
 	if (!gText || !Verify(kPrintSites, "_ZN5CFont11PrintStringEffPt") || !Verify(kScaleSites, "_ZN5CFont8SetScaleEff") ||
 	    !Verify(kDrawSites, "_ZN9CSprite2d4DrawERK5CRectRK5CRGBAffffffff"))
 		return false;
+	gCrosshairOnlyWhenAiming = gConfig.aimCamera;
+	for (uint32_t site : kCrosshairSites)
+		gCrosshairOnlyWhenAiming =
+		    gCrosshairOnlyWhenAiming && hooks::IsCallTo(site, "_ZN9CSprite2d4DrawERK5CRectRK5CRGBAffffffff");
 	return hooks::Install("_ZN5CFont11PrintStringEffPt", Hook_PrintString, orig_PrintString) &&
 	       hooks::Install("_ZN5CFont8SetScaleEff", Hook_SetScale, orig_SetScale) &&
 	       hooks::Install("_ZN9CSprite2d4DrawERK5CRectRK5CRGBAffffffff", Hook_DrawUV, orig_DrawUV);
