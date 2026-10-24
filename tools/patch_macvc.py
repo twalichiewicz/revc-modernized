@@ -75,6 +75,10 @@ DEFAULT_HOOKS = [
     "_ZN7CWeapon19DoDriveByAutoAimingEP7CEntityP8CVehicleP7CVectorS5_",
     "_ZN4CCam20Process_FollowCar_SAERK7CVectorfff",
     "_ZN4CPed9PreRenderEv",
+    # phone calls in vehicles, the brick phone
+    "_ZN11CTheScripts7ProcessEv",
+    "_ZN4CPed15SetAnswerMobileEv",
+    "_ZN4CPed17ClearAnswerMobileEv",
 ]
 
 # Flag-controlled skips inside CHud::Draw: (name, instruction address, expected

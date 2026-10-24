@@ -218,6 +218,20 @@ struct Api {
 	void (*UpdateRpHAnim)(uint8_t *entity);          // rebuilds those matrices from the keyframes
 	void *(*RtQuatRotate)(void *quat, const CVector *axis, float degrees, int combineOp);
 
+	// ped animation (CAnimBlendAssociation: blend delta at +0x2c, current time at +0x30)
+	uint8_t *(*BlendAnimation)(uint8_t *clump, int group, int anim, float delta); // fades the other partial anims
+	uint8_t *(*GetAssociation)(uint8_t *clump, uint32_t anim);                    // RpAnimBlendClumpGetAssociation
+	void (*SetFinishCallback)(uint8_t *assoc, void (*callback)(uint8_t *assoc, void *arg), void *arg);
+	void (*AddWeaponModel)(uint8_t *ped, int model);    // into the right hand (CPed::m_pWeaponModel)
+	void (*RemoveWeaponModel)(uint8_t *ped, int model); // -1: whatever is there
+	bool (*IsPedInControl)(uint8_t *ped);
+	bool (*PadGetTarget)(uint8_t *pad); // aiming, in the pad's controller mode
+	bool (*PadGetWeapon)(uint8_t *pad); // firing
+
+	// mission scripts
+	uint8_t *scriptSpace;    // CTheScripts::ScriptSpace: main.scm as loaded, globals first (4 bytes each)
+	uint8_t **activeScripts; // CTheScripts::pActiveScripts: CRunningScript list (next at +0)
+
 	// radio (see cMusicManager::ServiceGameMode)
 	int32_t *numRetunePresses; // stations to step on the next retune
 	int32_t *retuneCounter;    // frames until the retune
@@ -355,6 +369,20 @@ enum CamModeId : uint16_t {
 	kCamHeliCannon = 45,
 	kCamCameraWeapon = 46,
 };
+
+// CPed state (+0x2fc), the clump it animates (+0x58), what's in its right hand
+// (m_pWeaponModel at +0x290, that model's index at +0x684).
+inline int32_t PedState(const uint8_t *ped) { return *reinterpret_cast<const int32_t *>(ped + 0x2fc); }
+inline uint8_t *EntityClump(uint8_t *entity) { return *reinterpret_cast<uint8_t **>(entity + 0x58); }
+inline int32_t PedHandModel(const uint8_t *ped) { return *reinterpret_cast<const int32_t *>(ped + 0x684); }
+constexpr int32_t kPedDriving = 0x32;
+
+// CRunningScript: name at +0x10, GOSUB return addresses at +0x1c, their count at +0x34.
+inline uint8_t *ScriptNext(uint8_t *script) { return *reinterpret_cast<uint8_t **>(script); }
+inline const char *ScriptName(const uint8_t *script) { return reinterpret_cast<const char *>(script + 0x10); }
+inline const uint32_t *ScriptStack(const uint8_t *script) { return reinterpret_cast<const uint32_t *>(script + 0x1c); }
+inline int ScriptStackDepth(const uint8_t *script) { return *reinterpret_cast<const uint16_t *>(script + 0x34); }
+inline int32_t &ScriptGlobal(int index) { return *reinterpret_cast<int32_t *>(api.scriptSpace + 4 * index); }
 
 inline int16_t EntityModel(const uint8_t *entity) { return *reinterpret_cast<const int16_t *>(entity + 0x6a); }
 // Helicopters (cars with heli handling in VC), planes and the RC aircraft, by model (data/default.ide).

@@ -3,6 +3,9 @@
 //
 // usage: vcmm-preview <map.bin> <roads.csv> <out.png> <x> <y> <heading deg> <range> [targetX targetY]
 //   roads.csv comes from VCHUD_DUMP_ROADS; heading 0 = camera facing north.
+//        vcmm-preview --phone <out.png> <line 1> <line 2> [tilt deg] [scroll s] [night]
+//   the call phone, as on a 1080-pixel-high screen.
+#include "../../src/brickphone.h"
 #include "../../src/config.h"
 #include "../../src/scene.h"
 #include "../bake/gamefiles.h"
@@ -173,8 +176,42 @@ std::vector<Vec2> ShortestPath(const RoadGraph &roads, const std::vector<std::ve
 
 } // namespace
 
+int PreviewPhone(int argc, char **argv)
+{
+	if (argc < 5) {
+		fprintf(stderr, "usage: %s --phone <out.png> <line 1> <line 2> [tilt deg] [scroll s]\n", argv[0]);
+		return 2;
+	}
+	const int w = 420, h = 520; // the bottom-right corner of a 1920x1080 screen
+	Image fb{w, h, std::vector<uint8_t>(size_t(w) * h * 4, 0)};
+	for (int y = 0; y < h; y++) // a dusky Vice City street behind it
+		for (int x = 0; x < w; x++) {
+			uint8_t *p = &fb.rgba[(size_t(y) * w + x) * 4];
+			p[0] = uint8_t(70 + 60 * y / h);
+			p[1] = uint8_t(80 + 30 * x / w);
+			p[2] = uint8_t(110 - 30 * y / h);
+			p[3] = 255;
+			if (argc > 7) // a night scene
+				p[0] /= 4, p[1] /= 4, p[2] /= 4;
+		}
+	BrickPhone phone;
+	phone.unit = 0.095f * 1080;
+	phone.x = w - 27 - phone.unit;
+	phone.y = h - 27 - kBrickPhoneHeight * phone.unit;
+	phone.line1 = argv[3];
+	phone.line2 = argv[4];
+	phone.tilt = argc > 5 ? float(atof(argv[5])) * float(M_PI) / 180.0f : 0.0f;
+	phone.scroll = argc > 6 ? float(atof(argv[6])) : 0.0f;
+	phone.sendGlow = 1.0f;
+	SoftCanvas canvas(fb);
+	DrawBrickPhone(canvas, phone);
+	return WritePng(argv[2], fb.w, fb.h, fb.rgba) ? 0 : 1;
+}
+
 int main(int argc, char **argv)
 {
+	if (argc > 1 && std::string(argv[1]) == "--phone")
+		return PreviewPhone(argc, argv);
 	if (argc < 8) {
 		fprintf(stderr, "usage: %s <map.bin> <roads.csv> <out.png> <x> <y> <heading> <range> [tx ty]\n", argv[0]);
 		return 2;

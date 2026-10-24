@@ -19,6 +19,7 @@ struct Config {
 	bool modernTriggers = true; // LT aims and RT fires on foot, brake and gas in a vehicle
 	bool aimCamera = true;      // over-the-shoulder camera while aiming
 	bool driveByAim = true;     // in a vehicle hold LB to aim anywhere, RB shoots
+	bool phone = true;          // calls ring in vehicles too; a brick phone shows them, D-pad up answers
 	float lookSensitivity = 1.0f; // right stick camera speed
 	float aimSensitivity = 0.45f; // ... while aiming or scoped, relative to that
 	float margin = 0.025f;      // gap to the screen's bottom-left corner, fraction of screen height

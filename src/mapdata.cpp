@@ -7,7 +7,7 @@
 namespace mapdata {
 namespace {
 
-constexpr char kMagic[8] = {'V', 'C', 'M', 'M', 'M', 'A', 'P', '2'};
+constexpr char kMagic[8] = {'V', 'C', 'M', 'M', 'M', 'A', 'P', '3'};
 
 template <typename T>
 bool Read(FILE *f, T &v) { return fread(&v, sizeof v, 1, f) == 1; }

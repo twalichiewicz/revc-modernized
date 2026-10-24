@@ -28,6 +28,7 @@
 #include "mapdata.h"
 #include "menu.h"
 #include "minimap.h"
+#include "phone.h"
 #include "projection.h"
 #include "scene.h"
 #include "wheel.h"
@@ -349,6 +350,7 @@ void Hook_HudDraw()
 	menu::OnGameplayFrame();
 	orig_HudDraw();
 	driveby::Draw();
+	phone::Draw();
 	wheel::Draw();
 }
 
@@ -457,6 +459,8 @@ __attribute__((constructor)) void Init()
 		Log("camera hook missing; aiming camera left as is (re-run install.sh)");
 	if (!driveby::Install())
 		Log("drive-by hooks missing; drive-bys left as is (re-run install.sh)");
+	if (!phone::Install())
+		Log("phone functions missing; calls left as they are");
 }
 
 } // namespace

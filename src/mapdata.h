@@ -34,7 +34,8 @@ struct Building {
 
 struct Road {
 	Vec2 a, b;
-	float width; // kerb to kerb
+	float width;        // kerb to kerb
+	float joinA, joinB; // the round joint at each end: as wide as the narrowest road meeting there
 };
 
 struct Map {

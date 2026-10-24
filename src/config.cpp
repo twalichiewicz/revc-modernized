@@ -27,6 +27,7 @@ const char kDefaultIni[] = "; VC Modern HUD for macVC. Delete this file to resto
                            "ModernTriggers=1     ; LT aims, RT fires; in a vehicle RT gas, LT brake, R3 look back\n"
                            "AimCamera=1          ; over-the-shoulder camera while aiming\n"
                            "DriveByAim=1         ; in a vehicle hold LB to aim an SMG or pistol anywhere, RB shoots\n"
+                           "Phone=1              ; calls ring in vehicles too: a brick phone slides up, D-pad up answers\n"
                            "LookSensitivity=1    ; right stick camera speed\n"
                            "AimSensitivity=0.45  ; right stick speed while aiming or scoped (1 = as when not aiming)\n"
                            "Margin=0.025         ; distance from the screen corner\n"
@@ -71,6 +72,8 @@ void Apply(const char *key, const char *value)
 		gConfig.aimCamera = b;
 	else if (!strcasecmp(key, "DriveByAim"))
 		gConfig.driveByAim = b;
+	else if (!strcasecmp(key, "Phone"))
+		gConfig.phone = b;
 	else if (!strcasecmp(key, "AimSensitivity") && f > 0.05f && f <= 2.0f)
 		gConfig.aimSensitivity = f;
 	else if (!strcasecmp(key, "LookSensitivity") && f > 0.05f && f <= 4.0f)

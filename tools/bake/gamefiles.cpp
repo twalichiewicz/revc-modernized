@@ -248,6 +248,7 @@ std::vector<Instance> LoadInstances(const std::string &gameData)
 std::vector<RoadSegment> LoadCarPaths(const std::string &gameData)
 {
 	constexpr float kLaneWidth = 5.0f;
+	constexpr float kMaxMedian = 15.0f; // as CPathFind::StoreNodeInfoCar caps it
 	std::vector<RoadSegment> out;
 	std::ifstream ipl(gameData + "/data/maps/paths.ipl");
 	std::string line;
@@ -259,11 +260,44 @@ std::vector<RoadSegment> LoadCarPaths(const std::string &gameData)
 		float width;
 	};
 	std::vector<Node> group;
+	// Like CPathFind::PreparePathDataForType, take a link's width from the
+	// tile's external node at either end and carry it along chains of internal
+	// nodes: internal nodes' own lane counts are mostly placeholders (1 + 1 on
+	// a four-lane road), which drew those stretches narrower than the rest.
 	auto flush = [&] {
-		if (groupType == 1)
-			for (const Node &n : group)
-				if (n.type > 0 && n.next >= 0 && n.next < int(group.size()) && group[size_t(n.next)].type > 0)
-					out.push_back({n.pos, group[size_t(n.next)].pos, n.width});
+		constexpr int kExternal = 1, kInternal = 2;
+		struct Link {
+			int a, b;
+			float width; // < 0: not known yet
+		};
+		std::vector<Link> links;
+		for (size_t i = 0; groupType == 1 && i < group.size(); i++) {
+			const Node &n = group[i];
+			if (n.type <= 0 || n.next < 0 || n.next >= int(group.size()) || group[size_t(n.next)].type <= 0)
+				continue;
+			const Node &m = group[size_t(n.next)];
+			links.push_back({int(i), n.next, n.type == kExternal ? n.width : m.type == kExternal ? m.width : -1.0f});
+		}
+		for (bool changed = true; changed;) {
+			changed = false;
+			for (size_t i = 0; i < group.size(); i++) {
+				if (group[i].type != kInternal)
+					continue;
+				std::vector<Link *> at;
+				for (Link &l : links)
+					if (l.a == int(i) || l.b == int(i))
+						at.push_back(&l);
+				if (at.size() != 2)
+					continue; // a junction: each road keeps its own width
+				for (int k = 0; k < 2; k++)
+					if (at[k]->width < 0 && at[1 - k]->width >= 0) {
+						at[k]->width = at[1 - k]->width;
+						changed = true;
+					}
+			}
+		}
+		for (const Link &l : links)
+			out.push_back({group[size_t(l.a)].pos, group[size_t(l.b)].pos, l.width >= 0 ? l.width : group[size_t(l.a)].width});
 		group.clear();
 	};
 	while (std::getline(ipl, line)) {
@@ -289,7 +323,7 @@ std::vector<RoadSegment> LoadCarPaths(const std::string &gameData)
 		float median, left, right;
 		if (ss >> n.type >> n.next >> cross >> n.pos.x >> n.pos.y >> n.pos.z >> median >> left >> right) {
 			n.pos = {n.pos.x / 16.0f, n.pos.y / 16.0f, n.pos.z / 16.0f};
-			n.width = (left + right) * kLaneWidth + median;
+			n.width = (left + right) * kLaneWidth + std::min(median, kMaxMedian);
 			group.push_back(n);
 		}
 	}

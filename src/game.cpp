@@ -154,6 +154,16 @@ bool Resolve()
 	Bind(api.HAnimMatrixArray, "_Z30RpHAnimHierarchyGetMatrixArrayPN2rw14HAnimHierarchyE");
 	Bind(api.UpdateRpHAnim, "_ZN7CEntity13UpdateRpHAnimEv");
 	Bind(api.RtQuatRotate, "_Z12RtQuatRotateP6RtQuatPKN2rw3V3dEf15RwOpCombineType");
+	Bind(api.BlendAnimation, "_ZN12CAnimManager14BlendAnimationEPN2rw5ClumpE12AssocGroupId11AnimationIdf");
+	Bind(api.GetAssociation, "_Z30RpAnimBlendClumpGetAssociationPN2rw5ClumpEj");
+	Bind(api.SetFinishCallback, "_ZN21CAnimBlendAssociation17SetFinishCallbackEPFvPS_PvES1_");
+	Bind(api.AddWeaponModel, "_ZN4CPed14AddWeaponModelEi");
+	Bind(api.RemoveWeaponModel, "_ZN4CPed17RemoveWeaponModelEi");
+	Bind(api.IsPedInControl, "_ZN4CPed14IsPedInControlEv");
+	Bind(api.PadGetTarget, "_ZN4CPad9GetTargetEv");
+	Bind(api.PadGetWeapon, "_ZN4CPad9GetWeaponEv");
+	Bind(api.scriptSpace, "_ZN11CTheScripts11ScriptSpaceE");
+	Bind(api.activeScripts, "_ZN11CTheScripts14pActiveScriptsE");
 
 	Bind(api.numRetunePresses, "gNumRetunePresses");
 	Bind(api.retuneCounter, "gRetuneCounter");

@@ -8,7 +8,8 @@ A modern GTA-style HUD and controller layout for the native Apple Silicon port o
 - a cleaner HUD around it,
 - a GTA IV-style pause menu that opens straight on the map,
 - GTA V-style weapon and radio wheels, and a D-pad that does something useful,
-- modern aiming on foot and free-aim drive-bys.
+- modern aiming on foot and free-aim drive-bys,
+- story phone calls you can take anywhere, on a 1980s brick phone that slides up GTA IV-style.
 
 ![In game](docs/hud.jpg)
 
@@ -52,6 +53,7 @@ A modern GTA-style HUD and controller layout for the native Apple Silicon port o
   - The D-pad no longer moves you. Left and right switch weapons on foot, and a tap changes the radio station
     in a vehicle. Down zooms the minimap out for a few seconds, GTA V style (press again to go back). Up, in
     a vehicle, starts or stops its side mission: taxi, vigilante, paramedic or firefighter (R3 on the PS2).
+    While the phone rings, up answers it instead.
   - On foot, LT aims and RT fires, instead of switching weapons. R1 and Circle no longer aim and fire, so they
     are free for other things.
   - In a car, on a bike or in a boat, RT is the throttle and LT the brake and reverse, both as far as you
@@ -66,6 +68,11 @@ A modern GTA-style HUD and controller layout for the native Apple Silicon port o
   aiming). Tommy leans out of whichever side you're facing and points his gun at the crosshair, and the
   shots go there instead of straight out of the window. Pistols fire one shot per press. Without either
   weapon, LB does nothing.
+- **Phone calls anywhere.** The story's calls from Lance, Kent Paul, Cortez and the rest used to wait until
+  you were on foot, then had you press L1 and stand still until they were over. Now they ring in vehicles
+  too: a brick phone slides up in the bottom-right corner, showing who's calling on its LED display, and
+  D-pad up answers. Tommy holds it to his ear and keeps walking or driving; aiming, fighting or drawing a
+  weapon puts it away while the call carries on. Calls during missions are left as they were.
 - **Precise right stick.** The camera follows the right stick smoothly from a small dead zone (the game's own
   stick handling ignored the first 30% and then jumped), slower while aiming and slower still through a
   zoomed scope.
@@ -142,6 +149,7 @@ This restores the original binary and removes the plugin. Your saves are never t
   | `ModernTriggers` | 1 | LT aims and RT fires on foot; RT throttle, LT brake and R3 look back in a vehicle |
   | `AimCamera` | 1 | over-the-shoulder aiming, the hip-fire dot and the precise right stick |
   | `DriveByAim` | 1 | in a vehicle hold LB to aim an SMG or pistol anywhere, RB shoots |
+  | `Phone` | 1 | calls ring in vehicles too, on a brick phone; D-pad up answers |
   | `LookSensitivity` | 1 | right stick camera speed |
   | `AimSensitivity` | 0.45 | right stick speed while aiming or scoped (1 = as when not aiming) |
   | `Margin` | 0.025 | gap to the screen corner (fraction of screen height) |
@@ -168,7 +176,9 @@ hooks are written to disk:
 - **Controller.** `src/controls.cpp` hooks `CPad::Update`, between the game reading the gamepad and merging it
   into the pad state. It reads the gamepad through GLFW directly, takes the D-pad, LB and the triggers out
   of the joystick's state, and puts back the buttons the game expects: aim and fire on foot, throttle and
-  brake (as far as the triggers are pulled) in a vehicle. Weapons switch through the game's own
+  brake in a vehicle. The game reads throttle and brake as pressure, as the PS2's buttons gave it, but its
+  merge rounds every button to fully on or off, so the pedals go in after the merge, as far as the triggers
+  are pulled. Weapons switch through the game's own
   `CPlayerPed::ProcessWeaponSwitch`, stations through its retune counter, and side missions start on the R3
   press their scripts wait for. The wheels are in `src/wheel.cpp`.
 - **Aiming.** `src/aimcam.cpp` hooks the PC follow camera (`CCam::Process_FollowPedWithMouse`) and moves it over
@@ -180,6 +190,13 @@ hooks are written to disk:
   the shot from the gun to what's under the crosshair. The aiming camera replaces the vehicle camera's
   result (`CCam::Process_FollowCar_SA`), and `CPed::PreRender` turns Tommy's right upper arm towards the
   crosshair before the game rebuilds his skeleton from the animation.
+- **Phone.** `src/phone.cpp` patches the `CELL` mission script in memory once `main.scm` is loaded (checking
+  every byte first, so a modded script is left alone): calls start and carry on whether or not Tommy is on
+  foot, and the "press L1" help is gone. Holding D-pad up holds L1 for the script until it picks up.
+  In place of `CPed::SetAnswerMobile` it plays the game's phone animations, which only move his head and
+  right arm, and puts the game's phone model in his hand, without the ped state that freezes him. The caller is worked out from
+  the script's GOSUB stack: each of the 41 calls is its own call site. The phone itself is drawn by
+  `src/brickphone.cpp`.
 - **Pause menu.** `src/menu.cpp` opens the frontend on the map page, draws the tabs after each frontend frame
   and switches pages through the game's own `CMenuManager::SwitchToNewScreen`. The legend's drawing calls
   in `CMenuManager::PrintMap` and `CRadar::DrawLegend` are moved and scaled into the corner.
@@ -196,7 +213,9 @@ The game still draws the blips, re-projected onto the map. Routing uses the game
 `tools/bake` builds the map data:
 
 - **Land, water, parks and beaches** come from the radar art, with its painted roads and buildings removed.
-- **Roads** come from `data/maps/paths.ipl`, at their real widths.
+- **Roads** come from `data/maps/paths.ipl`, at their real widths. As in the game, each tile's lane counts
+  come from the nodes at its edges and are carried along its inner nodes, so a road keeps one width from
+  junction to junction.
 - **Buildings** are the roof surfaces of each map model's collision mesh. These are upward faces that nothing
   in the same model covers and that stand above the street, welded into connected roofs whose outlines
   become walls.
@@ -209,6 +228,8 @@ make test       # projection unit tests
 make preview    # offline renderer for iterating on the look without the game:
 build/vcmm-preview <map.bin> <roads.csv> <out.png> <x> <y> <heading> <range> [targetX targetY]
                 # VCMM_PREVIEW_SCALE=2.5 renders a close-up
+build/vcmm-preview --phone <out.png> <line 1> <line 2> [tilt deg] [scroll s] [night]
+                # the call phone, as on a 1080p screen
 build/vcmm-bake <GameData> out.bin --area <x> <y> <size> area.png
                 # top-down check: real collision vs extracted buildings and roads
 ```
@@ -221,6 +242,8 @@ Developer switches (environment variables, e.g. `open --env VAR=value "Grand The
 - `VCHUD_TEST_MONEY=1` always shows the money pill.
 - `VCHUD_TEST_WHEEL=1` opens the weapon or radio wheel once, without holding LB.
 - `VCHUD_TEST_AIM=1` shows the aiming camera whenever a gun is out.
+- `VCHUD_TEST_PHONE=1` rings a pretend call 10 s after the last one ends, to try the phone without waiting
+  for the story.
 
 Struct offsets, symbols and call sites were read from the 1.0.5217 binary. Supporting another build means
 re-deriving them; see `src/game.h`, `src/hud.cpp`, `src/menu.cpp`, `src/controls.cpp` and `tools/patch_macvc.py`.

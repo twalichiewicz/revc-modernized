@@ -163,12 +163,14 @@ void DrawRoads(Canvas &canvas, const View &view)
 	canvas.SetTexture(nullptr);
 	for (int pass = 0; pass < 2; pass++) { // all casings first, so junctions merge cleanly
 		const CRGBA col = pass == 0 ? kRoadCasing : kRoad;
+		auto halfWidth = [&](float width) {
+			return HalfWidth(view.proj, view.in.range, width * kRoadInset, kMinRoadPx) +
+			       (pass == 0 ? kCasingWidth / view.in.range : 0.0f);
+		};
 		for (const mapdata::Road *r : visible) {
-			const float hw = HalfWidth(view.proj, view.in.range, r->width * kRoadInset, kMinRoadPx) +
-			                 (pass == 0 ? kCasingWidth / view.in.range : 0.0f);
-			ThickSegment(canvas, view, r->a, r->b, hw, col);
-			Disc(canvas, view, r->a, hw, col);
-			Disc(canvas, view, r->b, hw, col);
+			ThickSegment(canvas, view, r->a, r->b, halfWidth(r->width), col);
+			Disc(canvas, view, r->a, halfWidth(r->joinA), col);
+			Disc(canvas, view, r->b, halfWidth(r->joinB), col);
 		}
 	}
 	canvas.Flush();

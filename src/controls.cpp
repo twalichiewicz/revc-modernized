@@ -5,6 +5,7 @@
 #include "hooks.h"
 #include "log.h"
 #include "minimap.h"
+#include "phone.h"
 #include "wheel.h"
 
 #include <algorithm>
@@ -37,6 +38,7 @@ constexpr int kRetuneFrames = 20; // as for a press of the station button
 constexpr auto kSubMissionHold = std::chrono::milliseconds(300); // R3, as the scripts poll it
 constexpr float kMouseRange = 60.0f;    // mouse travel (pixels) that counts as a full stick push
 constexpr float kTriggerPressed = -0.7f; // GLFW triggers rest at -1 and are fully in at 1
+constexpr float kPedalSlack = 0.04f, kPedalFloor = 0.96f; // trigger travel (0..1) read as untouched / fully in
 constexpr float kStickDeadZone = 0.12f;  // round, on the right stick
 constexpr float kLookYaw = 3.5f, kLookPitch = 2.2f; // radians per second at full deflection
 
@@ -171,20 +173,28 @@ void TriggersAimAndFire(uint8_t *pad, const Gamepad &now)
 		PadJoy(pad, fire) = 255;
 }
 
+// How far a trigger is pulled, as a pedal: 0 (off) to 1 (floored).
+float Pedal(float axis)
+{
+	return std::clamp(((axis + 1.0f) / 2.0f - kPedalSlack) / (kPedalFloor - kPedalSlack), 0.0f, 1.0f);
+}
+
+struct Pedals {
+	float gas = 0, brake = 0;
+};
+
 // In a car, bike or boat, RT accelerates and LT brakes or reverses, as far as
 // they're pulled, instead of looking left / right. CPad::GetAccelerate and
-// GetBrake read Cross and Square in controller modes 0-2. Aircraft keep their
-// controls (their triggers turn the tail).
-void TriggersDrive(uint8_t *pad, const Gamepad &now)
+// GetBrake read Cross and Square in controller modes 0-2 as pressure (0-255,
+// from the PS2's pressure-sensitive buttons), but CPad::Update's merge of the
+// joystick and keyboard turns every button into 0 or 255, so the pedals go in
+// after it (Hook_Update). Aircraft keep their controls (their triggers turn
+// the tail).
+Pedals TriggersDrive(uint8_t *pad, const Gamepad &now)
 {
 	if (*api.padAffectedByController && *reinterpret_cast<const uint16_t *>(pad + 0xec) == 3)
-		return;
+		return {};
 	PadJoy(pad, kPadLT) = PadJoy(pad, kPadRT) = 0;
-	const float gas = (now.rt + 1.0f) / 2.0f, brake = (now.lt + 1.0f) / 2.0f; // 0..1
-	if (gas > 0.05f)
-		PadJoy(pad, kPadCross) = std::max(PadJoy(pad, kPadCross), int16_t(gas * 255.0f));
-	if (brake > 0.05f)
-		PadJoy(pad, kPadSquare) = std::max(PadJoy(pad, kPadSquare), int16_t(brake * 255.0f));
 	// Looking back was both triggers (CPad::GetLookBehindForCar); it moves to R3,
 	// as in GTA V, whose own job (side missions) is on D-pad up.
 	if (gConfig.dpadActions) {
@@ -192,6 +202,7 @@ void TriggersDrive(uint8_t *pad, const Gamepad &now)
 		if (now.buttons[kRThumb])
 			PadJoy(pad, kPadLT) = PadJoy(pad, kPadRT) = 255;
 	}
+	return {Pedal(now.rt), Pedal(now.lt)};
 }
 
 // In a vehicle, D-pad left / right: a tap retunes to the previous / next
@@ -309,11 +320,12 @@ void Hook_Update(uint8_t *pad, int16_t index)
 	const bool lbAims = driveby::Enabled() && vehicle && !IsAircraft(vehicle); // else LB is the wheel's
 
 	bool tapLB = false;
+	Pedals pedals;
 	if (gConfig.modernTriggers && control) {
 		if (!vehicle)
 			TriggersAimAndFire(pad, now);
 		else if (!IsAircraft(vehicle))
-			TriggersDrive(pad, now);
+			pedals = TriggersDrive(pad, now);
 	}
 
 	// In a car, on a bike or a boat: hold LB to aim, the right stick turns the
@@ -364,12 +376,17 @@ void Hook_Update(uint8_t *pad, int16_t index)
 	if (gConfig.aimCamera && control && !wheel::IsOpen() && !vehicle)
 		StickLook(pad, now, now.lt > kTriggerPressed, dt);
 
+	// D-pad up answers the phone while it rings.
+	const bool answer = control && Pressed(now, kUp) && phone::Ringing();
+	if (answer)
+		phone::Answer();
+
 	// D-pad down: the expanded minimap; up, in a vehicle: its side mission (taxi,
 	// vigilante, paramedic, firefighter), which the scripts start on R3.
 	if (gConfig.dpadActions && control && !wheel::IsOpen()) {
 		if (Pressed(now, kDown))
 			minimap::ToggleExpanded();
-		if (Pressed(now, kUp) && PedInVehicle(ped))
+		if (Pressed(now, kUp) && PedInVehicle(ped) && !answer)
 			gSubMissionUntil = Clock::now() + kSubMissionHold;
 	}
 
@@ -395,6 +412,10 @@ void Hook_Update(uint8_t *pad, int16_t index)
 		PadNew(pad, cycleButton) = 255;
 	if (Clock::now() < gSubMissionUntil)
 		PadNew(pad, kPadR3) = 255;
+	phone::HoldAnswer(pad);
+	// A held A button or key still floors it.
+	PadNew(pad, kPadCross) = std::max(PadNew(pad, kPadCross), int16_t(pedals.gas * 255.0f));
+	PadNew(pad, kPadSquare) = std::max(PadNew(pad, kPadSquare), int16_t(pedals.brake * 255.0f));
 }
 
 } // namespace
@@ -402,7 +423,7 @@ void Hook_Update(uint8_t *pad, int16_t index)
 bool Install()
 {
 	if (!gConfig.wheels && !gConfig.dpadActions && !gConfig.modernTriggers && !gConfig.aimCamera &&
-	    !gConfig.driveByAim)
+	    !gConfig.driveByAim && !gConfig.phone)
 		return true;
 	if (!api.glfwGetGamepadState || !api.glfwJoystickIsGamepad || !api.glfwGetJoystickName) {
 		Log("controls: GLFW gamepad functions not found; controller changes off");

@@ -439,11 +439,29 @@ Extracted ExtractBuildings(const std::vector<Instance> &insts, const std::map<st
 	return out;
 }
 
+// Each end gets a round joint so bends close up. Where roads of different
+// widths meet (junctions, lane changes) it is only as wide as the narrowest of
+// them, so it never bulges out of a road.
 std::vector<mapdata::Road> Roads(const std::vector<RoadSegment> &segments)
 {
+	constexpr float kSameNode = 1.0f; // neighbouring tiles' shared nodes are a little apart
 	std::vector<mapdata::Road> roads;
 	for (const RoadSegment &s : segments)
-		roads.push_back({{s.a.x, s.a.y}, {s.b.x, s.b.y}, s.width});
+		roads.push_back({{s.a.x, s.a.y}, {s.b.x, s.b.y}, s.width, s.width, s.width});
+	struct End {
+		Vec2 pos;
+		float width;
+		float *join;
+	};
+	std::vector<End> ends;
+	for (mapdata::Road &r : roads) {
+		ends.push_back({r.a, r.width, &r.joinA});
+		ends.push_back({r.b, r.width, &r.joinB});
+	}
+	for (const End &e : ends)
+		for (const End &other : ends)
+			if (fabsf(e.pos.x - other.pos.x) < kSameNode && fabsf(e.pos.y - other.pos.y) < kSameNode)
+				*e.join = std::min(*e.join, other.width);
 	return roads;
 }
 
