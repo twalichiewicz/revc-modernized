@@ -28,38 +28,58 @@ bool ReadFile(const std::string &path, std::vector<uint8_t> &out)
 	return true;
 }
 
-void DecodeDxt1(const uint8_t *src, int w, int h, std::vector<uint8_t> &out)
+// A DXT colour block (4 bytes of endpoints, 4 of 2-bit indices). DXT3 always
+// uses the four-colour mode; DXT1 switches to three colours + transparent
+// when the first endpoint is not the larger one.
+void DecodeColourBlock(const uint8_t *src, bool fourColour, uint8_t pal[4][4], uint32_t &bits)
+{
+	uint16_t c[2];
+	memcpy(c, src, 4);
+	memcpy(&bits, src + 4, 4);
+	for (int i = 0; i < 2; i++) {
+		pal[i][0] = uint8_t((c[i] >> 11) * 255 / 31);
+		pal[i][1] = uint8_t(((c[i] >> 5) & 63) * 255 / 63);
+		pal[i][2] = uint8_t((c[i] & 31) * 255 / 31);
+		pal[i][3] = 255;
+	}
+	const bool four = fourColour || c[0] > c[1];
+	for (int k = 0; k < 3; k++) {
+		if (four) {
+			pal[2][k] = uint8_t((2 * pal[0][k] + pal[1][k]) / 3);
+			pal[3][k] = uint8_t((pal[0][k] + 2 * pal[1][k]) / 3);
+		} else {
+			pal[2][k] = uint8_t((pal[0][k] + pal[1][k]) / 2);
+			pal[3][k] = 0;
+		}
+	}
+	pal[2][3] = 255;
+	pal[3][3] = four ? 255 : 0;
+}
+
+// DXT1 (8-byte blocks) or DXT3 (8 bytes of 4-bit alpha, then a colour block).
+void DecodeDxt(const uint8_t *src, int w, int h, bool dxt3, std::vector<uint8_t> &out)
 {
 	out.assign(size_t(w) * h * 4, 0);
 	for (int by = 0; by < h; by += 4)
-		for (int bx = 0; bx < w; bx += 4, src += 8) {
-			uint16_t c[2];
-			uint32_t bits;
-			memcpy(c, src, 4);
-			memcpy(&bits, src + 4, 4);
+		for (int bx = 0; bx < w; bx += 4) {
+			uint64_t alpha = 0;
+			if (dxt3) {
+				memcpy(&alpha, src, 8);
+				src += 8;
+			}
 			uint8_t pal[4][4];
-			for (int i = 0; i < 2; i++) {
-				pal[i][0] = uint8_t((c[i] >> 11) * 255 / 31);
-				pal[i][1] = uint8_t(((c[i] >> 5) & 63) * 255 / 63);
-				pal[i][2] = uint8_t((c[i] & 31) * 255 / 31);
-				pal[i][3] = 255;
-			}
-			for (int k = 0; k < 3; k++) {
-				if (c[0] > c[1]) {
-					pal[2][k] = uint8_t((2 * pal[0][k] + pal[1][k]) / 3);
-					pal[3][k] = uint8_t((pal[0][k] + 2 * pal[1][k]) / 3);
-				} else {
-					pal[2][k] = uint8_t((pal[0][k] + pal[1][k]) / 2);
-					pal[3][k] = 0;
-				}
-			}
-			pal[2][3] = 255;
-			pal[3][3] = c[0] > c[1] ? 255 : 0;
+			uint32_t bits;
+			DecodeColourBlock(src, dxt3, pal, bits);
+			src += 8;
 			for (int py = 0; py < 4; py++)
 				for (int px = 0; px < 4; px++) {
-					const int x = bx + px, y = by + py;
-					if (x < w && y < h)
-						memcpy(&out[(size_t(y) * w + x) * 4], pal[(bits >> (2 * (py * 4 + px))) & 3], 4);
+					const int x = bx + px, y = by + py, i = py * 4 + px;
+					if (x >= w || y >= h)
+						continue;
+					uint8_t *p = &out[(size_t(y) * w + x) * 4];
+					memcpy(p, pal[(bits >> (2 * i)) & 3], 4);
+					if (dxt3)
+						p[3] = uint8_t(((alpha >> (4 * i)) & 15) * 17);
 				}
 		}
 }
@@ -106,37 +126,51 @@ std::vector<std::string> ImgArchive::Names() const
 	return names;
 }
 
-bool DecodeTxdFirstTexture(const std::vector<uint8_t> &d, int &w, int &h, std::vector<uint8_t> &rgba)
+bool DecodeTxdTexture(const std::vector<uint8_t> &d, const std::string &name, int &w, int &h,
+                      std::vector<uint8_t> &rgba)
 {
-	const size_t tex = 12 + 12 + 4; // TXD header, struct header, count + device
-	if (Get<uint32_t>(d, tex) != 0x15)
-		return false;
-	const size_t s = tex + 24; // texture native header + struct header
-	const uint32_t d3dFormat = Get<uint32_t>(d, s + 76);
-	w = Get<uint16_t>(d, s + 80);
-	h = Get<uint16_t>(d, s + 82);
-	const uint8_t depth = d[s + 84];
-	const uint8_t compression = d[s + 87];
-	const uint32_t size = Get<uint32_t>(d, s + 88);
-	const uint8_t *data = d.data() + s + 92;
-	if (s + 92 + size > d.size())
-		return false;
-	if (compression == 1 || d3dFormat == 0x31545844) {
-		DecodeDxt1(data, w, h, rgba);
-		return true;
-	}
-	if (depth == 32) {
-		rgba.resize(size_t(w) * h * 4);
-		for (size_t i = 0; i < rgba.size(); i += 4) {
-			rgba[i] = data[i + 2];
-			rgba[i + 1] = data[i + 1];
-			rgba[i + 2] = data[i];
-			rgba[i + 3] = data[i + 3];
+	// TXD header, struct (count + device), then one texture native chunk per texture.
+	for (size_t tex = 12 + 12 + 4; Get<uint32_t>(d, tex) == 0x15; tex += 12 + Get<uint32_t>(d, tex + 4)) {
+		const size_t s = tex + 24; // texture native header + struct header
+		char texName[33] = {};
+		if (s + 40 <= d.size())
+			memcpy(texName, d.data() + s + 8, 32);
+		if (!name.empty() && Lower(texName) != Lower(name))
+			continue;
+		const uint32_t d3dFormat = Get<uint32_t>(d, s + 76);
+		w = Get<uint16_t>(d, s + 80);
+		h = Get<uint16_t>(d, s + 82);
+		const uint8_t depth = d[s + 84];
+		const uint8_t compression = d[s + 87];
+		const uint32_t size = Get<uint32_t>(d, s + 88);
+		const uint8_t *data = d.data() + s + 92;
+		if (s + 92 + size > d.size())
+			return false;
+		if (compression == 1 || compression == 3 || d3dFormat == 0x31545844 || d3dFormat == 0x33545844) {
+			DecodeDxt(data, w, h, compression == 3 || d3dFormat == 0x33545844, rgba);
+			return true;
 		}
-		return true;
+		if (depth == 32) {
+			rgba.resize(size_t(w) * h * 4);
+			for (size_t i = 0; i < rgba.size(); i += 4) {
+				rgba[i] = data[i + 2];
+				rgba[i + 1] = data[i + 1];
+				rgba[i + 2] = data[i];
+				rgba[i + 3] = data[i + 3];
+			}
+			return true;
+		}
+		return false;
 	}
 	return false;
 }
+
+bool DecodeTxdFirstTexture(const std::vector<uint8_t> &d, int &w, int &h, std::vector<uint8_t> &rgba)
+{
+	return DecodeTxdTexture(d, "", w, h, rgba);
+}
+
+bool ReadGameFile(const std::string &path, std::vector<uint8_t> &out) { return ReadFile(path, out); }
 
 void ParseColArchive(const std::vector<uint8_t> &d, std::map<std::string, ColModel> &out)
 {

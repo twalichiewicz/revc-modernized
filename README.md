@@ -1,12 +1,13 @@
-# VC Minimap
+# VC Modern HUD
 
-A GTA VI-style HUD for the native Apple Silicon port of **Grand Theft Auto: Vice City** on macOS. It adds:
+A modern GTA-style HUD and controller layout for the native Apple Silicon port of **Grand Theft Auto: Vice City** on macOS. It adds:
 
 - a rectangular, tilted 3D minimap with real building shapes,
 - GPS guidance to your waypoint or mission objective,
 - health, armour and stamina bars under the map,
 - a cleaner HUD around it,
-- a GTA IV-style pause menu that opens straight on the map.
+- a GTA IV-style pause menu that opens straight on the map,
+- GTA V-style weapon and radio wheels, and a D-pad that does something useful.
 
 ![In game](docs/hud.jpg)
 
@@ -43,6 +44,17 @@ A GTA VI-style HUD for the native Apple Silicon port of **Grand Theft Auto: Vice
   - The map legend is a small panel in the bottom-right corner instead of covering the map.
   - On the map, A (Xbox) or ✕ (PlayStation) places a waypoint without also closing it. LT and RT zoom,
     since RB now switches tabs.
+- **Controller, GTA IV/V style.**
+  - Hold LB (L1) for the weapon wheel on foot, or the radio wheel in a vehicle. Point the right stick at a
+    weapon or station and let go of LB to pick it; time slows while the wheel is open. A quick tap of LB
+    still does what it always did (centre the camera, next station).
+  - The D-pad no longer moves you. Left and right switch weapons on foot, and change the radio station in a
+    vehicle.
+  - On foot, LT aims and RT fires, instead of switching weapons.
+  - PlayStation controllers work properly. The game's controller list maps the DualSense and DualShock 4 on
+    macOS with the right stick's up/down on the same axis as L2, so the camera tilted when you pulled the
+    left trigger. The mod corrects that at start-up, so turn Steam Input off for the game if you used it to
+    work around this.
 
 ## Requirements
 
@@ -58,8 +70,8 @@ the binary at run time, so it never touches a game it wasn't made for.
 ## Install
 
 ```sh
-git clone https://github.com/twalichiewicz/vc-minimap.git
-cd vc-minimap
+git clone https://github.com/twalichiewicz/vc-modern-hud.git
+cd vc-modern-hud
 ./install.sh                                  # quit the game first
 ./install.sh "/path/to/Grand Theft Auto Vice City.app"   # if it isn't in /Applications
 ```
@@ -67,10 +79,11 @@ cd vc-minimap
 `install.sh` does five things:
 
 1. Builds the plugin.
-2. Saves the untouched game binary to `~/Library/Application Support/macVC/vcminimap/macVC.vanilla`.
-3. Bakes the map data (roads, buildings, base map) from **your** game files.
+2. Saves the untouched game binary to `~/Library/Application Support/macVC/vcmodernhud/macVC.vanilla`.
+3. Bakes the map data (roads, buildings, base map) and the radio wheel's station logos from **your** game
+   files.
 4. Patches and ad-hoc re-signs the game binary.
-5. Copies `libVCMinimap.dylib` into the app.
+5. Copies `libVCModernHUD.dylib` into the app.
 
 No game files are included in this repository.
 
@@ -91,7 +104,7 @@ This restores the original binary and removes the plugin. Your saves are never t
 ## Using it
 
 - **Set a waypoint:** right-click the map in the pause menu, or press A/✕ with a controller.
-- **Settings:** `~/Library/Application Support/macVC/vcminimap.ini`, written on first run.
+- **Settings:** `~/Library/Application Support/macVC/vcmodernhud.ini`, written on first run.
 
   | Key | Default | What it does |
   |---|---|---|
@@ -106,13 +119,16 @@ This restores the original binary and removes the plugin. Your saves are never t
   | `PauseTabs` | 1 | pause menu opens on the map, other pages as tabs |
   | `CompactLegend` | 1 | small map legend in the corner of the pause map |
   | `CircleBack` | 1 | Circle (B) goes back in menus; 0 restores Triangle (Y) |
+  | `Wheels` | 1 | hold LB for the weapon / radio wheel |
+  | `DpadActions` | 1 | D-pad left/right switch weapons / stations instead of moving you |
+  | `ModernTriggers` | 1 | on foot LT aims and RT fires (instead of switching weapons) |
   | `Margin` | 0.025 | gap to the screen corner (fraction of screen height) |
   | `Tilt` | 50 | degrees of 3D tilt; 0 is flat |
   | `Zoom` | 1.5 | higher is closer |
   | `Size` | 1.25 | map height relative to the original radar |
   | `Aspect` | 1.55 | width / height |
 
-- **Log:** `~/Library/Application Support/macVC/vcminimap.log`. Check here first if something looks off.
+- **Log:** `~/Library/Application Support/macVC/vcmodernhud.log`. Check here first if something looks off.
 - The minimap replaces the radar when the radar mode is "map & blips". With the radar off, the original
   health, armour and clock come back.
 
@@ -127,6 +143,10 @@ hooks are written to disk:
   missing (it is loaded as a weak dylib), the slots stay empty and the game runs its original code.
 - **HUD elements.** Two "skip" patches hide the top-right health and armour. Other HUD elements are recognised
   by where they are called from in `CHud::Draw`.
+- **Controller.** `src/controls.cpp` hooks `CPad::Update`, between the game reading the gamepad and merging it
+  into the pad state. It reads the gamepad through GLFW directly, takes the D-pad and LB out of the
+  joystick's state, and drives the wheels (`src/wheel.cpp`). Weapons switch through the game's own
+  `CPlayerPed::ProcessWeaponSwitch`, stations through its retune counter.
 - **Pause menu.** `src/menu.cpp` opens the frontend on the map page, draws the tabs after each frontend frame
   and switches pages through the game's own `CMenuManager::SwitchToNewScreen`. The legend's drawing calls
   in `CMenuManager::PrintMap` and `CRadar::DrawLegend` are moved and scaled into the corner.
@@ -162,13 +182,14 @@ build/vcmm-bake <GameData> out.bin --area <x> <y> <size> area.png
 
 Developer switches (environment variables, e.g. `open --env VAR=value "Grand Theft Auto Vice City.app"`):
 
-- `VCMINIMAP_DUMP_ROADS=path` writes the game's road network, which the preview uses for routing.
-- `VCMINIMAP_TEST_WAYPOINT=dx,dy` places a waypoint relative to the player.
-- `VCMINIMAP_TEST_WANTED=n` sets a wanted level.
-- `VCMINIMAP_TEST_MONEY=1` always shows the money pill.
+- `VCHUD_DUMP_ROADS=path` writes the game's road network, which the preview uses for routing.
+- `VCHUD_TEST_WAYPOINT=dx,dy` places a waypoint relative to the player.
+- `VCHUD_TEST_WANTED=n` sets a wanted level.
+- `VCHUD_TEST_MONEY=1` always shows the money pill.
+- `VCHUD_TEST_WHEEL=1` opens the weapon or radio wheel once, without holding LB.
 
 Struct offsets, symbols and call sites were read from the 1.0.5217 binary. Supporting another build means
-re-deriving them; see `src/game.h`, `src/hud.cpp`, `src/menu.cpp` and `tools/patch_macvc.py`.
+re-deriving them; see `src/game.h`, `src/hud.cpp`, `src/menu.cpp`, `src/controls.cpp` and `tools/patch_macvc.py`.
 
 ## Disclaimer
 

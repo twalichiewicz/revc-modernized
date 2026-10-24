@@ -55,7 +55,7 @@ int gStarScreenW;
 Vec2 gClockScaleXY;
 bool gHaveClockScale;
 float gMoneyAlpha;     // money pill fade, 0..1
-bool gTestMoney;       // VCMINIMAP_TEST_MONEY: always show the money pill
+bool gTestMoney;       // VCHUD_TEST_MONEY: always show the money pill
 uint32_t gLastPillMs;
 
 template <size_t N>
@@ -239,7 +239,7 @@ __attribute__((noinline)) void Hook_DrawUV(const CSprite2d *sprite, const float 
 bool Install()
 {
 	gText = reinterpret_cast<const uint8_t *>(hooks::ImageBase());
-	gTestMoney = getenv("VCMINIMAP_TEST_MONEY") != nullptr;
+	gTestMoney = getenv("VCHUD_TEST_MONEY") != nullptr;
 	if (!gText || !Verify(kPrintSites, "_ZN5CFont11PrintStringEffPt") || !Verify(kScaleSites, "_ZN5CFont8SetScaleEff") ||
 	    !Verify(kDrawSites, "_ZN9CSprite2d4DrawERK5CRectRK5CRGBAffffffff"))
 		return false;

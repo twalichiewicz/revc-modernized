@@ -16,12 +16,12 @@ namespace {
 bool gOk;
 
 template <typename T>
-void Bind(T &out, const char *name)
+void Bind(T &out, const char *name, void *handle = RTLD_MAIN_ONLY, bool required = true)
 {
-	void *p = dlsym(RTLD_MAIN_ONLY, name);
+	void *p = dlsym(handle, name);
 	if (!p) {
 		Log("game: missing symbol %s", name);
-		gOk = false;
+		gOk = gOk && !required;
 	}
 	out = reinterpret_cast<T>(p);
 }
@@ -119,6 +119,7 @@ bool Resolve()
 	Bind(api.oldKeyState, "_ZN4CPad11OldKeyStateE");
 	Bind(api.newMouseState, "_ZN4CPad23NewMouseControllerStateE");
 	Bind(api.oldMouseState, "_ZN4CPad23OldMouseControllerStateE");
+	Bind(api.padAffectedByController, "_ZN4CPad22IsAffectedByControllerE");
 	Bind(api.clockHours, "_ZN6CClock18ms_nGameClockHoursE");
 	Bind(api.clockMinutes, "_ZN6CClock20ms_nGameClockMinutesE");
 
@@ -126,21 +127,92 @@ bool Resolve()
 	Bind(api.worldPlayers, "_ZN6CWorld7PlayersE");
 	Bind(api.playerInFocus, "_ZN6CWorld13PlayerInFocusE");
 	Bind(api.pickups, "_ZN8CPickups8aPickUpsE");
+
+	Bind(api.GetWeaponInfo, "_ZN11CWeaponInfo13GetWeaponInfoE11eWeaponType");
+	Bind(api.WeaponHasAmmoToBeUsed, "_ZN7CWeapon21HasWeaponAmmoToBeUsedEv");
+	Bind(api.modelInfoPtrs, "_ZN10CModelInfo16ms_modelInfoPtrsE");
+	Bind(api.TexDictionaryFindNamedTexture, "_Z31RwTexDictionaryFindNamedTexturePN2rw13TexDictionaryEPKc");
+	Bind(api.TxdFindSlot, "_ZN9CTxdStore11FindTxdSlotEPKc");
+	Bind(api.TxdAddSlot, "_ZN9CTxdStore10AddTxdSlotEPKc");
+	Bind(api.TxdLoad, "_ZN9CTxdStore7LoadTxdEiPKc");
+	Bind(api.TxdAddRef, "_ZN9CTxdStore6AddRefEi");
+	Bind(api.timeScale, "_ZN6CTimer13ms_fTimeScaleE");
+
+	Bind(api.numRetunePresses, "gNumRetunePresses");
+	Bind(api.retuneCounter, "gRetuneCounter");
+	Bind(api.radioStaticCounter, "RadioStaticCounter");
+	Bind(api.metDebbieHarry, "_ZN11CTheScripts24bPlayerHasMetDebbieHarryE");
+	Bind(api.VehicleUsesSiren, "_ZN8CVehicle9UsesSirenEv");
+	Bind(api.IsMP3RadioChannelAvailable, "_ZN8cDMAudio26IsMP3RadioChannelAvailableEv");
+	Bind(api.TextGet, "_ZN5CText3GetEPKc");
+	Bind(api.theText, "TheText");
+
+	Bind(api.glfwJoystickIsGamepad, "glfwJoystickIsGamepad", RTLD_DEFAULT, false); // only for controls.cpp
+	Bind(api.glfwGetGamepadState, "glfwGetGamepadState", RTLD_DEFAULT, false);
+	Bind(api.glfwGetJoystickName, "glfwGetJoystickName", RTLD_DEFAULT, false);
+	Bind(api.glfwUpdateGamepadMappings, "glfwUpdateGamepadMappings", RTLD_DEFAULT, false);
 	return gOk;
 }
 
-// Mirrors CRadar::DrawRadarSection: CTxdStore::GetSlot(gRadarTxdIds[x + 8y])->texDict.
-RwTexture *RadarTileTexture(int x, int y)
+// CTxdStore::GetSlot(slot)->texDict
+RwTexDictionary *TxdDictionary(int slot)
 {
-	if (x < 0 || y < 0 || x >= kRadarTiles || y >= kRadarTiles || *api.playerInStadium)
-		return nullptr;
-	const int32_t slot = api.radarTxdIds[x + kRadarTiles * y];
 	const uint8_t *pool = *api.txdPool;
 	if (slot < 0 || !pool || slot >= *reinterpret_cast<const int32_t *>(pool + 0x10))
 		return nullptr;
 	const uint8_t *entries = *reinterpret_cast<uint8_t *const *>(pool);
-	auto *dict = *reinterpret_cast<RwTexDictionary *const *>(entries + 32 * slot);
+	return *reinterpret_cast<RwTexDictionary *const *>(entries + 32 * slot);
+}
+
+// Mirrors CRadar::DrawRadarSection.
+RwTexture *RadarTileTexture(int x, int y)
+{
+	if (x < 0 || y < 0 || x >= kRadarTiles || y >= kRadarTiles || *api.playerInStadium)
+		return nullptr;
+	RwTexDictionary *dict = TxdDictionary(api.radarTxdIds[x + kRadarTiles * y]);
 	return dict ? api.GetFirstTexture(dict) : nullptr;
+}
+
+RwTexture *WeaponIcon(int32_t type)
+{
+	const uint8_t *info = api.GetWeaponInfo(type);
+	const int32_t model = info ? *reinterpret_cast<const int32_t *>(info + 0x54) : -1;
+	const uint8_t *mi = model > 0 ? api.modelInfoPtrs[model] : nullptr;
+	RwTexDictionary *dict = mi ? TxdDictionary(*reinterpret_cast<const int16_t *>(mi + 0x2e)) : nullptr;
+	return dict ? api.TexDictionaryFindNamedTexture(dict, reinterpret_cast<const char *>(mi + 8)) : nullptr;
+}
+
+bool RadioUsable(uint8_t *vehicle)
+{
+	switch (EntityModel(vehicle)) {
+	case 162: case 163: case 202: case 218: case 227: // Rhino, Barracks, Coast Guard, the Mavericks
+		return false;
+	case 153: case 155: // Mr Whoopee and the Hunter keep their radio despite the "siren"
+		return true;
+	case 216: // Kaufman cab
+		return !*api.metDebbieHarry;
+	default:
+		return !api.VehicleUsesSiren(vehicle);
+	}
+}
+
+int RadioTuning(const uint8_t *vehicle)
+{
+	return ((VehicleRadio(vehicle) + *api.numRetunePresses) % kRadioChannels + kRadioChannels) % kRadioChannels;
+}
+
+void RetuneBy(const uint8_t *vehicle, int steps, int frames)
+{
+	if (steps == 0)
+		return;
+	// The MP3 player is only in the cycle when it has tracks.
+	const int dir = steps > 0 ? 1 : -1;
+	int target = ((RadioTuning(vehicle) + steps) % kRadioChannels + kRadioChannels) % kRadioChannels;
+	if (target == kRadioMP3 && !api.IsMP3RadioChannelAvailable(api.dmAudio))
+		steps += dir;
+	*api.numRetunePresses += steps;
+	*api.retuneCounter = frames;
+	*api.radioStaticCounter = 0;
 }
 
 } // namespace game

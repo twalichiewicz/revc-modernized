@@ -12,10 +12,13 @@ struct Style {
 	bool proportional = true;
 };
 
+// Strings are ASCII, or the game's own 16-bit text (e.g. from CText::Get).
 float Width(const char *ascii, const Style &style);
+float Width(const uint16_t *text, const Style &style);
 // Top and bottom of the line CFont draws for Draw(x, y, ...) in this style.
 void LineExtent(const Style &style, float y, float &top, float &bottom);
 void Draw(float x, float y, const char *ascii, const Style &style);
+void Draw(float x, float y, const uint16_t *text, const Style &style);
 void Flush();
 
 } // namespace text

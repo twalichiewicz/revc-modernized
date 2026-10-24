@@ -2,7 +2,7 @@
 // look can be iterated on without launching the game.
 //
 // usage: vcmm-preview <map.bin> <roads.csv> <out.png> <x> <y> <heading deg> <range> [targetX targetY]
-//   roads.csv comes from VCMINIMAP_DUMP_ROADS; heading 0 = camera facing north.
+//   roads.csv comes from VCHUD_DUMP_ROADS; heading 0 = camera facing north.
 #include "../../src/config.h"
 #include "../../src/scene.h"
 #include "../bake/gamefiles.h"

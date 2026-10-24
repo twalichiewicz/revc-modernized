@@ -22,8 +22,12 @@ private:
 	std::map<std::string, std::pair<uint32_t, uint32_t>> entries_; // lower-case name -> sector offset, count
 };
 
-// First texture of a TXD as RGBA (DXT1 / 8888 only). Returns false otherwise.
+// A TXD's texture as RGBA (DXT1, DXT3 or 8888): the one called `name`
+// (any case), or the first for an empty name. False if missing or unsupported.
+bool DecodeTxdTexture(const std::vector<uint8_t> &txd, const std::string &name, int &w, int &h,
+                      std::vector<uint8_t> &rgba);
 bool DecodeTxdFirstTexture(const std::vector<uint8_t> &txd, int &w, int &h, std::vector<uint8_t> &rgba);
+bool ReadGameFile(const std::string &path, std::vector<uint8_t> &out);
 
 struct ColFace {
 	uint32_t a, b, c;

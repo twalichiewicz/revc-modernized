@@ -40,12 +40,13 @@ void Apply(const Style &style)
 
 } // namespace
 
-float Width(const char *ascii, const Style &style)
+float Width(const uint16_t *text, const Style &style)
 {
-	Unicode u(ascii);
 	Apply(style);
-	return api.FontGetStringWidth(u.chars, true);
+	return api.FontGetStringWidth(const_cast<uint16_t *>(text), true);
 }
+
+float Width(const char *ascii, const Style &style) { return Width(Unicode(ascii).chars, style); }
 
 void LineExtent(const Style &style, float y, float &top, float &bottom)
 {
@@ -57,12 +58,13 @@ void LineExtent(const Style &style, float y, float &top, float &bottom)
 	bottom = std::max(rect[1], rect[3]);
 }
 
-void Draw(float x, float y, const char *ascii, const Style &style)
+void Draw(float x, float y, const uint16_t *text, const Style &style)
 {
-	Unicode u(ascii);
 	Apply(style);
-	api.FontPrintString(x, y, u.chars);
+	api.FontPrintString(x, y, const_cast<uint16_t *>(text));
 }
+
+void Draw(float x, float y, const char *ascii, const Style &style) { Draw(x, y, Unicode(ascii).chars, style); }
 
 void Flush() { api.FontDrawFonts(); }
 

@@ -64,6 +64,8 @@ DEFAULT_HOOKS = [
     "_ZN9CSprite2d8DrawRectERK5CRectRK5CRGBA",
     "_ZN9CSprite2d13Draw2DPolygonEffffffffRK5CRGBA",
     "_ZN6CRadar10DrawLegendEiii",
+    # controller: weapon/radio wheels, D-pad actions
+    "_ZN4CPad6UpdateEs",
 ]
 
 # Flag-controlled skips inside CHud::Draw: (name, instruction address, expected
@@ -285,7 +287,7 @@ def main():
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("input")
     ap.add_argument("output")
-    ap.add_argument("--dylib", default="@executable_path/../Frameworks/libVCMinimap.dylib")
+    ap.add_argument("--dylib", default="@executable_path/../Frameworks/libVCModernHUD.dylib")
     ap.add_argument("--hook", action="append", help="mangled symbol (no leading _); default: minimap hooks")
     ap.add_argument("--any-binary", action="store_true", help="skip the vanilla macVC checksum check")
     args = ap.parse_args()

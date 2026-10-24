@@ -9,7 +9,7 @@ Config gConfig;
 
 namespace {
 
-const char kDefaultIni[] = "; GTA VI-style minimap for macVC. Delete this file to restore defaults.\n"
+const char kDefaultIni[] = "; VC Modern HUD for macVC. Delete this file to restore defaults.\n"
                            "[Minimap]\n"
                            "Enabled=1            ; 0 = the original round radar\n"
                            "GPS=1                ; route line to your waypoint / mission objective\n"
@@ -21,7 +21,10 @@ const char kDefaultIni[] = "; GTA VI-style minimap for macVC. Delete this file t
                            "MoneyPill=1          ; show money next to the map in shops / at property for sale\n"
                            "PauseTabs=1          ; pause menu opens on the map; Q/E or LB/RB switch tabs\n"
                            "CompactLegend=1      ; small map legend in the corner of the pause map\n"
-                           "CircleBack=1         ; Circle (B on Xbox) goes back in menus; 0 = Triangle (Y) like the PS2\n"
+                           "CircleBack=1         ; Circle (B) goes back in menus; 0 = Triangle (Y), as on the PS2\n"
+                           "Wheels=1             ; hold LB: weapon wheel on foot, radio wheel in a vehicle\n"
+                           "DpadActions=1        ; D-pad left/right switch weapons / radio stations instead of moving\n"
+                           "ModernTriggers=1     ; on foot LT aims and RT fires (instead of switching weapons)\n"
                            "Margin=0.025         ; distance from the screen corner\n"
                            "Tilt=50              ; degrees of 3D tilt, 0 = flat\n"
                            "Zoom=1.5             ; higher = closer\n"
@@ -54,6 +57,12 @@ void Apply(const char *key, const char *value)
 		gConfig.compactLegend = b;
 	else if (!strcasecmp(key, "CircleBack"))
 		gConfig.circleBack = b;
+	else if (!strcasecmp(key, "Wheels"))
+		gConfig.wheels = b;
+	else if (!strcasecmp(key, "DpadActions"))
+		gConfig.dpadActions = b;
+	else if (!strcasecmp(key, "ModernTriggers"))
+		gConfig.modernTriggers = b;
 	else if (!strcasecmp(key, "Margin") && f >= 0.0f && f < 0.3f)
 		gConfig.margin = f;
 	else if (!strcasecmp(key, "Tilt"))
@@ -88,7 +97,7 @@ std::string SupportDir()
 
 void LoadConfig()
 {
-	const std::string path = SupportDir() + "/vcminimap.ini";
+	const std::string path = SupportDir() + "/vcmodernhud.ini";
 	FILE *f = fopen(path.c_str(), "r");
 	if (!f) {
 		if (FILE *out = fopen(path.c_str(), "w")) {

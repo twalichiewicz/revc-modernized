@@ -174,13 +174,41 @@ struct Api {
 	uint8_t *dmAudio;
 	void (*PlayFrontEndSound)(uint8_t *audio, uint16_t sound, uint32_t volume);
 	uint8_t *newKeyState, *oldKeyState;     // CKeyboardState: int16 F[12], then VK_KEYS[256]
-	uint8_t *newMouseState, *oldMouseState; // CMouseControllerState: LMB at +0
+	uint8_t *newMouseState, *oldMouseState; // CMouseControllerState: LMB at +0, movement x/y (floats) at +8/+0xc
+	uint8_t *padAffectedByController;       // pads use their controller mode (+0xec) when set
 
 	// player
 	uint8_t *(*FindPlayerPed)();
 	uint8_t *worldPlayers; // CWorld::Players, CPlayerInfo[] with stride 0x1a0
 	uint8_t *playerInFocus;
 	uint8_t *pickups;      // CPickups::aPickUps, CPickup[kNumPickups]
+
+	// weapons and models
+	uint8_t *(*GetWeaponInfo)(int32_t type); // CWeaponInfo: model id at +0x54
+	bool (*WeaponHasAmmoToBeUsed)(const uint8_t *weapon);
+	uint8_t **modelInfoPtrs; // CModelInfo::ms_modelInfoPtrs: name at +8, TXD slot (int16) at +0x2e
+	RwTexture *(*TexDictionaryFindNamedTexture)(RwTexDictionary *, const char *);
+	int (*TxdFindSlot)(const char *name);
+	int (*TxdAddSlot)(const char *name);
+	bool (*TxdLoad)(int slot, const char *path);
+	void (*TxdAddRef)(int slot);
+	float *timeScale; // CTimer::ms_fTimeScale
+
+	// radio (see cMusicManager::ServiceGameMode)
+	int32_t *numRetunePresses; // stations to step on the next retune
+	int32_t *retuneCounter;    // frames until the retune
+	uint8_t *radioStaticCounter;
+	uint8_t *metDebbieHarry; // Kaufman cabs play the taxi radio from then on
+	bool (*VehicleUsesSiren)(uint8_t *vehicle);
+	bool (*IsMP3RadioChannelAvailable)(uint8_t *dmAudio);
+	uint16_t *(*TextGet)(uint8_t *text, const char *key);
+	uint8_t *theText;
+
+	// GLFW, which the game reads its gamepad through
+	int (*glfwJoystickIsGamepad)(int jid);
+	int (*glfwGetGamepadState)(int jid, void *state); // GLFWgamepadstate: uint8 buttons[15], float axes[6]
+	const char *(*glfwGetJoystickName)(int jid);
+	int (*glfwUpdateGamepadMappings)(const char *mappings);
 };
 
 extern Api api;
@@ -230,18 +258,30 @@ inline bool CharJustDown(char upper)
 	       (KeyDown(api.newKeyState, lower) && !KeyDown(api.oldKeyState, lower));
 }
 inline bool LeftClickJustDown() { return api.newMouseState[0] && !api.oldMouseState[0]; }
-// CPad: NewState then OldState (CControllerState, 0x2a bytes of int16 buttons).
+// CPad: NewState then OldState (CControllerState, 0x2a bytes of int16 fields).
+// CPad::Update merges the keyboard, joystick and mouse states (+0x6c, +0x96,
+// +0xc0) into NewState; the joystick's D-pad arrives as DPad* and drives the
+// player like the left stick (CPad::GetPedWalkLeftRight).
 enum PadButton : int {
+	kPadRightStickX = 0x4,
+	kPadRightStickY = 0x6,
 	kPadLB = 0x8,
 	kPadLT = 0xa,
 	kPadRB = 0xc,
+	kPadRT = 0xe,
+	kPadDPadUp = 0x10,
+	kPadDPadDown = 0x12,
+	kPadDPadLeft = 0x14,
+	kPadDPadRight = 0x16,
 	kPadTriangle = 0x1e,
 	kPadCross = 0x20,
 	kPadCircle = 0x22,
 };
-constexpr int kPadOldState = 0x2a;
+constexpr int kPadOldState = 0x2a, kPadJoyState = 0x96;
 inline int16_t &PadNew(uint8_t *pad, PadButton b) { return *reinterpret_cast<int16_t *>(pad + b); }
 inline int16_t &PadOld(uint8_t *pad, PadButton b) { return *reinterpret_cast<int16_t *>(pad + kPadOldState + b); }
+inline int16_t &PadJoy(uint8_t *pad, PadButton b) { return *reinterpret_cast<int16_t *>(pad + kPadJoyState + b); }
+inline bool PadControlsDisabled(const uint8_t *pad) { return *reinterpret_cast<const uint16_t *>(pad + 0xf0) != 0; }
 inline bool CrossJustDown(const uint8_t *pad)
 {
 	auto at = [pad](int off) { return *reinterpret_cast<const int16_t *>(pad + off); };
@@ -272,6 +312,30 @@ inline const CSprite2d *RadarDiscSprite() { return reinterpret_cast<const CSprit
 inline const CVector &EntityPos(const uint8_t *entity) { return *reinterpret_cast<const CVector *>(entity + 0x38); }
 inline bool PedInVehicle(const uint8_t *ped) { return ped[0x4c0] != 0; }
 inline uint8_t *PedVehicle(const uint8_t *ped) { return *reinterpret_cast<uint8_t *const *>(ped + 0x4b8); }
+inline int16_t EntityModel(const uint8_t *entity) { return *reinterpret_cast<const int16_t *>(entity + 0x6a); }
+
+// CPlayerPed weapons (see CPlayerPed::ProcessWeaponSwitch): 10 CWeapon slots of
+// 0x18 bytes at +0x550 (type, state, ammo in clip at +8, total ammo at +0xc),
+// the current slot at +0x64c and the slot to switch to at +0x798.
+constexpr int kWeaponSlots = 10;
+inline uint8_t *PedWeapon(uint8_t *ped, int slot) { return ped + 0x550 + slot * 0x18; }
+inline int32_t WeaponType(const uint8_t *weapon) { return *reinterpret_cast<const int32_t *>(weapon); }
+inline int32_t WeaponAmmoTotal(const uint8_t *weapon) { return *reinterpret_cast<const int32_t *>(weapon + 0xc); }
+inline int PedCurrentWeaponSlot(const uint8_t *ped) { return ped[0x64c]; }
+inline int8_t &PlayerWeaponSlotToSelect(uint8_t *ped) { return *reinterpret_cast<int8_t *>(ped + 0x798); }
+// The weapon's HUD icon: its model's texture of the same name (as CHud::Draw finds it).
+RwTexture *WeaponIcon(int32_t type);
+
+// Radio: stations 0-8 (FEA_FM0..8), 9 the MP3 player, 10 off; a vehicle's at +0x2e8.
+constexpr int kRadioChannels = 11, kRadioMP3 = 9, kRadioOff = 10;
+inline uint8_t VehicleRadio(const uint8_t *vehicle) { return vehicle[0x2e8]; }
+bool RadioUsable(uint8_t *vehicle);  // the station can be changed (as CPad::ChangeStationJustDown would)
+int RadioTuning(const uint8_t *vehicle); // the station once pending retunes are done
+// Retunes `steps` stations on (or back), after `frames` frames of static.
+void RetuneBy(const uint8_t *vehicle, int steps, int frames);
+// An RW texture dictionary from a CTxdStore slot (nullptr if not loaded).
+RwTexDictionary *TxdDictionary(int slot);
+
 inline int32_t NumCarPathNodes() { return *reinterpret_cast<int32_t *>(api.thePaths + 0x54b7c); }
 inline CVector NodePos(const CPathNode *node)
 {

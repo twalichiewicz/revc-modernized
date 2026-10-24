@@ -2,22 +2,22 @@ CXX      := xcrun clang++
 CXXFLAGS := -std=c++17 -O2 -Wall -Wextra -arch arm64 -mmacosx-version-min=15.0
 BUILD    := build
 
-DYLIB   := $(BUILD)/libVCMinimap.dylib
+DYLIB   := $(BUILD)/libVCModernHUD.dylib
 BAKE    := $(BUILD)/vcmm-bake
 PREVIEW := $(BUILD)/vcmm-preview
 
 SHARED := src/canvas.cpp src/mapdata.cpp src/projection.cpp src/scene.cpp
-PLUGIN := $(SHARED) src/config.cpp src/draw.cpp src/game.cpp src/gps.cpp src/hooks.cpp src/hud.cpp src/log.cpp src/menu.cpp src/minimap.cpp src/text.cpp
+PLUGIN := $(SHARED) src/config.cpp src/controls.cpp src/draw.cpp src/game.cpp src/gps.cpp src/hooks.cpp src/hud.cpp src/log.cpp src/menu.cpp src/minimap.cpp src/radiologos.cpp src/text.cpp src/wheel.cpp
 GAMEFILES := tools/bake/gamefiles.cpp
 
 all: $(DYLIB) $(BAKE)
 
 $(DYLIB): $(PLUGIN) $(wildcard src/*.h) | $(BUILD)
 	$(CXX) $(CXXFLAGS) -fvisibility=hidden -dynamiclib \
-		-install_name @executable_path/../Frameworks/libVCMinimap.dylib -o $@ $(PLUGIN)
+		-install_name @executable_path/../Frameworks/libVCModernHUD.dylib -o $@ $(PLUGIN)
 
-$(BAKE): tools/bake/bake.cpp $(GAMEFILES) src/mapdata.cpp $(wildcard tools/bake/*.h src/*.h) | $(BUILD)
-	$(CXX) $(CXXFLAGS) -o $@ tools/bake/bake.cpp $(GAMEFILES) src/mapdata.cpp -lz
+$(BAKE): tools/bake/bake.cpp $(GAMEFILES) src/mapdata.cpp src/radiologos.cpp $(wildcard tools/bake/*.h src/*.h) | $(BUILD)
+	$(CXX) $(CXXFLAGS) -o $@ tools/bake/bake.cpp $(GAMEFILES) src/mapdata.cpp src/radiologos.cpp -lz
 
 $(PREVIEW): tools/preview/preview.cpp $(SHARED) $(GAMEFILES) $(wildcard src/*.h) | $(BUILD)
 	$(CXX) $(CXXFLAGS) -Isrc -o $@ tools/preview/preview.cpp $(SHARED) $(GAMEFILES) -lz

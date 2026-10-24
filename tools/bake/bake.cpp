@@ -11,6 +11,7 @@
 //
 // usage: vcmm-bake <GameData dir> <out map.bin> [debug dir] [--area x y size out.png]...
 #include "../../src/mapdata.h"
+#include "../../src/radiologos.h"
 #include "gamefiles.h"
 
 #include <algorithm>
@@ -557,6 +558,48 @@ void DebugArea(const std::string &path, float cx, float cy, float size, const st
 
 } // namespace
 
+// The radio wheel's station logos: 512x512 in the frontend's textures, shrunk
+// to radiologos::kSize with alpha-weighted averaging (so edges don't darken).
+void BakeRadioLogos(const std::string &gameData, const std::string &out)
+{
+	std::vector<uint8_t> txd;
+	if (!ReadGameFile(gameData + "/models/fronten2.txd", txd)) {
+		printf("radio logos: models/fronten2.txd not found\n");
+		return;
+	}
+	constexpr int n = radiologos::kSize;
+	radiologos::Logos logos(radiologos::kCount);
+	int found = 0;
+	for (int i = 0; i < radiologos::kCount; i++) {
+		int w, h;
+		std::vector<uint8_t> rgba;
+		if (!DecodeTxdTexture(txd, radiologos::kTextures[i], w, h, rgba) || w < n || h < n || w % n || h % n)
+			continue;
+		const int fx = w / n, fy = h / n;
+		logos[i].resize(size_t(n) * n * 4);
+		for (int y = 0; y < n; y++)
+			for (int x = 0; x < n; x++) {
+				float sum[4] = {};
+				for (int j = 0; j < fy; j++)
+					for (int k = 0; k < fx; k++) {
+						const uint8_t *p = &rgba[(size_t(y * fy + j) * w + x * fx + k) * 4];
+						for (int c = 0; c < 3; c++)
+							sum[c] += p[c] * p[3];
+						sum[3] += p[3];
+					}
+				uint8_t *o = &logos[i][(size_t(y) * n + x) * 4];
+				for (int c = 0; c < 3; c++)
+					o[c] = sum[3] > 0 ? uint8_t(sum[c] / sum[3] + 0.5f) : 0;
+				o[3] = uint8_t(sum[3] / (fx * fy) + 0.5f);
+			}
+		found++;
+	}
+	if (!radiologos::Save(out, logos))
+		fprintf(stderr, "cannot write %s\n", out.c_str());
+	else
+		printf("radio logos: %d of %d\n", found, radiologos::kCount);
+}
+
 int main(int argc, char **argv)
 {
 	if (argc < 3) {
@@ -597,6 +640,8 @@ int main(int argc, char **argv)
 		fprintf(stderr, "cannot write %s\n", argv[2]);
 		return 1;
 	}
+	const std::string out = argv[2];
+	BakeRadioLogos(gameData, out.substr(0, out.find_last_of('/') + 1) + "radio.bin");
 	if (argc > 3 && argv[3][0] != '-')
 		DebugImages(argv[3], art, map);
 	for (int i = 3; i + 4 < argc; i++)

@@ -16,6 +16,7 @@
 // open, the radar mode is not "map & blips", or the minimap is disabled.
 // The rest of the HUD is in hud.cpp, the pause menu in menu.cpp.
 #include "config.h"
+#include "controls.h"
 #include "draw.h"
 #include "game.h"
 #include "gps.h"
@@ -26,6 +27,7 @@
 #include "menu.h"
 #include "projection.h"
 #include "scene.h"
+#include "wheel.h"
 
 #include <algorithm>
 #include <cmath>
@@ -134,7 +136,7 @@ void LoadMapData()
 	if (attempted)
 		return;
 	attempted = true;
-	const std::string path = SupportDir() + "/vcminimap/map.bin";
+	const std::string path = SupportDir() + "/vcmodernhud/map.bin";
 	if (gMap.Load(path))
 		Log("map data: %d px base, %zu buildings, %zu road segments", gMap.size, gMap.buildings.size(),
 		    gMap.roads.size());
@@ -220,15 +222,16 @@ void DrawFallbackTiles()
 bool MinimapActive() { return gConfig.enabled && !MenuMapActive() && RadarMode() == 0; }
 
 // First HUD frame: log the layout once. Developer switches:
-//   VCMINIMAP_TEST_WAYPOINT=dx,dy  waypoint relative to the player
-//   VCMINIMAP_TEST_WANTED=n        wanted level
-//   VCMINIMAP_TEST_MONEY=1         money pill always shown (hud.cpp)
-//   VCMINIMAP_DUMP_ROADS=path      write the car path network (for tools/preview)
+//   VCHUD_TEST_WAYPOINT=dx,dy  waypoint relative to the player
+//   VCHUD_TEST_WANTED=n        wanted level
+//   VCHUD_TEST_MONEY=1         money pill always shown (hud.cpp)
+//   VCHUD_TEST_WHEEL=1         open the weapon/radio wheel once (controls.cpp)
+//   VCHUD_DUMP_ROADS=path      write the car path network (for tools/preview)
 void FirstFrame()
 {
 	Log("first frame: rect %.0f,%.0f %.0fx%.0f, range %.0f, view %.2f, map %s", gProj.X(), gProj.Y(), gProj.W(),
 	    gProj.H(), gScene.range, gProj.MaxVisibleDistance(), gBaseRaster ? "baked" : "fallback tiles");
-	if (const char *path = getenv("VCMINIMAP_DUMP_ROADS")) {
+	if (const char *path = getenv("VCHUD_DUMP_ROADS")) {
 		if (FILE *f = fopen(path, "w")) {
 			const auto *links = reinterpret_cast<const uint16_t *>(api.thePaths + 0x3bd08);
 			for (int i = 0; i < NumCarPathNodes(); i++) {
@@ -245,7 +248,7 @@ void FirstFrame()
 			Log("dumped %d car path nodes to %s", NumCarPathNodes(), path);
 		}
 	}
-	if (const char *wanted = getenv("VCMINIMAP_TEST_WANTED")) {
+	if (const char *wanted = getenv("VCHUD_TEST_WANTED")) {
 		using SetWanted = void (*)(uint8_t *, int);
 		auto set = reinterpret_cast<SetWanted>(dlsym(RTLD_MAIN_ONLY, "_ZN10CPlayerPed14SetWantedLevelEi"));
 		if (set && api.FindPlayerPed()) {
@@ -254,7 +257,7 @@ void FirstFrame()
 		}
 	}
 	float dx, dy;
-	const char *test = getenv("VCMINIMAP_TEST_WAYPOINT");
+	const char *test = getenv("VCHUD_TEST_WAYPOINT");
 	if (test && sscanf(test, "%f,%f", &dx, &dy) == 2 && *api.targetMarkerId == -1) {
 		api.ToggleTargetMarker(gScene.origin.x + dx, gScene.origin.y + dy);
 		Log("test waypoint at %.0f,%.0f", gScene.origin.x + dx, gScene.origin.y + dy);
@@ -319,6 +322,7 @@ void Hook_HudDraw()
 	hud::BeginFrame(shown);
 	menu::OnGameplayFrame();
 	orig_HudDraw();
+	wheel::Draw();
 }
 
 void Hook_DrawBlips()
@@ -393,8 +397,8 @@ void Hook_SpriteDraw(const CSprite2d *sprite, const CRect &rect, const CRGBA &co
 
 __attribute__((constructor)) void Init()
 {
-	LogOpen((SupportDir() + "/vcminimap.log").c_str());
-	Log("VC Minimap loaded");
+	LogOpen((SupportDir() + "/vcmodernhud.log").c_str());
+	Log("VC Modern HUD loaded");
 	LoadConfig(); // gConfig is constant-initialised, so this survives static init
 	if (!hooks::Init(kBuildUuid) || !Resolve()) {
 		Log("staying vanilla");
@@ -420,6 +424,8 @@ __attribute__((constructor)) void Init()
 	Log(hudOk ? "minimap and HUD hooks installed" : "minimap hooks installed; HUD layout left as is");
 	if (!menu::Install(orig_SpriteDraw, hudOk))
 		Log("pause menu hooks missing; menu left as is (re-run install.sh)");
+	if (!controls::Install())
+		Log("controller hooks missing; controls left as is (re-run install.sh)");
 }
 
 } // namespace
