@@ -131,6 +131,7 @@ bool Resolve()
 
 	Bind(api.GetWeaponInfo, "_ZN11CWeaponInfo13GetWeaponInfoE11eWeaponType");
 	Bind(api.WeaponHasAmmoToBeUsed, "_ZN7CWeapon21HasWeaponAmmoToBeUsedEv");
+	Bind(api.SetCurrentWeapon, "_ZN4CPed16SetCurrentWeaponEi");
 	Bind(api.modelInfoPtrs, "_ZN10CModelInfo16ms_modelInfoPtrsE");
 	Bind(api.TexDictionaryFindNamedTexture, "_Z31RwTexDictionaryFindNamedTexturePN2rw13TexDictionaryEPKc");
 	Bind(api.TxdFindSlot, "_ZN9CTxdStore11FindTxdSlotEPKc");
@@ -146,6 +147,13 @@ bool Resolve()
 	Bind(api.crosshairMultY, "_ZN7CCamera22m_f3rdPersonCHairMultYE");
 	Bind(api.GetIsLineOfSightClear, "_ZN6CWorld21GetIsLineOfSightClearERK7CVectorS2_bbbbbbb");
 	Bind(api.Find3rdPersonCamTargetVector, "_ZN7CCamera28Find3rdPersonCamTargetVectorEf7CVectorRS0_S1_");
+	Bind(api.ProcessLineOfSight, "_ZN6CWorld18ProcessLineOfSightERK7CVectorS2_R9CColPointRP7CEntitybbbbbbbb");
+	Bind(api.ignoreEntity, "_ZN6CWorld13pIgnoreEntityE");
+	Bind(api.GetAnimHierarchyFromSkinClump, "_Z29GetAnimHierarchyFromSkinClumpPN2rw5ClumpE");
+	Bind(api.HAnimIDGetIndex, "_Z17RpHAnimIDGetIndexPN2rw14HAnimHierarchyEi");
+	Bind(api.HAnimMatrixArray, "_Z30RpHAnimHierarchyGetMatrixArrayPN2rw14HAnimHierarchyE");
+	Bind(api.UpdateRpHAnim, "_ZN7CEntity13UpdateRpHAnimEv");
+	Bind(api.RtQuatRotate, "_Z12RtQuatRotateP6RtQuatPKN2rw3V3dEf15RwOpCombineType");
 
 	Bind(api.numRetunePresses, "gNumRetunePresses");
 	Bind(api.retuneCounter, "gRetuneCounter");

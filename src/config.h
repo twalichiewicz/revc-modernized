@@ -14,10 +14,11 @@ struct Config {
 	bool pauseTabs = true;      // pause menu opens on the map, other pages as tabs
 	bool compactLegend = true;  // pause map legend shrunk into a corner
 	bool circleBack = true;     // Circle (B) goes back in menus instead of Triangle (Y)
-	bool wheels = true;         // hold LB: weapon wheel on foot, radio wheel in a vehicle
-	bool dpadActions = true;    // D-pad left/right: weapons on foot, radio in a vehicle (not movement)
-	bool modernTriggers = true; // on foot LT aims and RT fires, instead of cycling weapons
+	bool wheels = true;         // hold LB: weapon wheel on foot; hold D-pad left/right: radio wheel in a vehicle
+	bool dpadActions = true;    // D-pad: weapons / radio, expanded map, side missions (not movement)
+	bool modernTriggers = true; // LT aims and RT fires on foot, brake and gas in a vehicle
 	bool aimCamera = true;      // over-the-shoulder camera while aiming
+	bool driveByAim = true;     // in a vehicle hold LB to aim anywhere, RB shoots
 	float lookSensitivity = 1.0f; // right stick camera speed
 	float aimSensitivity = 0.45f; // ... while aiming or scoped, relative to that
 	float margin = 0.025f;      // gap to the screen's bottom-left corner, fraction of screen height

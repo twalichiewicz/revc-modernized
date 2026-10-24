@@ -7,7 +7,7 @@ BAKE    := $(BUILD)/vcmm-bake
 PREVIEW := $(BUILD)/vcmm-preview
 
 SHARED := src/canvas.cpp src/mapdata.cpp src/projection.cpp src/scene.cpp
-PLUGIN := $(SHARED) src/aimcam.cpp src/config.cpp src/controls.cpp src/draw.cpp src/game.cpp src/gps.cpp src/hooks.cpp src/hud.cpp src/log.cpp src/menu.cpp src/minimap.cpp src/radiologos.cpp src/text.cpp src/wheel.cpp
+PLUGIN := $(SHARED) src/aimcam.cpp src/config.cpp src/controls.cpp src/draw.cpp src/driveby.cpp src/game.cpp src/gps.cpp src/hooks.cpp src/hud.cpp src/log.cpp src/menu.cpp src/minimap.cpp src/radiologos.cpp src/text.cpp src/wheel.cpp
 GAMEFILES := tools/bake/gamefiles.cpp
 
 all: $(DYLIB) $(BAKE)

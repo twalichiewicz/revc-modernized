@@ -1,7 +1,8 @@
 #pragma once
 // GTA V-style selection wheels: weapons on foot, radio stations in a vehicle.
-// controls.cpp opens one while LB is held and steers it with the right stick;
-// letting go of LB applies the choice. Time slows while a wheel is open.
+// controls.cpp opens one while LB is held on foot, or the D-pad left / right in
+// a vehicle, and steers it with the right stick; letting go applies the choice.
+// Time slows while a wheel is open.
 
 namespace wheel {
 

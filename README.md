@@ -7,7 +7,8 @@ A modern GTA-style HUD and controller layout for the native Apple Silicon port o
 - health, armour and stamina bars under the map,
 - a cleaner HUD around it,
 - a GTA IV-style pause menu that opens straight on the map,
-- GTA V-style weapon and radio wheels, and a D-pad that does something useful.
+- GTA V-style weapon and radio wheels, and a D-pad that does something useful,
+- modern aiming on foot and free-aim drive-bys.
 
 ![In game](docs/hud.jpg)
 
@@ -18,7 +19,7 @@ A modern GTA-style HUD and controller layout for the native Apple Silicon port o
 ## What you get
 
 - **Tilted 3D minimap.** It sits in the bottom-left corner and rotates with the camera. It looks further
-  ahead the faster you drive.
+  ahead the faster you drive, and D-pad down zooms it out for a few seconds.
 - **Real buildings.** They are built from the game's own collision meshes, so outlines and heights match the
   actual buildings, including stepped towers and sloped roofs.
 - **Real roads.** They come from the game's car path network, drawn at their actual widths.
@@ -45,17 +46,26 @@ A modern GTA-style HUD and controller layout for the native Apple Silicon port o
   - On the map, A (Xbox) or ✕ (PlayStation) places a waypoint without also closing it. LT and RT zoom,
     since RB now switches tabs.
 - **Controller, GTA IV/V style.**
-  - Hold LB (L1) for the weapon wheel on foot, or the radio wheel in a vehicle. Point the right stick at a
-    weapon or station and let go of LB to pick it; time slows while the wheel is open. A quick tap of LB
-    still does what it always did (centre the camera, next station).
-  - The D-pad no longer moves you. Left and right switch weapons on foot, and change the radio station in a
-    vehicle.
+  - Hold LB (L1) on foot for the weapon wheel, or hold the D-pad left or right in a vehicle for the radio
+    wheel. Point the right stick at a weapon or station and let go to pick it; time slows while the wheel is
+    open. A quick tap of LB on foot still does what it always did.
+  - The D-pad no longer moves you. Left and right switch weapons on foot, and a tap changes the radio station
+    in a vehicle. Down zooms the minimap out for a few seconds, GTA V style (press again to go back). Up, in
+    a vehicle, starts or stops its side mission: taxi, vigilante, paramedic or firefighter (R3 on the PS2).
   - On foot, LT aims and RT fires, instead of switching weapons. R1 and Circle no longer aim and fire, so they
     are free for other things.
+  - In a car, on a bike or in a boat, RT is the throttle and LT the brake and reverse, both as far as you
+    pull them. R3 looks behind (it was L2 + R2). Aircraft keep the game's controls.
 - **Aiming, modern third-person style.** Holding LT with a gun eases the camera in over Tommy's right
   shoulder and zooms in, with the crosshair in the middle of the screen, pointing where the small hip-fire
   dot pointed before you aimed. The M4, Ruger and M60 aim this way too instead of switching to first person;
   sniper rifles and the rocket launcher keep their scopes, now steered with the right stick.
+- **Free-aim drive-bys.** Hold LB in a car, on a bike or in a boat to aim an SMG or a pistol (the SMG if you
+  have both, unless the pistol is in your hand). The camera rises over the vehicle and turns with the right
+  stick, with a crosshair in the middle of the screen; RB shoots (it's the handbrake when you aren't
+  aiming). Tommy leans out of whichever side you're facing and points his gun at the crosshair, and the
+  shots go there instead of straight out of the window. Pistols fire one shot per press. Without either
+  weapon, LB does nothing.
 - **Precise right stick.** The camera follows the right stick smoothly from a small dead zone (the game's own
   stick handling ignored the first 30% and then jumped), slower while aiming and slower still through a
   zoomed scope.
@@ -127,10 +137,11 @@ This restores the original binary and removes the plugin. Your saves are never t
   | `PauseTabs` | 1 | pause menu opens on the map, other pages as tabs |
   | `CompactLegend` | 1 | small map legend in the corner of the pause map |
   | `CircleBack` | 1 | Circle (B) goes back in menus; 0 restores Triangle (Y) |
-  | `Wheels` | 1 | hold LB for the weapon / radio wheel |
-  | `DpadActions` | 1 | D-pad left/right switch weapons / stations instead of moving you |
-  | `ModernTriggers` | 1 | on foot LT aims and RT fires (instead of switching weapons) |
+  | `Wheels` | 1 | hold LB for the weapon wheel, D-pad left/right in a vehicle for the radio wheel |
+  | `DpadActions` | 1 | D-pad: weapons / stations, bigger minimap, side missions instead of moving you |
+  | `ModernTriggers` | 1 | LT aims and RT fires on foot; RT throttle, LT brake and R3 look back in a vehicle |
   | `AimCamera` | 1 | over-the-shoulder aiming, the hip-fire dot and the precise right stick |
+  | `DriveByAim` | 1 | in a vehicle hold LB to aim an SMG or pistol anywhere, RB shoots |
   | `LookSensitivity` | 1 | right stick camera speed |
   | `AimSensitivity` | 0.45 | right stick speed while aiming or scoped (1 = as when not aiming) |
   | `Margin` | 0.025 | gap to the screen corner (fraction of screen height) |
@@ -155,12 +166,20 @@ hooks are written to disk:
 - **HUD elements.** Two "skip" patches hide the top-right health and armour. Other HUD elements are recognised
   by where they are called from in `CHud::Draw`.
 - **Controller.** `src/controls.cpp` hooks `CPad::Update`, between the game reading the gamepad and merging it
-  into the pad state. It reads the gamepad through GLFW directly, takes the D-pad and LB out of the
-  joystick's state, and drives the wheels (`src/wheel.cpp`). Weapons switch through the game's own
-  `CPlayerPed::ProcessWeaponSwitch`, stations through its retune counter.
+  into the pad state. It reads the gamepad through GLFW directly, takes the D-pad, LB and the triggers out
+  of the joystick's state, and puts back the buttons the game expects: aim and fire on foot, throttle and
+  brake (as far as the triggers are pulled) in a vehicle. Weapons switch through the game's own
+  `CPlayerPed::ProcessWeaponSwitch`, stations through its retune counter, and side missions start on the R3
+  press their scripts wait for. The wheels are in `src/wheel.cpp`.
 - **Aiming.** `src/aimcam.cpp` hooks the PC follow camera (`CCam::Process_FollowPedWithMouse`) and moves it over
   the shoulder while aiming. The game aims along that same camera and crosshair
   (`CCamera::Find3rdPersonCamTargetVector`), so shots still go where the crosshair points.
+- **Drive-bys.** `src/driveby.cpp` wraps the game's own drive-by (`CAutomobile`, `CBike` and
+  `CBoat::DoDriveByShootings`): while you aim it is told to look out of the side you face and fire on RB,
+  and a skip patch lets it past its SMG-only check for pistols. `CWeapon::DoDriveByAutoAiming` then sends
+  the shot from the gun to what's under the crosshair. The aiming camera replaces the vehicle camera's
+  result (`CCam::Process_FollowCar_SA`), and `CPed::PreRender` turns Tommy's right upper arm towards the
+  crosshair before the game rebuilds his skeleton from the animation.
 - **Pause menu.** `src/menu.cpp` opens the frontend on the map page, draws the tabs after each frontend frame
   and switches pages through the game's own `CMenuManager::SwitchToNewScreen`. The legend's drawing calls
   in `CMenuManager::PrintMap` and `CRadar::DrawLegend` are moved and scaled into the corner.
