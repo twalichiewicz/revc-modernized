@@ -17,6 +17,7 @@ constexpr uint32_t kMinIntervalMs = 200; // ...but no more often than this when 
 constexpr float kArrivedDist = 25.0f;
 constexpr float kSearchLimit = 999999.88f;
 constexpr uint8_t kCarPaths = 0;
+constexpr uint32_t kFreshMs = 500; // a route not brought up to date for this long (no minimap drawn) is gone
 
 struct Target {
 	bool valid = false;
@@ -28,6 +29,7 @@ struct Target {
 std::vector<Vec2> gPath; // road nodes from the player's end to the destination's end
 Route gRoute;
 bool gHaveRoute;
+uint32_t gUpdated; // game time of the last Update
 CVector gLastTarget;
 int gLastStartNode = -2;
 uint32_t gLastSearch;
@@ -153,6 +155,7 @@ void BuildRoute(const CVector &player, const Target &target)
 void Update(const CVector &player)
 {
 	gHaveRoute = false;
+	gUpdated = *api.timeMs;
 	const Target target = PickTarget(player);
 	if (!target.valid || NumCarPathNodes() <= 0) {
 		gLastStartNode = -2;
@@ -184,6 +187,6 @@ void Update(const CVector &player)
 	gHaveRoute = gRoute.points.size() >= 2;
 }
 
-const Route *Current() { return gHaveRoute ? &gRoute : nullptr; }
+const Route *Current() { return gHaveRoute && *api.timeMs - gUpdated < kFreshMs ? &gRoute : nullptr; }
 
 } // namespace gps

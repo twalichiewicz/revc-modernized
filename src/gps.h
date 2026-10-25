@@ -10,7 +10,7 @@ namespace gps {
 void Update(const CVector &player);
 
 // The route along road centres, starting level with the player; nullptr when
-// there is nowhere to guide to.
+// there is nowhere to guide to (or the minimap hasn't been drawn lately).
 const Route *Current();
 
 } // namespace gps

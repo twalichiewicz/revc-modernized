@@ -1,5 +1,6 @@
 #include "player.h"
 #include "camera.h"
+#include "steering.h"
 #include "aimcam.h"
 #include "body.h"
 #include "climb.h"
@@ -53,6 +54,8 @@ void Hook_PreRender(uint8_t *ped)
 		}
 	}
 	orig_PreRender(ped);
+	if (ped == api.FindPlayerPed())
+		steering::PoseDriver(ped); // his hands on the wheel
 	camera::AfterPreRender(ped);
 }
 

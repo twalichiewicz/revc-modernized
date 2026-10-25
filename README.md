@@ -31,7 +31,8 @@ Vice City's story, missions and world stay as they are. Every feature can be swi
   in the top-right corner.
 - When you change station, its logo shows at the bottom of the screen instead of the big coloured name.
 - A GTA IV-style pause menu opens on the map, with the other pages in tabs. The map has a compact legend,
-  and marks hospitals, police stations and businesses you can buy, with their prices.
+  marks hospitals, police stations and businesses you can buy, with their prices, and shows the GPS route
+  as soon as you set a waypoint.
 
 ### Controls and camera
 
@@ -63,6 +64,9 @@ Vice City's story, missions and world stay as they are. Every feature can be swi
   - Getting in and out stays in first person.
   - On a motorcycle the view leans with you.
   - Drive-bys aim from the seat.
+- Cars' steering wheels are round and turn as you steer, with Tommy's hands on them. Sounding the horn
+  (clicking the left stick), he presses its middle; when the blinkers come on, he flicks the stalk behind
+  it.
 
 ### On foot
 
@@ -93,6 +97,11 @@ Vice City's story, missions and world stay as they are. Every feature can be swi
 - A modern camera look: bloom, shafts of sunlight, softer highlights, a touch more contrast and a
   vignette. Vice City's lighting is baked into its models, so this is the look of the picture, not new
   lights.
+- Cars' lights glow in the model itself, where they're painted on: tail lights brighten red when
+  braking (and while a car waits with someone at the wheel), reversing lights go white, and headlights
+  light up at night. A smashed light stays dark.
+- With a GPS route, your car's blinkers come on as the next turn comes up, with a green arrow on the
+  dash in the driver's seat.
 - Together they cost about 4 ms a frame at 3440×1440 on an M4. Each frame, the clouds work out a
   quarter of their pixels at half resolution and carry the rest over from the last frame.
 
@@ -101,7 +110,7 @@ Vice City's story, missions and world stay as they are. Every feature can be swi
   page.
 - The game no longer crashes when someone gets off a bus whose animations had been unloaded.
 - Brake, reverse and headlights no longer draw see-through boxes sticking out of the bodywork (a GTA III
-  leftover). Their glow stays.
+  leftover).
 - If the car radio gets stuck looping one moment of a song (this can happen after the pause menu), it
   now restarts on its own after a few seconds.
 - You can get out of a car that's in the water, and there are no footstep sounds while swimming.
@@ -121,7 +130,9 @@ Vice City's story, missions and world stay as they are. Every feature can be swi
 | R3                  |                                        | Look behind                                    |
 | Select / Back       | Camera distance, then first person     | Camera distance, including the driver's seat   |
 
-In the pause menu, LB/RB (or Q/E) switch tabs and B/Circle goes back.
+In the pause menu, LB/RB (or Q/E) switch tabs and B/Circle goes back. On the map, the left stick moves
+the cursor (gently for small pushes; the D-pad nudges it), the right stick moves the map, LT/RT zoom in and
+out about the cursor, and A/Cross sets or clears a waypoint.
 
 ## Install
 
@@ -158,6 +169,8 @@ These are the ones you're most likely to want:
 | `LookSensitivity`, `AimSensitivity` | Right stick speed, and while aiming                               |
 | `Tilt`, `Zoom`, `Size`, `Aspect` | The minimap's shape                                                  |
 | `Clouds`, `ModernLighting`  | The new sky and the camera look                                           |
+| `LightGlow`                 | Cars' lights glowing on the model                                         |
+| `SteeringWheel`             | Round, turning steering wheels, Tommy's hands on them                     |
 
 If something looks wrong, the log next to the settings file (`vcmodernhud.log`) usually says why.
 

@@ -1,5 +1,6 @@
 #include "menu.h"
 #include "config.h"
+#include "controls.h"
 #include "draw.h"
 #include "game.h"
 #include "hooks.h"
@@ -7,6 +8,7 @@
 #include "text.h"
 
 #include <algorithm>
+#include <chrono>
 #include <cmath>
 #include <cstdlib>
 #include <cstring>
@@ -40,6 +42,17 @@ constexpr uint32_t kLegendEntryScaleSite = 0xf8510;     // PrintMap: CFont::SetS
 
 constexpr int kStickInUse = 32;        // of 128: a stick pushed this far is the controller in use
 
+// The pause map (CMenuManager, MAP_ENHANCEMENTS): its half size and middle,
+// in pixels; zoomed out to 162 and in to 1000 (448ths of the screen height).
+constexpr size_t kMapSize = 0x40, kMapCentreX = 0x44, kMapCentreY = 0x48, kShowMouse = 0x1b4;
+constexpr float kMapMinSize = 162.0f, kMapMaxSize = 1000.0f;
+// Its cursor with the controller, in screen heights per second: the left
+// stick at full push, the D-pad, the right stick moving the map; zooming
+// (per second, a trigger fully in: e to that power); the cursor stops this
+// far from the screen's edge and moves the map instead.
+constexpr float kMapCursorSpeed = 0.9f, kMapNudgeSpeed = 0.1f, kMapPanSpeed = 1.1f, kMapZoomRate = 1.8f, kMapEdge = 0.05f;
+constexpr float kStickDead = 0.12f, kStickCurve = 2.2f; // of the stick's travel; its speed's power
+
 constexpr float kLegendScale = 0.55f;  // at most
 constexpr float kLegendMaxHeight = 0.6f; // of the screen: a long legend shrinks to fit
 constexpr CRGBA kWhite{255, 255, 255, 255};
@@ -61,6 +74,10 @@ CVector2D *gMapCrosshair; // PrintMap's crosshair, in screen pixels
 
 const uint8_t *gText; // image base, for call sites
 bool gTabsOn, gLegendOn, gCircleBack;
+using Clock = std::chrono::steady_clock;
+Clock::time_point gMapLastInput;
+uint8_t gMapInputSaved[kPadOldState]; // the pad's state, kept from the game while it reads the map's input
+bool gMapInputHeld;
 bool gFreshOpen;      // gameplay was on screen since the menu was last drawn
 bool gPrevLB, gPrevRB;
 Box gTabBoxes[kNumTabs];
@@ -209,19 +226,103 @@ bool ControllerInUse(uint8_t *pad)
 	return false;
 }
 
-// The map's crosshair follows the mouse while its pointer is shown, and
-// otherwise stays where it is (PrintMap): moving the map with a stick hides
-// the pointer, so the crosshair stayed where the mouse had left it. With the
-// controller in use the pointer goes and the crosshair sits in the middle of
-// the screen, the map moving under it (zooming in and the waypoint go by it).
-void ControllerCrosshair(uint8_t *menu, uint8_t *pad)
+float &MenuFloat(uint8_t *menu, size_t offset) { return *reinterpret_cast<float *>(menu + offset); }
+
+// The map's bounds, as AdditionalOptionInput keeps them: zoomed out as far as
+// it goes the map sits in the middle; zoomed in it moves no further than
+// keeps an edge on screen.
+void ClampMap(uint8_t *menu)
 {
+	const float W = float(ScreenWidth()), H = float(ScreenHeight());
+	const float size = MenuFloat(menu, kMapSize);
+	const float rx = std::max(size - kMapMinSize * H / 480.0f, 0.0f), ry = std::max(size - kMapMinSize * H / 448.0f, 0.0f);
+	MenuFloat(menu, kMapCentreX) = std::clamp(MenuFloat(menu, kMapCentreX), W / 2 - rx, W / 2 + rx);
+	MenuFloat(menu, kMapCentreY) = std::clamp(MenuFloat(menu, kMapCentreY), H / 2 - ry, H / 2 + ry);
+}
+
+// A stick's push as a speed: nothing in the dead zone, then slow for a small
+// push and fast at the end of its travel (for fine placing).
+Vec2 StickSpeed(int16_t x, int16_t y, float fullSpeed)
+{
+	const float sx = x / 128.0f, sy = y / 128.0f, m = std::min(std::hypot(sx, sy), 1.0f);
+	if (m < kStickDead)
+		return {0, 0};
+	const float s = std::pow((m - kStickDead) / (1.0f - kStickDead), kStickCurve) * fullSpeed / std::hypot(sx, sy);
+	return {sx * s, sy * s};
+}
+
+// The pause map with the controller, as GTA V has it: the left stick moves a
+// cursor over the map (the crosshair, which the waypoint goes by), pushed
+// against the screen's edge it moves the map along; the right stick moves
+// the map under it, the D-pad nudges it, and the triggers zoom about it (LT
+// in, RT out, as far as they're pulled). The game's own handling of these
+// for the map is kept out: it moved the map under a crosshair fixed in the
+// middle, in big steps whatever the push, and not at all until zoomed in.
+// The mouse keeps the game's (its pointer is the crosshair).
+void MapControl(uint8_t *menu, uint8_t *pad)
+{
+	gMapInputHeld = false;
 	if (!gMapCrosshair || MenuScreen(menu) != kPageMap)
 		return;
-	if (pad && ControllerInUse(pad))
-		menu[0x1b4] = 0; // CMenuManager::m_bShowMouse
-	if (!menu[0x1b4])
-		*gMapCrosshair = {float(ScreenWidth()) * 0.5f, float(ScreenHeight()) * 0.5f};
+	// A trigger pulled is the controller too (else the game's own zoom, about
+	// the screen's middle, had it while its pointer was up).
+	float in, out;
+	controls::Triggers(in, out);
+	if (ControllerInUse(pad) || in > 0.0f || out > 0.0f)
+		menu[kShowMouse] = 0;
+	const Clock::time_point now = Clock::now();
+	const float dt = std::clamp(std::chrono::duration<float>(now - gMapLastInput).count(), 0.0f, 0.05f);
+	gMapLastInput = now;
+	if (menu[kShowMouse])
+		return;
+	const float W = float(ScreenWidth()), H = float(ScreenHeight());
+	float &size = MenuFloat(menu, kMapSize), &cx = MenuFloat(menu, kMapCentreX), &cy = MenuFloat(menu, kMapCentreY);
+	CVector2D &cursor = *gMapCrosshair;
+	if (cursor.x < cx - size || cursor.x > cx + size || cursor.y < cy - size || cursor.y > cy + size)
+		cursor = {W / 2, H / 2};
+
+	// Zoom, about the cursor.
+	const float lo = kMapMinSize * H / 448.0f, hi = kMapMaxSize * H / 448.0f;
+	const float zoom = std::clamp(size * std::exp((in - out) * kMapZoomRate * dt), lo, hi) / size;
+	cx += (cursor.x - cx) * (1.0f - zoom);
+	cy += (cursor.y - cy) * (1.0f - zoom);
+	size *= zoom;
+	// The right stick moves the map under the cursor.
+	const Vec2 pan = StickSpeed(PadNew(pad, kPadRightStickX), PadNew(pad, kPadRightStickY), kMapPanSpeed * H);
+	cx -= pan.x * dt;
+	cy -= pan.y * dt;
+	// The left stick and the D-pad move the cursor; at the screen's edge the map moves instead.
+	Vec2 move = StickSpeed(PadNew(pad, kPadLeftStickX), PadNew(pad, kPadLeftStickY), kMapCursorSpeed * H);
+	move.x += float((PadNew(pad, kPadDPadRight) != 0) - (PadNew(pad, kPadDPadLeft) != 0)) * kMapNudgeSpeed * H;
+	move.y += float((PadNew(pad, kPadDPadDown) != 0) - (PadNew(pad, kPadDPadUp) != 0)) * kMapNudgeSpeed * H;
+	cursor.x += move.x * dt;
+	cursor.y += move.y * dt;
+	const float edge = kMapEdge * H;
+	if (cursor.x < edge)
+		cx += edge - cursor.x, cursor.x = edge;
+	if (cursor.x > W - edge)
+		cx -= cursor.x - (W - edge), cursor.x = W - edge;
+	if (cursor.y < edge)
+		cy += edge - cursor.y, cursor.y = edge;
+	if (cursor.y > H - edge)
+		cy -= cursor.y - (H - edge), cursor.y = H - edge;
+	ClampMap(menu);
+	cursor.x = std::clamp(cursor.x, std::max(cx - size, edge), std::min(cx + size, W - edge));
+	cursor.y = std::clamp(cursor.y, std::max(cy - size, edge), std::min(cy + size, H - edge));
+
+	// Out of the game's sight while it reads the input; put back after.
+	std::memcpy(gMapInputSaved, pad, sizeof gMapInputSaved);
+	gMapInputHeld = true;
+	for (PadButton b : {kPadLeftStickX, kPadLeftStickY, kPadRightStickX, kPadRightStickY, kPadDPadUp, kPadDPadDown,
+	                    kPadDPadLeft, kPadDPadRight, kPadLT, kPadRB, kPadRT})
+		PadNew(pad, b) = 0;
+}
+
+void MapInputBack(uint8_t *pad)
+{
+	if (gMapInputHeld)
+		std::memcpy(pad, gMapInputSaved, sizeof gMapInputSaved);
+	gMapInputHeld = false;
 }
 
 void DrawTabs(const uint8_t *menu, int current)
@@ -237,7 +338,7 @@ void DrawTabs(const uint8_t *menu, int current)
 	for (int i = 0; i < kNumTabs; i++)
 		total += widths[i] = text::Width(kTabs[i].label, label) + 2 * padX;
 
-	const bool mouse = menu[0x1b4] != 0; // the cursor is shown
+	const bool mouse = menu[kShowMouse] != 0; // the cursor is shown
 	const float mx = float(MenuMouseX(menu)), my = float(MenuMouseY(menu));
 	int hover = -1;
 	SetHudRenderStates();
@@ -387,9 +488,9 @@ void Hook_UserInput(uint8_t *menu)
 		SwapTriangleCircle(pad);
 	if (TabsActive(menu))
 		TabInput(menu);
-	ControllerCrosshair(menu, pad);
+	MapControl(menu, pad);
 	orig_UserInput(menu);
-	ControllerCrosshair(menu, nullptr); // after it moved the map, for PrintMap
+	MapInputBack(pad);
 	if (gCircleBack)
 		SwapTriangleCircle(pad);
 }
@@ -567,7 +668,7 @@ bool Install(SpriteDrawFn spriteDraw, bool fontHooks)
 	if (!input)
 		gMapCrosshair = nullptr;
 	Log("menu: tabs %s, compact legend %s, back on %s, map crosshair %s", gTabsOn ? "on" : "off",
-	    gLegendOn ? "on" : "off", gCircleBack ? "Circle" : "Triangle", gMapCrosshair ? "centred for the pad" : "vanilla");
+	    gLegendOn ? "on" : "off", gCircleBack ? "Circle" : "Triangle", gMapCrosshair ? "a cursor on the sticks" : "vanilla");
 	return true;
 }
 

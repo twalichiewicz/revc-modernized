@@ -21,5 +21,8 @@ bool PlayStationPad();
 // The right stick's look this frame (radians: yaw to the right, pitch up), at
 // the on-foot camera's feel and sensitivity; false while it's at rest.
 bool LookTurn(float &yaw, float &pitch);
+// How far the triggers are pulled, 0 to 1, as last read (the frontend's too;
+// it only sees them as buttons).
+void Triggers(float &lt, float &rt);
 
 } // namespace controls

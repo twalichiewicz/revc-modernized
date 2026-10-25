@@ -557,6 +557,12 @@ bool LookTurn(float &yaw, float &pitch)
 
 bool PlayStationPad() { return gPlayStation; }
 
+void Triggers(float &lt, float &rt)
+{
+	lt = Pedal(gPrev.lt);
+	rt = Pedal(gPrev.rt);
+}
+
 bool Install()
 {
 	if (!gConfig.wheels && !gConfig.dpadActions && !gConfig.modernTriggers && !gConfig.aimCamera &&

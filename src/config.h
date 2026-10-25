@@ -32,6 +32,8 @@ struct Config {
 	bool climb = true;          // the jump button vaults, climbs ledges and climbs out of the water
 	bool clouds = true;         // volumetric clouds instead of the flat cloud sprites
 	bool modernLighting = true; // bloom, sun shafts, filmic highlights and a touch of contrast
+	bool lightGlow = true;      // cars' brake, reverse and headlights glow on the model
+	bool steeringWheel = true;  // round steering wheels that turn, his hands on them
 	bool firstPerson = true;    // the Select button's cycle on foot goes on to first person
 	bool carVariety = true;     // more car models loaded, turned over sooner, fewer of one model at once
 	float cameraShake = 1.0f;   // GTA IV-style camera shake (0 = none)

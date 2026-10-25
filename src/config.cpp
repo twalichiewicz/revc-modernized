@@ -40,6 +40,8 @@ const char kDefaultIni[] = "; VC Modern HUD for macVC. Delete this file to resto
                            "Climbing=1           ; jump vaults low walls, climbs ledges and climbs out of the water\n"
                            "Clouds=1             ; volumetric clouds instead of the flat cloud sprites\n"
                            "ModernLighting=1     ; bloom, sun shafts, filmic highlights and a touch of contrast\n"
+                           "LightGlow=1          ; cars' brake, reverse and headlights glow on the model\n"
+                           "SteeringWheel=1      ; round steering wheels that turn, Tommy's hands on them\n"
                            "FirstPerson=1        ; on foot, Select (Back) goes near, mid, far, then first person\n"
                            "CameraShake=1        ; handheld camera on foot, sway and jolts in vehicles (0 = none, 2 = double)\n"
                            "SpawnDistance=2      ; cars and people appear this much further out, past where you notice (1 = as the game)\n"
@@ -122,6 +124,10 @@ void Apply(const char *key, const char *value)
 		gConfig.clouds = b;
 	else if (!strcasecmp(key, "ModernLighting"))
 		gConfig.modernLighting = b;
+	else if (!strcasecmp(key, "LightGlow"))
+		gConfig.lightGlow = b;
+	else if (!strcasecmp(key, "SteeringWheel"))
+		gConfig.steeringWheel = b;
 	else if (!strcasecmp(key, "AimSensitivity") && f > 0.05f && f <= 2.0f)
 		gConfig.aimSensitivity = f;
 	else if (!strcasecmp(key, "LookSensitivity") && f > 0.05f && f <= 4.0f)

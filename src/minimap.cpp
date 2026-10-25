@@ -20,6 +20,7 @@
 #include "camera.h"
 #include "carlights.h"
 #include "carradio.h"
+#include "steering.h"
 #include "driveby.h"
 #include "config.h"
 #include "controls.h"
@@ -67,6 +68,9 @@ constexpr int kCellsPerTile = 8; // fallback tiles: subdivision keeps texture wa
 constexpr float kOffscreen = -10000.0f;
 constexpr CRGBA kWhite{255, 255, 255, 255};
 constexpr CRGBA kFallbackWater{38, 62, 86, 235};
+// The route on the pause map: its width and its dark edge's, in screen heights (as the minimap's).
+constexpr float kMenuRouteWidth = 0.0055f, kMenuRouteOutline = 0.0025f;
+constexpr CRGBA kMenuRouteOutlineColour{14, 14, 18, 235};
 
 void (*orig_DrawRadarMap)();
 void (*orig_DrawBlips)();
@@ -381,12 +385,57 @@ void Hook_HudDraw()
 	phone::Draw();
 	interact::Draw();
 	climb::Draw();
+	carlights::DrawDash();
 	wheel::Draw();
+}
+
+// The GPS route on the pause map, under its icons, as wide on screen at any
+// zoom. The game is paused there and the HUD (which routes for the minimap)
+// isn't drawn, so it's routed here, and a waypoint just set shows its way.
+void DrawMenuRoute()
+{
+	if (!gConfig.gps)
+		return;
+	gps::Update(*api.FindPlayerCentreOfWorld_NoSniperShift());
+	const Route *route = gps::Current();
+	if (!route || route->points.size() < 2)
+		return;
+	std::vector<Vec2> points;
+	for (const Vec2 &p : route->points) {
+		CVector2D radar, screen;
+		api.TransformRealWorldPointToRadarSpace(radar, {p.x, p.y});
+		orig_TransformRadarPointToScreenSpace(screen, radar);
+		points.push_back({screen.x, screen.y});
+	}
+	const float H = float(ScreenHeight());
+	SetHudRenderStates();
+	gCanvas.SetTexture(nullptr);
+	for (int pass = 0; pass < 2; pass++) {
+		const float hw = H * (kMenuRouteWidth + (pass == 0 ? kMenuRouteOutline : 0.0f)) * 0.5f;
+		const CRGBA col = pass == 0 ? kMenuRouteOutlineColour : route->colour;
+		for (size_t i = 0; i + 1 < points.size(); i++) {
+			const Vec2 a = points[i], b = points[i + 1];
+			const float len = std::hypot(b.x - a.x, b.y - a.y);
+			if (len < 1e-3f)
+				continue;
+			const float nx = -(b.y - a.y) / len * hw, ny = (b.x - a.x) / len * hw;
+			gCanvas.Quad({a.x + nx, a.y + ny}, {b.x + nx, b.y + ny}, {b.x - nx, b.y - ny}, {a.x - nx, a.y - ny}, col);
+		}
+		for (const Vec2 &c : points) // round joins
+			for (int k = 0; k < 10; k++) {
+				const float a0 = 6.2831853f * k / 10, a1 = 6.2831853f * (k + 1) / 10;
+				gCanvas.Tri({c.x, c.y, 0, 0}, {c.x + hw * std::cos(a0), c.y + hw * std::sin(a0), 0, 0},
+				            {c.x + hw * std::cos(a1), c.y + hw * std::sin(a1), 0, 0}, col);
+			}
+	}
+	gCanvas.Flush();
 }
 
 void Hook_DrawBlips()
 {
 	if (!gMapDrawn || MenuMapActive()) {
+		if (MenuMapActive())
+			DrawMenuRoute();
 		orig_DrawBlips();
 		if (MenuMapActive()) // the pause map: through its own transform, as CRadar::DrawCoordBlip does
 			places::Draw([](float x, float y, Vec2 &out) {
@@ -534,6 +583,8 @@ __attribute__((constructor)) void Init()
 		Log("traffic: hook missing (re-run install.sh); car models are picked as before");
 	if (!carlights::Install())
 		Log("carlights: hook missing (re-run install.sh); cars' light boxes stay");
+	if (!steering::Install())
+		Log("steering: functions missing; the steering wheels are the game's own");
 	if (!viewmodel::Install())
 		Log("viewmodel: the skeleton functions are missing; no gun in first person");
 	if (!camera::Install())

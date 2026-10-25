@@ -247,6 +247,22 @@ CVector OutOf(const float *frame, const float *local, int i)
 
 } // namespace
 
+void ReachArm(uint8_t *ped, bool left, const CVector &wrist, const CVector &pole)
+{
+	void *clump = gReady ? *reinterpret_cast<void *const *>(ped + kRwObject) : nullptr;
+	void *hierarchy = clump ? gHierarchy(clump) : nullptr;
+	if (!hierarchy)
+		return;
+	float *matrices = gBoneMatrices(hierarchy), *arm[4];
+	for (int i = 0; i < 4; i++) {
+		const int b = gBoneIndex(hierarchy, (left ? kLeft : kRight)[i]);
+		if (b < 0 && i < 3)
+			return;
+		arm[i] = b >= 0 ? matrices + b * 16 : nullptr;
+	}
+	Reach(arm, gLays[left ? 1 : 0], wrist, pole, nullptr);
+}
+
 bool Install()
 {
 	gHierarchy = reinterpret_cast<void *(*)(void *)>(dlsym(RTLD_MAIN_ONLY, "_Z29GetAnimHierarchyFromSkinClumpPN2rw5ClumpE"));
