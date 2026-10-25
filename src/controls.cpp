@@ -317,6 +317,9 @@ void RadioDpad(const Gamepad &now, uint8_t *vehicle) // vehicle: null when not i
 // The right stick as turn rates (radians per second, to the right and up): a
 // small round dead zone, a response curve, slower while aiming. The game's own
 // stick handling only starts at 30% deflection, with a jump (CapturePad).
+bool gLookTurn;
+float gLookYaw, gLookPitch; // this frame's, for the first-person seat view
+
 bool StickRates(const Gamepad &now, bool precise, float &yaw, float &pitch)
 {
 	const float m = Length(now.rx, now.ry);
@@ -432,6 +435,10 @@ void Hook_Update(uint8_t *pad, int16_t index)
 		gCarZoomBeforeB = -1;
 	}
 
+	gLookTurn = StickRates(now, false, gLookYaw, gLookPitch);
+	gLookYaw *= dt;
+	gLookPitch *= dt;
+
 	// In a car, on a bike or a boat: hold LB to aim, the right stick turns the
 	// aim, RB shoots (otherwise the handbrake).
 	float aimYaw = 0, aimPitch = 0;
@@ -540,6 +547,13 @@ void Hook_Update(uint8_t *pad, int16_t index)
 }
 
 } // namespace
+
+bool LookTurn(float &yaw, float &pitch)
+{
+	yaw = gLookTurn ? gLookYaw : 0.0f;
+	pitch = gLookTurn ? gLookPitch : 0.0f;
+	return gLookTurn;
+}
 
 bool PlayStationPad() { return gPlayStation; }
 

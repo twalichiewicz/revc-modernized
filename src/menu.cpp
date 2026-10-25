@@ -55,6 +55,7 @@ void (*orig_ProcessUserInput)(uint8_t *, uint8_t, uint8_t, uint8_t, uint8_t, int
 void (*orig_DrawRect)(const CRect &, const CRGBA &);
 void (*orig_Draw2DPolygon)(float, float, float, float, float, float, float, float, const CRGBA &);
 void (*orig_DrawLegend)(int, int, int);
+uint16_t *(*orig_TextGet)(uint8_t *, const char *);
 SpriteDrawFn gSpriteDraw;
 CVector2D *gMapCrosshair; // PrintMap's crosshair, in screen pixels
 
@@ -446,10 +447,91 @@ void Hook_DrawLegend(int x, int y, int id)
 	gInLegend = false;
 }
 
+// Text reVC added for its own menus and messages, which the port's text files
+// (the original game's) don't have: the game showed "FED_VPL missing" and the
+// like. Used only when the game's text has none (CKeyArray::Search returns
+// its "... missing" in WideErrorString), so a reVC text file still wins.
+struct ExtraText {
+	const char *key, *text;
+};
+constexpr ExtraText kExtraText[] = {
+    {"FET_GFX", "Graphics Setup"},    // Options: the graphics page
+    {"FED_FLS", "FULLSCREEN"},        // screen mode
+    {"FED_WND", "WINDOWED"},          //
+    {"FED_VPL", "VEHICLE PIPELINE"},  // graphics options
+    {"FED_MFX", "MATFX"},             //
+    {"FED_NEO", "NEO"},               //
+    {"FED_PRM", "PED RIM LIGHT"},     //
+    {"FED_WLM", "WORLD LIGHTMAPS"},   //
+    {"FED_RGL", "ROAD GLOSS"},        //
+    {"FEM_NON", "NONE"},              // colour filter, island loading
+    {"FEM_SIM", "SIMPLE"},            //
+    {"FEM_NRM", "NORMAL"},            //
+    {"FEM_MOB", "MOBILE"},            //
+    {"FEM_LOW", "LOW"},               //
+    {"FEM_MED", "MEDIUM"},            //
+    {"FEM_HIG", "HIGH"},              //
+    {"FEM_AUT", "AUTO"},              // aspect ratio
+    {"FEL_RUS", "RUSSIAN"},           // language
+    {"FEC_JOD", "DETECT JOYSTICK"},   // controls
+    {"FEC_GSL", "SHOW HEAD BOB"},     //
+    {"FESZ_RM", "RETRY MISSION?"},    // after failing a mission
+    {"FEC_SLC", "SLOT ~1~ IS CORRUPTED"},
+    {"FED_LFL", "Loading the saved game failed. The game will restart now."},
+    {"FED_LWR", "SAVE YOUR GAME?"},
+    {"FET_ADV", "ADVANCED"},                // graphics and display pages
+    {"FED_AAS", "ANTI ALIASING"},           //
+    {"FED_CLF", "COLOUR FILTER"},           //
+    {"FED_MBL", "MOTION BLUR"},             //
+    {"FEM_2PR", "PS2 ALPHA TEST"},          //
+    {"FEM_SCF", "SCREEN FORMAT"},           //
+    {"FEM_ISL", "MAP MEMORY USAGE"},        //
+    {"FEM_CSB", "CUTSCENE BORDERS"},        //
+    {"FEM_PED", "PED DENSITY"},             //
+    {"FEM_CAR", "CAR DENSITY"},             //
+    {"FED_UPS", "UPSCALING"},               // the port's own: MetalFX,
+    {"FED_RTR", "RAY TRACING"},             // ray-traced shadows,
+    {"FED_HDR", "HDR"},                     // EDR output,
+    {"FED_FPS", "FRAME RATE"},              // its frame rate / interpolation
+    {"FEC_FRC", "FREE CAM"},                // controls
+    {"FEC_JDE", "DETECTED JOYSTICK"},       //
+    {"FEC_JPR", "PRESS ANY BUTTON ON THE CONTROLLER YOU WANT TO USE"},
+};
+const uint16_t *gWideError; // WideErrorString
+
+uint16_t *Hook_TextGet(uint8_t *text, const char *key)
+{
+	uint16_t *found = orig_TextGet(text, key);
+	if (found != gWideError || !key)
+		return found;
+	static uint16_t wide[sizeof kExtraText / sizeof kExtraText[0]][64];
+	for (size_t i = 0; i < sizeof kExtraText / sizeof kExtraText[0]; i++)
+		if (!strcmp(key, kExtraText[i].key)) {
+			if (!wide[i][0])
+				for (size_t c = 0; c < 63 && kExtraText[i].text[c]; c++)
+					wide[i][c] = uint8_t(kExtraText[i].text[c]);
+			return wide[i];
+		}
+	// Any other, once each, for the next round of this list.
+	static char logged[32][8];
+	static int numLogged;
+	for (int i = 0; i < numLogged; i++)
+		if (!strncmp(logged[i], key, 7))
+			return found;
+	if (numLogged < 32) {
+		strncpy(logged[numLogged++], key, 7);
+		Log("menu: the game's text has nothing for %s", key);
+	}
+	return found;
+}
+
 } // namespace
 
 bool Install(SpriteDrawFn spriteDraw, bool fontHooks)
 {
+	gWideError = static_cast<const uint16_t *>(dlsym(RTLD_MAIN_ONLY, "WideErrorString"));
+	if (!gWideError || !hooks::Install("_ZN5CText3GetEPKc", Hook_TextGet, orig_TextGet))
+		Log("menu: no CText::Get hook (re-run install.sh); reVC's own menu text shows as \"... missing\"");
 	gSpriteDraw = spriteDraw;
 	gText = static_cast<const uint8_t *>(hooks::ImageBase());
 	// ProcessUserInput also carries the pause-map Cross fix, so it is always in.

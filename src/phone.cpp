@@ -82,6 +82,9 @@ const Caller kCallers[] = {
 // --- the phone in his hand --------------------------------------------------------
 
 constexpr int kAnimPhoneIn = 0xa4, kAnimPhoneOut = 0xa5, kAnimPhoneTalk = 0xa6; // standard group, all partial
+// Steering (CPed::DriveVehicle): left and right, in low cars, in boats. They
+// move his arms and lean his head, so the phone hand left his ear.
+constexpr int kAnimSteer[] = {0x6a, 0x6b, 0x6c, 0x6d, 0x74, 0x75};
 constexpr int kPhoneModel = 258;    // the cellphone CPed::AnswerMobile puts in his hand
 constexpr float kInHandAt = 0.85f;  // seconds into PHONE_IN when it's out of his pocket (CPed::AnswerMobile)
 constexpr float kDropFade = 8.0f;   // blend per second when something else takes his hand
@@ -411,6 +414,25 @@ void Hook_ClearAnswerMobile(uint8_t *ped)
 	gOurCall = false;
 	LowerPhone();
 }
+
+} // namespace
+
+void AfterWorld()
+{
+	if (gHand != Hand::kRaising && gHand != Hand::kTalking)
+		return;
+	uint8_t *ped = api.FindPlayerPed();
+	if (!ped || ped != gPed || !PedInVehicle(ped))
+		return;
+	uint8_t *clump = EntityClump(ped);
+	if (!clump)
+		return;
+	for (int anim : kAnimSteer)
+		if (uint8_t *assoc = api.GetAssociation(clump, anim))
+			*reinterpret_cast<float *>(assoc + 0x28) = 0.0f; // blendAmount
+}
+
+namespace {
 
 // --- on screen ---------------------------------------------------------------------
 

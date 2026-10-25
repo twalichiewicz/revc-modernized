@@ -55,6 +55,8 @@ constexpr CRGBA kUnderwaterTint{16, 66, 78, 255};
 
 void (*orig_ProcessBuoyancy)(uint8_t *ped);
 bool (*orig_IsTargetInWater)(uint8_t *cam, const CVector &source);
+bool (*orig_CanPedExitCar)(uint8_t *vehicle, bool jumpExit);
+void (*orig_PlayFootSteps)(uint8_t *ped);
 void (*gAddParticle)(int type, const CVector &pos, const CVector &velocity, uint8_t *entity, float size,
                      const CRGBA &colour, int rotationSpeed, int rotation, int frame, int life);
 void (*gPlayOneShot)(uint8_t *audio, int entity, uint16_t sound, float volume);
@@ -183,6 +185,27 @@ bool Hook_IsTargetInWater(uint8_t *cam, const CVector &source)
 	    ((target == player && (gSwimming || climb::Active())) || (PedInVehicle(player) && target == PedVehicle(player))))
 		return false;
 	return orig_IsTargetInWater(cam, source);
+}
+
+// He can get out of a vehicle in the water. The game lets him out only once
+// it has all but stopped turning (CVehicle::CanPedExitCar), which a car
+// bobbing and sinking never does, so he was stuck in it.
+bool Hook_CanPedExitCar(uint8_t *vehicle, bool jumpExit)
+{
+	if (orig_CanPedExitCar(vehicle, jumpExit))
+		return true;
+	const uint8_t *player = api.FindPlayerPed();
+	return player && PedInVehicle(player) && PedVehicle(player) == vehicle &&
+	       (*reinterpret_cast<const uint16_t *>(vehicle + 0x156) & kInWater);
+}
+
+// No footsteps while he swims: the game plays them off the walk and run
+// animations under the swimming pose (he's kept standing, CPed::PlayFootSteps).
+void Hook_PlayFootSteps(uint8_t *ped)
+{
+	if (gSwimming && ped == api.FindPlayerPed())
+		return;
+	orig_PlayFootSteps(ped);
 }
 
 // In a vehicle that's sunk (its ProcessBuoyancy drowns those inside).
@@ -539,6 +562,10 @@ bool Install()
 		return false;
 	if (!hooks::Install("_ZN4CCam15IsTargetInWaterERK7CVector", Hook_IsTargetInWater, orig_IsTargetInWater))
 		Log("swim: the camera stops following him in the water (re-run install.sh)");
+	if (!hooks::Install("_ZN4CPed13PlayFootStepsEv", Hook_PlayFootSteps, orig_PlayFootSteps))
+		Log("swim: his footsteps sound while he swims (re-run install.sh)");
+	if (!hooks::Install("_ZN8CVehicle13CanPedExitCarEb", Hook_CanPedExitCar, orig_CanPedExitCar))
+		Log("swim: he can't get out of a car in the water (re-run install.sh)");
 	gAddParticle = reinterpret_cast<decltype(gAddParticle)>(
 	    dlsym(RTLD_MAIN_ONLY, "_ZN9CParticle11AddParticleE13tParticleTypeRK7CVectorS3_P7CEntityfRKN2rw4RGBAEiiii"));
 	gPlayOneShot = reinterpret_cast<decltype(gPlayOneShot)>(dlsym(RTLD_MAIN_ONLY, "_ZN8cDMAudio11PlayOneShotEitf"));

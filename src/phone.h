@@ -19,6 +19,9 @@ void Answer();
 void HoldAnswer(uint8_t *pad);
 // From CHud::Draw.
 void Draw();
+// After the world's update (CPed::DriveVehicle blends his steering anims):
+// with the phone at his ear in a vehicle, steering doesn't pull it away.
+void AfterWorld();
 // The phone's left edge on screen while it's up, else the screen's right margin.
 float LeftEdge();
 // A text: `lcd` on the phone's screen (A-Z), `from` and `message` beside it.

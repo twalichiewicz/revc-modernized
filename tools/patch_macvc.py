@@ -64,6 +64,8 @@ DEFAULT_HOOKS = [
     "_ZN9CSprite2d8DrawRectERK5CRectRK5CRGBA",
     "_ZN9CSprite2d13Draw2DPolygonEffffffffRK5CRGBA",
     "_ZN6CRadar10DrawLegendEiii",
+    # reVC's own menu text, missing from the port's text files
+    "_ZN5CText3GetEPKc",
     # controller: weapon/radio wheels, D-pad actions
     "_ZN4CPad6UpdateEs",
     # over-the-shoulder aiming, the gun raised while aiming
@@ -98,6 +100,20 @@ DEFAULT_HOOKS = [
     "_ZN4CPed15ProcessBuoyancyEv",
     "_ZN4CPed7SetJumpEv",
     "_ZN4CCam15IsTargetInWaterERK7CVector",
+    "_ZN8CVehicle13CanPedExitCarEb",
+    "_ZN4CPed13PlayFootStepsEv",
+    # vehicles' animations wanted before they're loaded (a crash getting off a bus)
+    "_ZN12CAnimManager12AddAnimationEPN2rw5ClumpE12AssocGroupId11AnimationId",
+    "_ZN12CAnimManager14BlendAnimationEPN2rw5ClumpE12AssocGroupId11AnimationIdf",
+    # first person, camera shake, spawn distances; car variety
+    "_ZN7CCamera7ProcessEv",
+    "_ZN8CCarCtrl14ChooseCarModelEi",
+    "_ZN9CRenderer21SetupEntityVisibilityEP7CEntity",
+    "_ZN7CWeapon4FireEP7CEntityP7CVector",
+    # clouds and lighting; the port's ray-traced shadows' reports
+    "_Z9re3_debugPKcz",
+    "_ZN7CClouds6RenderEv",
+    "_ZN7CCamera16RenderMotionBlurEv",
 ]
 
 # Flag-controlled skips inside CHud::Draw: (name, instruction address, expected

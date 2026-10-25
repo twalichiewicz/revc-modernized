@@ -42,6 +42,19 @@ bool (*IsOpenTopCar)(uint8_t *car);
 bool (*IsDoorClosed)(uint8_t *car, int door);
 bool (*IsDoorMissing)(uint8_t *car, int door);
 
+// The radio stream stuck repeating a moment of its song (the port's streaming,
+// sometimes after a pause): playing, but its place in the song doesn't move.
+// It's stopped and the music manager forgets what it was playing, so it starts
+// the station again where it would be by now.
+constexpr auto kStuckWindow = std::chrono::seconds(4);
+constexpr int32_t kStuckBelow = 2000;       // ms the song moves on in that time, at least
+constexpr auto kRestartsApart = std::chrono::seconds(20);
+constexpr size_t kPlayingTrack = 0x3988;    // cMusicManager::m_nPlayingTrack
+constexpr int32_t kNoTrack = 0x4c9;         // NO_TRACK
+bool (*IsStreamPlaying)(uint8_t *samples, uint8_t stream);
+int32_t (*GetStreamedFilePosition)(uint8_t *samples, uint8_t stream);
+void (*StopStreamedFile)(uint8_t *samples, uint8_t stream);
+
 uint8_t *(*orig_FindVehicleOfPlayer)(uint8_t *audio);
 void (*orig_ServiceGameMode)(uint8_t *music);
 void (*orig_SetStreamedVolumeAndPan)(uint8_t *samples, uint8_t volume, uint8_t pan, uint8_t effect, uint8_t stream);
@@ -197,10 +210,47 @@ void Hook_SetStreamedVolumeAndPan(uint8_t *samples, uint8_t volume, uint8_t pan,
 	orig_SetStreamedVolumeAndPan(samples, volume, pan, effect, stream);
 }
 
+// Every frame of the game's music (not while paused): is his radio moving on?
+void Watch(uint8_t *music, uint8_t *player)
+{
+	static Clock::time_point windowAt, lastAt, restartedAt;
+	static int32_t from = -1, furthest = -1; // where the window started, the furthest it's got
+	const Clock::time_point now = Clock::now();
+	const bool playing = IsStreamPlaying && player && (PedInVehicle(player) || gCar) &&
+	                     IsStreamPlaying(gSampleManager, kMusicStream);
+	if (!playing || now - lastAt > std::chrono::milliseconds(500)) // stopped, or the game was paused
+		from = -1;
+	lastAt = now;
+	if (!playing)
+		return;
+	// Stuck, it goes back and forth over the same moment: the furthest it's got
+	// is what counts. Far back is a fresh start (another track, or the station
+	// going round to its start).
+	const int32_t at = GetStreamedFilePosition(gSampleManager, kMusicStream);
+	if (from < 0 || at < furthest - 10000) {
+		from = furthest = at;
+		windowAt = now;
+	}
+	furthest = std::max(furthest, at);
+	if (now - windowAt < kStuckWindow)
+		return;
+	if (furthest - from < kStuckBelow && now - restartedAt > kRestartsApart) {
+		Log("carradio: the radio was stuck repeating (%d ms on in %d s); started it again", furthest - from,
+		    int(std::chrono::duration_cast<std::chrono::seconds>(kStuckWindow).count()));
+		StopStreamedFile(gSampleManager, kMusicStream);
+		*reinterpret_cast<int32_t *>(music + kPlayingTrack) = kNoTrack;
+		restartedAt = now;
+		from = -1;
+		return;
+	}
+	from = furthest = at;
+	windowAt = now;
+}
+
 void Hook_ServiceGameMode(uint8_t *music)
 {
 	uint8_t *player = api.FindPlayerPed();
-	gCar = player && Health(player) > 0.0f ? Pick(player) : nullptr;
+	gCar = gConfig.carRadios && player && Health(player) > 0.0f ? Pick(player) : nullptr;
 	if (gCar) {
 		Mix(player);
 		if (!gLogged) {
@@ -222,14 +272,13 @@ void Hook_ServiceGameMode(uint8_t *music)
 	if (gCar && gHaveVolume)
 		orig_SetStreamedVolumeAndPan(gSampleManager, uint8_t(gVolume * gGain), gPan, gEffect, kMusicStream);
 	Muffle(gCar ? gHighs : -1.0f);
+	Watch(music, player);
 }
 
 } // namespace
 
 bool Install()
 {
-	if (!gConfig.carRadios)
-		return true;
 	gSampleManager = static_cast<uint8_t *>(dlsym(RTLD_MAIN_ONLY, "SampleManager"));
 	gVehiclePool = static_cast<uint8_t **>(dlsym(RTLD_MAIN_ONLY, "_ZN6CPools15ms_pVehiclePoolE"));
 	gStreamSources = static_cast<const ALuint *>(dlsym(RTLD_MAIN_ONLY, "ALStreamSources"));
@@ -245,6 +294,12 @@ bool Install()
 	    reinterpret_cast<decltype(IsDoorMissing)>(dlsym(RTLD_MAIN_ONLY, "_ZN11CAutomobile13IsDoorMissingE6eDoors"));
 	if (!IsDoorClosed || !IsDoorMissing)
 		IsOpenTopCar = nullptr;
+	IsStreamPlaying = reinterpret_cast<decltype(IsStreamPlaying)>(dlsym(RTLD_MAIN_ONLY, "_ZN14cSampleManager15IsStreamPlayingEh"));
+	GetStreamedFilePosition = reinterpret_cast<decltype(GetStreamedFilePosition)>(
+	    dlsym(RTLD_MAIN_ONLY, "_ZN14cSampleManager23GetStreamedFilePositionEh"));
+	StopStreamedFile = reinterpret_cast<decltype(StopStreamedFile)>(dlsym(RTLD_MAIN_ONLY, "_ZN14cSampleManager16StopStreamedFileEh"));
+	if (!GetStreamedFilePosition || !StopStreamedFile)
+		IsStreamPlaying = nullptr;
 	if (!alFilteri || !alFilterf || !alSourcei)
 		alGenFilters = nullptr;
 	if (!hooks::Install("_ZN13cAudioManager19FindVehicleOfPlayerEv", Hook_FindVehicleOfPlayer, orig_FindVehicleOfPlayer) ||

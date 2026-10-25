@@ -1,4 +1,5 @@
 #include "driveby.h"
+#include "camera.h"
 #include "canvas.h"
 #include "config.h"
 #include "draw.h"
@@ -111,7 +112,7 @@ int DriveByWeaponSlot(uint8_t *ped)
 	return -1;
 }
 
-CVector AimDirection()
+CVector Aim()
 {
 	return {std::cos(gPitch) * std::cos(gYaw), std::cos(gPitch) * std::sin(gYaw), std::sin(gPitch)};
 }
@@ -160,7 +161,7 @@ void DriveBy(uint8_t *vehicle, void (*orig)(uint8_t *), int which)
 	uint8_t *ped = api.FindPlayerPed();
 	uint8_t *cam = ActiveCam();
 	uint8_t *pad = api.GetPad(0);
-	const CVector &r = VehicleRight(vehicle), aim = AimDirection();
+	const CVector &r = VehicleRight(vehicle), aim = Aim();
 	const bool right = aim.x * r.x + aim.y * r.y > 0.0f;
 	const bool pistol = PedCurrentWeaponSlot(ped) == kPistolSlot;
 	const bool fire = pistol ? gShotPending && Clock::now() >= gNextPistolShot : gFireHeld;
@@ -232,7 +233,7 @@ void Hook_FollowCar(uint8_t *cam, const CVector &target, float a, float b, float
 	if (gBlend <= 0.0f || cam != ActiveCam() || !ped || !PedInVehicle(ped) || !PedVehicle(ped))
 		return;
 	const float e = Smooth(gBlend);
-	const CVector dir = AimDirection(), pivot = Pivot(PedVehicle(ped), ped);
+	const CVector dir = Aim(), pivot = Pivot(PedVehicle(ped), ped);
 	CVector source = Sub(pivot, Scale(dir, gDistance));
 	for (float k : {0.7f, 0.4f}) { // pulled in if a wall is in the way
 		if (api.GetIsLineOfSightClear(pivot, source, true, false, false, true, false, true, false))
@@ -382,11 +383,13 @@ void PreRender(uint8_t *ped)
 }
 
 bool Enabled() { return gInstalled; }
+CVector AimDirection() { return Aim(); }
+
 bool Aiming() { return gAiming; }
 
 void Draw()
 {
-	if (!gAiming || gBlend < 0.5f)
+	if (!gAiming || (gBlend < 0.5f && !camera::InSeat())) // its camera, or the first-person seat's
 		return;
 	const float cx = ScreenWidth() / 2.0f, cy = ScreenHeight() / 2.0f, h = float(ScreenHeight());
 	const float r = h * 0.016f, w = std::max(1.5f, h * 0.0016f), dot = std::max(1.5f, h * 0.0022f);

@@ -30,6 +30,12 @@ struct Config {
 	bool credit = true;         // buy a business with a quarter of its price down, the rest out of its income
 	bool swim = true;           // Tommy swims instead of drowning
 	bool climb = true;          // the jump button vaults, climbs ledges and climbs out of the water
+	bool clouds = true;         // volumetric clouds instead of the flat cloud sprites
+	bool modernLighting = true; // bloom, sun shafts, filmic highlights and a touch of contrast
+	bool firstPerson = true;    // the Select button's cycle on foot goes on to first person
+	bool carVariety = true;     // more car models loaded, turned over sooner, fewer of one model at once
+	float cameraShake = 1.0f;   // GTA IV-style camera shake (0 = none)
+	float spawnDistance = 2.0f; // how much further out cars and people appear (1 = the game's)
 	float lookSensitivity = 1.0f; // right stick camera speed
 	float aimSensitivity = 0.45f; // ... while aiming or scoped, relative to that
 	float margin = 0.025f;      // gap to the screen's bottom-left corner, fraction of screen height

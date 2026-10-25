@@ -1,4 +1,5 @@
 #include "aimcam.h"
+#include "camera.h"
 #include "config.h"
 #include "game.h"
 #include "hooks.h"
@@ -94,19 +95,25 @@ void SyncCrosshairBase()
 	}
 }
 
-// Eases the crosshair (and so the aim) from the game's position to the screen centre.
+// Where the crosshair rests: the game's position, or in first person the
+// middle (the hip-fire dot and the aimed crosshair in one place, where the
+// shots go: camera.cpp).
+float BaseX() { return camera::FirstPersonOnFoot() ? 0.5f : gBaseX; }
+float BaseY() { return camera::FirstPersonOnFoot() ? 0.5f : gBaseY; }
+
+// Eases the crosshair (and so the aim) from where it rests to the screen centre.
 void PlaceCrosshair(float e)
 {
-	gWrittenX = *api.crosshairMultX = gBaseX + (0.5f - gBaseX) * e;
-	gWrittenY = *api.crosshairMultY = gBaseY + (0.5f - gBaseY) * e;
+	gWrittenX = *api.crosshairMultX = BaseX() + (0.5f - BaseX()) * e;
+	gWrittenY = *api.crosshairMultY = BaseY() + (0.5f - BaseY()) * e;
 }
 
 // Where the hip-fire dot points: the game's crosshair on its own camera, as the
 // game works out a shot (CCamera::Find3rdPersonCamTargetVector).
 CVector HipFireDirection(uint8_t *ped, uint8_t *cam)
 {
-	*api.crosshairMultX = gBaseX;
-	*api.crosshairMultY = gBaseY;
+	*api.crosshairMultX = BaseX();
+	*api.crosshairMultY = BaseY();
 	CVector source, target;
 	api.Find3rdPersonCamTargetVector(api.theCamera, 50.0f, EntityPos(ped), source, target);
 	const CVector dir = Normalised({target.x - source.x, target.y - source.y, target.z - source.z});

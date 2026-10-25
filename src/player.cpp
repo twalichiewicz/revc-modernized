@@ -1,4 +1,5 @@
 #include "player.h"
+#include "camera.h"
 #include "aimcam.h"
 #include "body.h"
 #include "climb.h"
@@ -52,6 +53,7 @@ void Hook_PreRender(uint8_t *ped)
 		}
 	}
 	orig_PreRender(ped);
+	camera::AfterPreRender(ped);
 }
 
 bool Hook_InflictDamage(uint8_t *ped, uint8_t *by, int32_t weapon, float damage, int32_t piece, uint8_t direction)

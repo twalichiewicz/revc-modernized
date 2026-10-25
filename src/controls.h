@@ -18,5 +18,8 @@ namespace controls {
 bool Install();
 // A PlayStation pad is connected (for the button prompts' symbols).
 bool PlayStationPad();
+// The right stick's look this frame (radians: yaw to the right, pitch up), at
+// the on-foot camera's feel and sensitivity; false while it's at rest.
+bool LookTurn(float &yaw, float &pitch);
 
 } // namespace controls

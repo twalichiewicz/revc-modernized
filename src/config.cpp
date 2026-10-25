@@ -38,6 +38,12 @@ const char kDefaultIni[] = "; VC Modern HUD for macVC. Delete this file to resto
                            "Credit=1             ; buy a business with a quarter down, the rest paid from your businesses' income\n"
                            "Swimming=1           ; Tommy swims instead of drowning\n"
                            "Climbing=1           ; jump vaults low walls, climbs ledges and climbs out of the water\n"
+                           "Clouds=1             ; volumetric clouds instead of the flat cloud sprites\n"
+                           "ModernLighting=1     ; bloom, sun shafts, filmic highlights and a touch of contrast\n"
+                           "FirstPerson=1        ; on foot, Select (Back) goes near, mid, far, then first person\n"
+                           "CameraShake=1        ; handheld camera on foot, sway and jolts in vehicles (0 = none, 2 = double)\n"
+                           "SpawnDistance=2      ; cars and people appear this much further out, past where you notice (1 = as the game)\n"
+                           "CarVariety=1         ; more car models about, and fewer of the same one at once\n"
                            "LookSensitivity=1    ; right stick camera speed\n"
                            "AimSensitivity=0.45  ; right stick speed while aiming or scoped (1 = as when not aiming)\n"
                            "Margin=0.025         ; distance from the screen corner\n"
@@ -104,6 +110,18 @@ void Apply(const char *key, const char *value)
 		gConfig.swim = b;
 	else if (!strcasecmp(key, "Climbing"))
 		gConfig.climb = b;
+	else if (!strcasecmp(key, "FirstPerson"))
+		gConfig.firstPerson = b;
+	else if (!strcasecmp(key, "CameraShake"))
+		gConfig.cameraShake = f;
+	else if (!strcasecmp(key, "SpawnDistance"))
+		gConfig.spawnDistance = f;
+	else if (!strcasecmp(key, "CarVariety"))
+		gConfig.carVariety = b;
+	else if (!strcasecmp(key, "Clouds"))
+		gConfig.clouds = b;
+	else if (!strcasecmp(key, "ModernLighting"))
+		gConfig.modernLighting = b;
 	else if (!strcasecmp(key, "AimSensitivity") && f > 0.05f && f <= 2.0f)
 		gConfig.aimSensitivity = f;
 	else if (!strcasecmp(key, "LookSensitivity") && f > 0.05f && f <= 4.0f)

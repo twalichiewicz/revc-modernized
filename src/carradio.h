@@ -6,6 +6,10 @@
 // towards the car and low-passed, as through the bodywork. The music manager
 // does the playing (station, track position, retuning): while it decides,
 // cAudioManager::FindVehicleOfPlayer answers with that car.
+//
+// Also (whatever the setting): a radio stuck repeating a moment of its song
+// (the port's streaming, sometimes after the pause menu) is noticed, its place
+// in the song not moving on, and started again where the station is by now.
 
 namespace carradio {
 

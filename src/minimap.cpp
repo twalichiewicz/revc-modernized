@@ -16,6 +16,8 @@
 // open, the radar mode is not "map & blips", or the minimap is disabled.
 // The rest of the HUD is in hud.cpp, the pause menu in menu.cpp.
 #include "aimcam.h"
+#include "anims.h"
+#include "camera.h"
 #include "carradio.h"
 #include "driveby.h"
 #include "config.h"
@@ -31,14 +33,20 @@
 #include "menu.h"
 #include "minimap.h"
 #include "phone.h"
+#include "grade.h"
 #include "places.h"
 #include "player.h"
+#include "shaders.h"
+#include "sky.h"
 #include "climb.h"
 #include "swim.h"
 #include "credit.h"
 #include "story.h"
 #include "projection.h"
 #include "radiohud.h"
+#include "rtshadows.h"
+#include "traffic.h"
+#include "viewmodel.h"
 #include "rumble.h"
 #include "scene.h"
 #include "wheel.h"
@@ -513,6 +521,22 @@ __attribute__((constructor)) void Init()
 		Log("swim: hooks missing (re-run install.sh); Tommy drowns as before");
 	if (!climb::Install())
 		Log("climb: hooks missing (re-run install.sh); the jump is the game's own");
+	if (!shaders::Install())
+		Log("shaders: the renderer's shader functions are missing; clouds and lighting left as they were");
+	if (!sky::Install())
+		Log("sky: hook missing (re-run install.sh); the clouds are the game's own");
+	if (!grade::Install())
+		Log("grade: hook missing (re-run install.sh); no lighting pass");
+	if (!anims::Install())
+		Log("anims: hooks missing (re-run install.sh); a vehicle's unloaded animations can crash the game");
+	if (!traffic::Install())
+		Log("traffic: hook missing (re-run install.sh); car models are picked as before");
+	if (!viewmodel::Install())
+		Log("viewmodel: the skeleton functions are missing; no gun in first person");
+	if (!camera::Install())
+		Log("camera: hook missing (re-run install.sh); no first person, camera shake or spawn distance");
+	if (!rtshadows::Install())
+		Log("rt shadows: no re3_debug hook (re-run install.sh); their reports stay in the terminal");
 }
 
 } // namespace

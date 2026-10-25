@@ -38,6 +38,7 @@ enum : int {
 	kStateDestBlend = 11,
 	kStateVertexAlpha = 12,
 	kStateFog = 14,
+	kBlendOne = 2,
 	kBlendSrcAlpha = 5,
 	kBlendInvSrcAlpha = 6,
 	kFilterLinear = 2,
