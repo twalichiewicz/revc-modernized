@@ -1,4 +1,4 @@
-# VC Modern HUD
+# Modernized Grand Theft Auto: Vice City
 
 A modern GTA-style HUD and controller layout for the native Apple Silicon port of **Grand Theft Auto: Vice City** on macOS. It adds:
 
