@@ -18,6 +18,7 @@
 #include "aimcam.h"
 #include "anims.h"
 #include "camera.h"
+#include "carlights.h"
 #include "carradio.h"
 #include "driveby.h"
 #include "config.h"
@@ -531,6 +532,8 @@ __attribute__((constructor)) void Init()
 		Log("anims: hooks missing (re-run install.sh); a vehicle's unloaded animations can crash the game");
 	if (!traffic::Install())
 		Log("traffic: hook missing (re-run install.sh); car models are picked as before");
+	if (!carlights::Install())
+		Log("carlights: hook missing (re-run install.sh); cars' light boxes stay");
 	if (!viewmodel::Install())
 		Log("viewmodel: the skeleton functions are missing; no gun in first person");
 	if (!camera::Install())

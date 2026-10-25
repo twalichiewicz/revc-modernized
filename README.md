@@ -14,11 +14,14 @@ GTA IV, GTA V and Red Dead Redemption 2 made standard:
 
 Vice City's story, missions and world stay as they are. Every feature can be switched off.
 
-![The HUD in game](docs/hud.jpg)
+![Driving along the beach at night, following a GPS route on the minimap](docs/driving.jpg)
 
 ## What it changes
 
 ### Map and HUD
+
+![The pause menu's map, with its tabs, the legend and the prices of businesses for sale](docs/pause-map.jpg)
+
 - A rectangular minimap, tilted in 3D like GTA VI's. It's drawn from the game's own buildings and roads.
 - GPS routes along the road network to your waypoint or the next mission objective. The waypoint clears
   when you arrive.
@@ -31,6 +34,12 @@ Vice City's story, missions and world stay as they are. Every feature can be swi
   and marks hospitals, police stations and businesses you can buy, with their prices.
 
 ### Controls and camera
+
+<p>
+  <img src="docs/aiming.jpg" width="49%" alt="Aiming the M4 over the shoulder in a storm">
+  <img src="docs/weapon-wheel.jpg" width="49%" alt="The weapon wheel open in the rain">
+</p>
+
 - A GTA V controller layout ([below](#controls)). It's read straight from the controller, so it works
   whatever the game's own button mapping is. PlayStation controllers show their own button symbols.
 - Over-the-shoulder aiming on LT, and you can walk while aiming. The M4, Ruger and M60 use it too
@@ -56,6 +65,9 @@ Vice City's story, missions and world stay as they are. Every feature can be swi
   - Drive-bys aim from the seat.
 
 ### On foot
+
+![Tommy swimming under the surface of the bay](docs/swimming.jpg)
+
 - Tommy swims instead of drowning: front crawl, a sprint, and treading water. Jump dives, with a breath
   meter. A sinking car gives you time to get out.
 - Jump also climbs. He vaults low walls, steps up and pulls up onto ledges (even mid-jump), and climbs out
@@ -88,6 +100,8 @@ Vice City's story, missions and world stay as they are. Every feature can be swi
 - reVC's own menu options show their names instead of "FED_VPL missing", including the Graphics Setup
   page.
 - The game no longer crashes when someone gets off a bus whose animations had been unloaded.
+- Brake, reverse and headlights no longer draw see-through boxes sticking out of the bodywork (a GTA III
+  leftover). Their glow stays.
 - If the car radio gets stuck looping one moment of a song (this can happen after the pause menu), it
   now restarts on its own after a few seconds.
 - You can get out of a car that's in the water, and there are no footstep sounds while swimming.

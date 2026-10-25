@@ -55,11 +55,15 @@ constexpr float kLookBackAfter = 0.3f, kLookBackRate = 4.0f;   // s, per second
 // Looking behind (R3) from the seat: the eye moves to the middle of the car,
 // ahead of the headrests, to look out of the back window.
 constexpr float kBehindAhead = 0.35f, kBehindUp = 0.05f; // m
-// On a bike: the eye back a little, following his head sooner (his lean
-// forward and back, from the left stick, shows), the view tipping with it.
+// On a bike: the eye where his eyes are, ahead of and above his head bone (on
+// a sport bike he leans so far forward that behind his head is in his
+// shoulders), following his head sooner (his lean forward and back, from the
+// left stick, shows), the view tipping with it. Looking behind, the eye moves
+// behind his back (leaning back, his back is up to 0.31 m behind the seat).
 constexpr int32_t kVehicleBike = 5;          // CVehicle::m_vehType (+0x348)
 constexpr size_t kRiderLean = 0x55c;         // CBike::m_fPedLeanAmountUD: back < 0 < forward
-constexpr float kBikeBack = 0.12f, kSettleOnBike = 0.08f, kLeanTip = 0.15f; // m, s, rad
+constexpr float kBikeEyeAhead = 0.10f, kBikeEyeUp = 0.08f, kBikeBehindBack = 0.45f; // m
+constexpr float kSettleOnBike = 0.08f, kLeanTip = 0.15f; // s, rad
 // Getting in and out (CPed states: opening the door, pulling someone out,
 // getting in, getting out): the eye stays in his head, the view turning
 // towards where he'll look next.
@@ -324,12 +328,14 @@ void InVehicle(uint8_t *ped, uint8_t *vehicle, float dt)
 {
 	const bool bike = *reinterpret_cast<const int32_t *>(vehicle + 0x348) == kVehicleBike;
 	const CVector head = SteadyHead(ped, vehicle, dt, bike ? kSettleOnBike : kSettleInVehicle);
-	CVector eye = Add(Add(EntityPos(vehicle), ToWorld(vehicle, head)), Mul(Axis(vehicle, 0x20), kEyeUp * 0.6f));
-	if (bike)
-		eye = Sub(eye, Mul(Axis(vehicle, 0x10), kBikeBack));
-	if (ActiveCam()[7]) // CCam::LookingBehind
-		eye = Add(Add(EntityPos(vehicle), ToWorld(vehicle, CVector{0.0f, head.y + kBehindAhead, head.z})),
-		          Mul(Axis(vehicle, 0x20), kEyeUp + kBehindUp));
+	const CVector origin = EntityPos(vehicle), &ahead = Axis(vehicle, 0x10), &up = Axis(vehicle, 0x20);
+	CVector eye = Add(origin, ToWorld(vehicle, head));
+	eye = bike ? Add(eye, Add(Mul(ahead, kBikeEyeAhead), Mul(up, kBikeEyeUp))) : Add(eye, Mul(up, kEyeUp * 0.6f));
+	if (ActiveCam()[7] && bike) { // CCam::LookingBehind
+		const CVector seat = ToLocal(vehicle, Sub(EntityPos(ped), origin));
+		eye = Add(Add(origin, ToWorld(vehicle, CVector{0.0f, seat.y - kBikeBehindBack, head.z})), Mul(up, kEyeUp));
+	} else if (ActiveCam()[7])
+		eye = Add(Add(origin, ToWorld(vehicle, CVector{0.0f, head.y + kBehindAhead, head.z})), Mul(up, kEyeUp + kBehindUp));
 	Row(0x30) = eye;
 	if (bike) {
 		const float lean = std::clamp(*reinterpret_cast<const float *>(vehicle + kRiderLean), -1.0f, 1.0f);
@@ -600,16 +606,18 @@ void AfterPreRender(uint8_t *ped)
 	if (!hierarchy)
 		return;
 	float *matrices = gBoneMatrices(hierarchy);
-	// A bone's skin shrunk to a point where it is (the skin draws it there),
-	// or its axes put back to their length.
+	// A bone's skin shrunk to a point where bone `to` is (the skin draws it
+	// there), or its axes put back to their length.
 	auto bone = [&](int tag) {
 		const int i = gBoneIndex(hierarchy, tag);
 		return i >= 0 ? matrices + i * 16 : nullptr;
 	};
-	auto shrink = [](float *m) {
+	auto shrink = [](float *m, const float *to) {
 		for (int row = 0; m && row < 3; row++)
 			for (int col = 0; col < 3; col++)
 				m[row * 4 + col] *= 0.001f;
+		for (int col = 0; m && to && col < 3; col++)
+			m[12 + col] = to[12 + col];
 	};
 	auto unscale = [](float *m) {
 		for (int row = 0; m && row < 3; row++) {
@@ -618,15 +626,21 @@ void AfterPreRender(uint8_t *ped)
 				m[row * 4 + col] /= l;
 		}
 	};
-	shrink(bone(kBoneHead));
-	// In the seat his neck too, and his shoulders steadied: on a bike (or
-	// with the top down) CPed::PreRender flaps his collar in the wind,
-	// scaling them at random every frame, right under the eye.
-	if (gCockpit) {
-		shrink(bone(kBoneNeck));
-		for (int tag : kBoneClavicles)
-			unscale(bone(tag));
+	float *head = bone(kBoneHead), *neck = bone(kBoneNeck);
+	if (!gCockpit) {
+		shrink(head, head);
+		return;
 	}
+	// In the seat his neck too, both to the base of his neck. Shrunk each to
+	// its own joint, the skin hung on both (the back of his head and neck)
+	// stretched into a pole between them, in front of the eye on a bike (it
+	// sits behind his head). And his shoulders steadied: on a bike (or with
+	// the top down) CPed::PreRender flaps his collar in the wind, scaling
+	// them at random every frame, right under the eye.
+	shrink(head, neck);
+	shrink(neck, neck);
+	for (int tag : kBoneClavicles)
+		unscale(bone(tag));
 }
 
 } // namespace camera

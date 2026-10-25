@@ -169,7 +169,7 @@ struct Api {
 
 	// frontend
 	uint8_t *menuScreens; // aScreens (CMenuScreen[], see MenuPageEntry)
-	float *menuFrame;     // menuBg: the pause screens' slanted frame, 4 corners in 640x448 units
+	float *menuFrame;     // menuBg: the pause screens' slanted frame, 640x448 units: top-left, top-right, bottom-left, bottom-right
 	void (*SwitchToNewScreen)(uint8_t *menu, int8_t page); // 0: the current entry's target, -2: back
 	void (*RequestFrontEndShutDown)(uint8_t *menu);
 	int (*GetOptionCount)(int page);

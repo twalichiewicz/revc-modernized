@@ -105,6 +105,8 @@ DEFAULT_HOOKS = [
     # vehicles' animations wanted before they're loaded (a crash getting off a bus)
     "_ZN12CAnimManager12AddAnimationEPN2rw5ClumpE12AssocGroupId11AnimationId",
     "_ZN12CAnimManager14BlendAnimationEPN2rw5ClumpE12AssocGroupId11AnimationIdf",
+    # cars' light boxes (a GTA III leftover sticking out of the bodywork)
+    "_ZN13CBrightLights11RegisterOneE7CVectorS0_S0_S0_hhhh",
     # first person, camera shake, spawn distances; car variety
     "_ZN7CCamera7ProcessEv",
     "_ZN8CCarCtrl14ChooseCarModelEi",

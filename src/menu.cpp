@@ -309,9 +309,14 @@ void LegendPlace(const float *rect)
 	gLegendTo = {corner.x - size.x, corner.y - size.y};
 	gLegendBoxKnown = true;
 
+	// menuBg keeps its corners top-left, top-right, bottom-left, bottom-right;
+	// round the frame they go top-left, top-right, bottom-right, bottom-left.
+	// (Taken as they're kept, two "edges" ran corner to corner, nothing passed,
+	// and the legend stayed at the screen's corner, half outside the frame.)
+	constexpr int kRound[4] = {0, 1, 3, 2};
 	Vec2 quad[4];
 	for (int i = 0; i < 4; i++)
-		quad[i] = {api.menuFrame[2 * i] * W / 640.0f, api.menuFrame[2 * i + 1] * H / 448.0f};
+		quad[i] = {api.menuFrame[2 * kRound[i]] * W / 640.0f, api.menuFrame[2 * kRound[i] + 1] * H / 448.0f};
 	const float inset = H * 0.02f, step = H * 0.004f;
 	if (BoxInQuad(quad, gLegendTo, corner, inset))
 		return;
