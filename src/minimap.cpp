@@ -16,6 +16,7 @@
 // open, the radar mode is not "map & blips", or the minimap is disabled.
 // The rest of the HUD is in hud.cpp, the pause menu in menu.cpp.
 #include "aimcam.h"
+#include "carradio.h"
 #include "driveby.h"
 #include "config.h"
 #include "controls.h"
@@ -24,12 +25,21 @@
 #include "gps.h"
 #include "hooks.h"
 #include "hud.h"
+#include "interact.h"
 #include "log.h"
 #include "mapdata.h"
 #include "menu.h"
 #include "minimap.h"
 #include "phone.h"
+#include "places.h"
+#include "player.h"
+#include "climb.h"
+#include "swim.h"
+#include "credit.h"
+#include "story.h"
 #include "projection.h"
+#include "radiohud.h"
+#include "rumble.h"
 #include "scene.h"
 #include "wheel.h"
 
@@ -137,7 +147,10 @@ void DrawStatusBars()
 	const uint8_t *info = PlayerInfo();
 	const float health = Health(ped) / std::max(1, MaxHealth(info) ? MaxHealth(info) : 100);
 	const float armour = Armour(ped) / std::max(1, MaxArmour(info) ? MaxArmour(info) : 100);
-	const float stamina = InfiniteSprint(info) ? 1.0f : Stamina(ped) / std::max(1.0f, MaxStamina(ped));
+	// Under the water the stamina bar is his breath.
+	const bool breath = swim::ShowsBreath();
+	const float stamina =
+	    breath ? swim::Breath() : InfiniteSprint(info) ? 1.0f : Stamina(ped) / std::max(1.0f, MaxStamina(ped));
 
 	const float gap = std::max(2.0f, gBars.w * 0.008f);
 	const float unit = (gBars.w - 2 * gap) / 5.0f;
@@ -145,7 +158,8 @@ void DrawStatusBars()
 	gCanvas.SetTexture(nullptr);
 	DrawBar(gBars.x, gBars.y, 3 * unit, gBars.h, health, healthCol);
 	DrawBar(gBars.x + 3 * unit + gap, gBars.y, unit, gBars.h, armour, {66, 144, 220, 255});
-	DrawBar(gBars.x + 4 * unit + 2 * gap, gBars.y, unit, gBars.h, stamina, {230, 190, 70, 255});
+	DrawBar(gBars.x + 4 * unit + 2 * gap, gBars.y, unit, gBars.h, stamina,
+	        breath ? CRGBA{110, 196, 236, 255} : CRGBA{230, 190, 70, 255});
 	gCanvas.Flush();
 }
 
@@ -330,7 +344,7 @@ void Hook_DrawRadarMap()
 	DrawScene(gCanvas, gProj, gScene);
 	DrawStatusBars();
 	hud::DrawClock(gCanvas, gProj.X(), gProj.Y(), gProj.W(), gProj.H());
-	hud::DrawPills(gCanvas, gProj.X(), gProj.Y(), gProj.W(), gProj.H());
+	hud::DrawPills(gCanvas, gProj.X(), gProj.Y(), gProj.W(), gProj.H(), Clock::now() < gExpandedUntil);
 	gMapDrawn = true;
 	gLastMapMs = std::max(*api.timeMs, 1u);
 }
@@ -346,11 +360,18 @@ void Hook_HudDraw()
 		*gHideHealth = shown && gConfig.bars;
 	if (gHideArmour)
 		*gHideArmour = shown && gConfig.bars;
+	swim::DrawUnderwater();
 	hud::BeginFrame(shown);
 	menu::OnGameplayFrame();
 	orig_HudDraw();
+	hud::DrawWanted();
 	driveby::Draw();
+	radiohud::Draw();
+	credit::Update();
+	story::Update();
 	phone::Draw();
+	interact::Draw();
+	climb::Draw();
 	wheel::Draw();
 }
 
@@ -358,6 +379,14 @@ void Hook_DrawBlips()
 {
 	if (!gMapDrawn || MenuMapActive()) {
 		orig_DrawBlips();
+		if (MenuMapActive()) // the pause map: through its own transform, as CRadar::DrawCoordBlip does
+			places::Draw([](float x, float y, Vec2 &out) {
+				CVector2D radar, screen;
+				api.TransformRealWorldPointToRadarSpace(radar, {x, y});
+				orig_TransformRadarPointToScreenSpace(screen, radar);
+				out = {screen.x, screen.y};
+				return true;
+			}, true);
 		return;
 	}
 	gMapDrawn = false;
@@ -366,6 +395,10 @@ void Hook_DrawBlips()
 	*api.radarRange = range * gBlipScale;
 	gInBlips = true;
 	orig_DrawBlips();
+	places::Draw([](float x, float y, Vec2 &out) { // only where the minimap shows the ground
+		const Vec2 g = WorldToGround(x, y);
+		return gProj.Inside(g) && gProj.GroundToScreen(g, out);
+	}, false);
 	gInBlips = false;
 	*api.radarRange = range;
 	SetHudRenderStates();
@@ -374,6 +407,8 @@ void Hook_DrawBlips()
 
 void Hook_DrawCoordBlip(int blip)
 {
+	if (places::Replaces(api.blips[blip]))
+		return;
 	gCurBlip = blip;
 	orig_DrawCoordBlip(blip);
 	gCurBlip = -1;
@@ -451,6 +486,8 @@ __attribute__((constructor)) void Init()
 	}
 	const bool hudOk = hud::Install();
 	Log(hudOk ? "minimap and HUD hooks installed" : "minimap hooks installed; HUD layout left as is");
+	if (!player::Install())
+		Log("player hooks missing (re-run install.sh): some of aiming, drive-bys, swimming and climbing are off");
 	if (!menu::Install(orig_SpriteDraw, hudOk))
 		Log("pause menu hooks missing; menu left as is (re-run install.sh)");
 	if (!controls::Install())
@@ -461,6 +498,21 @@ __attribute__((constructor)) void Init()
 		Log("drive-by hooks missing; drive-bys left as is (re-run install.sh)");
 	if (!phone::Install())
 		Log("phone functions missing; calls left as they are");
+	const bool scriptKnown = story::Install();
+	if (!credit::Install(scriptKnown))
+		Log("credit: hooks missing (re-run install.sh); businesses sell for the full price");
+	if (!places::Install())
+		Log("places: the game's respawn points are missing; no hospital or police icons");
+	if (!rumble::Install())
+		Log("rumble: the game's cutscene flags are missing; no vibration");
+	if (!radiohud::Install())
+		Log("radiohud: missing functions; the game's station name stays");
+	if (!carradio::Install())
+		Log("carradio: the game's audio globals are missing; radios only play in the car");
+	if (!swim::Install())
+		Log("swim: hooks missing (re-run install.sh); Tommy drowns as before");
+	if (!climb::Install())
+		Log("climb: hooks missing (re-run install.sh); the jump is the game's own");
 }
 
 } // namespace

@@ -28,4 +28,6 @@ public:
 	void VerticalGradient(float x, float y, float w, float h, CRGBA top, CRGBA bottom);
 	// Rectangle with fully rounded ends (a circle when w <= h).
 	void Pill(float x, float y, float w, float h, CRGBA col);
+	// Rectangle with corners rounded by `r`.
+	void RoundRect(float x, float y, float w, float h, float r, CRGBA col);
 };

@@ -6,6 +6,7 @@
 #include "game.h"
 #include "hooks.h"
 #include "log.h"
+#include "prompt.h"
 #include "text.h"
 
 #include <algorithm>
@@ -14,7 +15,9 @@
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
+#include <string>
 #include <strings.h>
+#include <vector>
 
 using namespace game;
 
@@ -415,30 +418,63 @@ constexpr float kUnit = 0.095f;                                          // the 
 constexpr float kSlideIn = 0.35f, kSlideOut = 0.3f;                      // seconds
 constexpr float kShakeTime = 0.6f, kShakeHz = 16.0f, kShakeAngle = 0.05f; // per ring
 
+constexpr float kTextWidth = 0.5f;                                         // the card's text, in screen heights
+constexpr float kTextBase = 4.0f, kTextPerChar = 0.06f, kTextMax = 15.0f;  // seconds up
+
 float gShow; // 0 hidden .. 1 up
+float gLeft = -1; // where Draw last put the phone's left edge (-1: not up)
 Clock::time_point gLastDraw;
 Im2DCanvas gCanvas;
 
-// The D-pad with its up arm lit, then "ANSWER", on a dark pill.
-void AnswerPrompt(float right, float cy, float h)
+// The text showing, if any.
+std::string gTextLcd, gTextFrom, gTextMessage;
+Clock::time_point gTextUntil;
+bool gShowingText; // what's up (or going down): a text, else a call
+
+text::Style CardStyle(float H, CRGBA colour) { return {1, H * 0.3f / 480, H * 0.42f / 448, colour}; }
+
+// `message` in lines no wider than `width`, breaking between words.
+std::vector<std::string> Wrap(const std::string &message, float width, const text::Style &style)
 {
-	const text::Style style{1, h * 0.3f / 480, h * 0.42f / 448, {255, 255, 255, 235}};
-	float top, bottom;
-	text::LineExtent(style, 0.0f, top, bottom);
-	const float lineH = bottom - top, pillH = lineH * 1.9f, icon = pillH * 0.56f, pad = pillH * 0.38f;
-	const float textW = text::Width("ANSWER", style), w = pad + icon + pad * 0.7f + textW + pad * 1.2f;
-	const float x = right - w, y = cy - pillH / 2;
-	gCanvas.Pill(x, y, w, pillH, {0, 0, 0, 175});
-	const float cx = x + pad + icon / 2, arm = icon * 0.36f, half = icon / 2;
-	const CRGBA dim{255, 255, 255, 70}, lit{255, 255, 255, 255};
-	gCanvas.Quad({cx - arm / 2, cy - half}, {cx + arm / 2, cy - half}, {cx + arm / 2, cy + half}, {cx - arm / 2, cy + half},
-	             dim);
-	gCanvas.Quad({cx - half, cy - arm / 2}, {cx + half, cy - arm / 2}, {cx + half, cy + arm / 2}, {cx - half, cy + arm / 2},
-	             dim);
-	gCanvas.Quad({cx - arm / 2, cy - half}, {cx + arm / 2, cy - half}, {cx + arm / 2, cy - arm / 2},
-	             {cx - arm / 2, cy - arm / 2}, lit);
+	std::vector<std::string> lines;
+	std::string line;
+	size_t at = 0;
+	while (at < message.size()) {
+		const size_t end = std::min(message.find(' ', at), message.size());
+		const std::string word = message.substr(at, end - at);
+		const std::string longer = line.empty() ? word : line + " " + word;
+		if (!line.empty() && text::Width(longer.c_str(), style) > width) {
+			lines.push_back(line);
+			line = word;
+		} else {
+			line = longer;
+		}
+		at = end + 1;
+	}
+	if (!line.empty())
+		lines.push_back(line);
+	return lines;
+}
+
+// The text on a card left of the phone, its bottom level with the phone's.
+void DrawCard(float right, float bottom, float H, float alpha)
+{
+	const text::Style body = CardStyle(H, {255, 255, 255, uint8_t(235 * alpha)});
+	const text::Style head = CardStyle(H, {150, 205, 255, uint8_t(255 * alpha)});
+	float top, low;
+	text::LineExtent(body, 0.0f, top, low);
+	const float line = (low - top) * 1.25f, pad = line * 0.7f;
+	const std::vector<std::string> lines = Wrap(gTextMessage, kTextWidth * H, body);
+	float w = text::Width(gTextFrom.c_str(), head);
+	for (const std::string &l : lines)
+		w = std::max(w, text::Width(l.c_str(), body));
+	const float h = pad * 2 + line * float(lines.size() + 1);
+	const float x = right - w - pad * 2, y = bottom - h;
+	gCanvas.RoundRect(x, y, w + pad * 2, h, pad * 0.8f, {0, 0, 0, uint8_t(175 * alpha)});
 	gCanvas.Flush();
-	text::Draw(x + pad + icon + pad * 0.7f, cy - (top + bottom) / 2, "ANSWER", style);
+	text::Draw(x + pad, y + pad - top, gTextFrom.c_str(), head);
+	for (size_t i = 0; i < lines.size(); i++)
+		text::Draw(x + pad, y + pad + line * float(i + 1) - top, lines[i].c_str(), body);
 }
 
 } // namespace
@@ -475,8 +511,13 @@ void Draw()
 	const Clock::time_point now = Clock::now();
 	const float dt = std::min(std::chrono::duration<float>(now - gLastDraw).count(), 0.1f);
 	gLastDraw = now;
-	const bool up = gInstalled && gScriptOk && gCallOn;
+	const bool call = gInstalled && gScriptOk && gCallOn;
+	const bool texting = !call && now < gTextUntil;
+	const bool up = call || texting;
+	if (up)
+		gShowingText = texting;
 	gShow = up ? std::min(1.0f, gShow + dt / kSlideIn) : std::max(0.0f, gShow - dt / kSlideOut);
+	gLeft = -1;
 	if (gShow <= 0.0f)
 		return;
 
@@ -505,14 +546,43 @@ void Draw()
 	phone.line2 = status;
 	phone.scroll = t;
 	phone.sendGlow = gRinging ? 0.5f + 0.5f * sinf(2.0f * float(M_PI) * 2.0f * t) : 0.0f;
+	if (gShowingText) {
+		phone.line1 = gTextLcd.c_str();
+		phone.line2 = "MESSAGE";
+		phone.scroll = 0;
+		phone.sendGlow = 0;
+	}
 
+	gLeft = phone.x;
 	SetHudRenderStates();
 	gCanvas.SetTexture(nullptr);
 	DrawBrickPhone(gCanvas, phone);
 	gCanvas.Flush();
 	if (gRinging)
-		AnswerPrompt(phone.x - 0.2f * phone.unit, BrickPhoneLcdCentre(phone), H);
+		prompt::Draw(gCanvas, phone.x - 0.2f * phone.unit, BrickPhoneLcdCentre(phone), H, prompt::Button::kUp, "ANSWER");
+	if (gShowingText)
+		DrawCard(phone.x - 0.2f * phone.unit, H - m, H, ease);
 	text::Flush();
+}
+
+float LeftEdge()
+{
+	const float H = float(ScreenHeight());
+	return gLeft >= 0 ? gLeft - 0.2f * kUnit * H : float(ScreenWidth()) - gConfig.margin * H;
+}
+
+bool Text(const char *lcd, const char *from, const char *message)
+{
+	const Clock::time_point now = Clock::now();
+	if (!gConfig.phone || gCallOn || now < gTextUntil || gShow > 0.0f)
+		return false;
+	gTextLcd = lcd;
+	gTextFrom = from;
+	gTextMessage = message;
+	const float secs = std::min(kTextMax, kTextBase + kTextPerChar * float(gTextMessage.size()));
+	gTextUntil = now + std::chrono::milliseconds(int(secs * 1000));
+	api.PlayFrontEndSound(api.dmAudio, kSoundMenuHighlight, 0);
+	return true;
 }
 
 bool Install()

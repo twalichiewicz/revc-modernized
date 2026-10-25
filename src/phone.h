@@ -4,7 +4,9 @@
 // him standing still with the phone to his ear until they're over. Here they
 // ring in vehicles too, a 1980s brick phone slides up in the bottom-right
 // corner with the caller's name, D-pad up answers, and Tommy keeps walking or
-// driving with the phone at his ear.
+// driving with the phone at his ear. Texts come in on it too (story.cpp's
+// hints): it slides up with the sender on its screen and the message on a card
+// beside it.
 #include <cstdint>
 
 namespace phone {
@@ -17,5 +19,10 @@ void Answer();
 void HoldAnswer(uint8_t *pad);
 // From CHud::Draw.
 void Draw();
+// The phone's left edge on screen while it's up, else the screen's right margin.
+float LeftEdge();
+// A text: `lcd` on the phone's screen (A-Z), `from` and `message` beside it.
+// False (try again later) while a call is on or one is already showing.
+bool Text(const char *lcd, const char *from, const char *message);
 
 } // namespace phone

@@ -5,6 +5,7 @@
 #include "game.h"
 #include "hooks.h"
 #include "log.h"
+#include "player.h"
 
 #include <algorithm>
 #include <chrono>
@@ -36,7 +37,6 @@ void (*orig_BikeDriveBy)(uint8_t *);
 void (*orig_BoatDriveBy)(uint8_t *);
 void (*orig_AutoAim)(uint8_t *shooter, uint8_t *vehicle, CVector *source, CVector *target);
 void (*orig_FollowCar)(uint8_t *cam, const CVector &target, float, float, float);
-void (*orig_PedPreRender)(uint8_t *ped);
 
 // Skip patches over each drive-by's "is it an SMG" check, set while it runs with a pistol.
 volatile uint64_t *gAnyWeapon[3];
@@ -311,19 +311,6 @@ void AimArm(uint8_t *ped, uint8_t *vehicle, float weight)
 	gArmWritten = true;
 }
 
-void Hook_PedPreRender(uint8_t *ped)
-{
-	if (ped == api.FindPlayerPed()) {
-		if (!gArmOff && PedInVehicle(ped) && AimingFrom(PedVehicle(ped))) {
-			const float since = std::chrono::duration<float>(Clock::now() - gAimSince).count();
-			AimArm(ped, PedVehicle(ped), Smooth(std::min(1.0f, since / kArmEaseIn)));
-		} else {
-			gArmWritten = false;
-		}
-	}
-	orig_PedPreRender(ped);
-}
-
 void Ring(float cx, float cy, float r0, float r1, CRGBA col)
 {
 	constexpr int kSteps = 40;
@@ -382,6 +369,18 @@ void SetInput(bool aim, bool fire, float yaw, float pitch)
 	gFireHeld = fire;
 }
 
+void PreRender(uint8_t *ped)
+{
+	if (!gInstalled || gArmOff || ped != api.FindPlayerPed())
+		return;
+	if (PedInVehicle(ped) && AimingFrom(PedVehicle(ped))) {
+		const float since = std::chrono::duration<float>(Clock::now() - gAimSince).count();
+		AimArm(ped, PedVehicle(ped), Smooth(std::min(1.0f, since / kArmEaseIn)));
+	} else {
+		gArmWritten = false;
+	}
+}
+
 bool Enabled() { return gInstalled; }
 bool Aiming() { return gAiming; }
 
@@ -414,7 +413,7 @@ bool Install()
 	if (!ok)
 		return false;
 	gInstalled = true;
-	gArmOff = !hooks::Install("_ZN4CPed9PreRenderEv", Hook_PedPreRender, orig_PedPreRender);
+	gArmOff = !player::PoseHooked();
 	gAnyWeapon[0] = hooks::Flag("skip:driveby_pistol_car");
 	gAnyWeapon[1] = hooks::Flag("skip:driveby_pistol_bike");
 	gAnyWeapon[2] = hooks::Flag("skip:driveby_pistol_boat");

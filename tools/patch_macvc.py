@@ -66,8 +66,10 @@ DEFAULT_HOOKS = [
     "_ZN6CRadar10DrawLegendEiii",
     # controller: weapon/radio wheels, D-pad actions
     "_ZN4CPad6UpdateEs",
-    # over-the-shoulder aiming
+    # over-the-shoulder aiming, the gun raised while aiming
     "_ZN4CCam26Process_FollowPedWithMouseERK7CVectorfff",
+    "_ZN10CPlayerPed19ProcessPlayerWeaponEP4CPad",
+    "_ZN10CPlayerPed14ProcessControlEv",
     # free-aim drive-bys
     "_ZN11CAutomobile18DoDriveByShootingsEv",
     "_ZN5CBike18DoDriveByShootingsEv",
@@ -79,6 +81,23 @@ DEFAULT_HOOKS = [
     "_ZN11CTheScripts7ProcessEv",
     "_ZN4CPed15SetAnswerMobileEv",
     "_ZN4CPed17ClearAnswerMobileEv",
+    # controller rumble
+    "_ZN4CPad10StartShakeEsh",
+    "_ZN4CPad19StartShake_DistanceEshfff",
+    "_ZN4CPed13InflictDamageEP7CEntity11eWeaponTypef14ePedPieceTypesh",
+    # car radios heard from outside
+    "_ZN13cAudioManager19FindVehicleOfPlayerEv",
+    "_ZN14cSampleManager23SetStreamedVolumeAndPanEhhhh",
+    "_ZN13cMusicManager15ServiceGameModeEv",
+    # the station logo instead of its name
+    "_ZN13cMusicManager23DisplayRadioStationNameEv",
+    # businesses on credit
+    "_ZN7CPickup6UpdateEP10CPlayerPedP8CVehiclei",
+    "_ZN4CHud14SetHelpMessageEPtbb",
+    # swimming and climbing
+    "_ZN4CPed15ProcessBuoyancyEv",
+    "_ZN4CPed7SetJumpEv",
+    "_ZN4CCam15IsTargetInWaterERK7CVector",
 ]
 
 # Flag-controlled skips inside CHud::Draw: (name, instruction address, expected

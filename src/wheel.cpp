@@ -194,6 +194,12 @@ bool Open()
 
 bool IsOpen() { return gKind != Kind::kNone; }
 
+void *StationLogo(int channel)
+{
+	LoadLogos();
+	return channel >= 0 && channel < radiologos::kCount ? gLogos[channel] : nullptr;
+}
+
 void Steer(float x, float y)
 {
 	if (gKind == Kind::kNone)

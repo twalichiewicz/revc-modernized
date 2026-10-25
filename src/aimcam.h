@@ -6,12 +6,25 @@
 // The M4, Ruger and M60, which the game aims in first person, use it too (a
 // skip patch in CPlayerPed::ProcessPlayerWeapon); scoped weapons keep scopes.
 // Bullets still go where the crosshair points: the game aims along the same
-// camera (CCamera::Find3rdPersonCamTargetVector).
+// camera (CCamera::Find3rdPersonCamTargetVector). Tommy raises the gun while
+// aiming, not only once he fires, so the first shot goes at once.
+
+#include <cstdint>
 
 namespace aimcam {
+
+// How far the pad hook lets the left stick go while aiming (a walk, not a run).
+constexpr float kWalkStick = 0.45f;
 
 bool Install();
 // The player is aiming a gun with the third-person crosshair.
 bool Aiming();
+// From the player hooks (player.cpp): after CPlayerPed::ProcessPlayerWeapon,
+// and around CPlayerPed::ProcessControl (BeforeControl's result goes to AfterControl).
+void AfterPlayerWeapon(uint8_t *ped, uint8_t *pad);
+// The game's weapon handling was skipped (swimming, climbing): the gun goes down.
+void Lower(uint8_t *ped);
+bool BeforeControl();
+void AfterControl(uint8_t *ped, bool strafed);
 
 } // namespace aimcam

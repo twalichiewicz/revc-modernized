@@ -25,9 +25,19 @@ const char kDefaultIni[] = "; VC Modern HUD for macVC. Delete this file to resto
                            "Wheels=1             ; hold LB: weapon wheel on foot; hold D-pad left/right: radio wheel\n"
                            "DpadActions=1        ; D-pad: left/right weapons or radio, down big map, up side missions\n"
                            "ModernTriggers=1     ; LT aims, RT fires; in a vehicle RT gas, LT brake, R3 look back\n"
+                           "ModernButtons=1      ; GTA V face buttons: B melees / reloads; in a vehicle hold B for the cinematic camera\n"
                            "AimCamera=1          ; over-the-shoulder camera while aiming\n"
                            "DriveByAim=1         ; in a vehicle hold LB to aim an SMG or pistol anywhere, RB shoots\n"
                            "Phone=1              ; calls ring in vehicles too: a brick phone slides up, D-pad up answers\n"
+                           "Rumble=1             ; controller vibration (crashes, explosions, punches)\n"
+                           "Interactions=1       ; X/B (Square/Circle): pick up or wave off hookers, greet or insult people\n"
+                           "CarRadios=1          ; on foot, hear car radios muffled: yours after you get out, stopped cars nearby\n"
+                           "RadioLogo=1          ; station logo at the bottom centre when it changes, instead of the big name\n"
+                           "Places=1             ; map icons: hospitals, police stations, businesses before they're for sale\n"
+                           "StoryHints=1         ; Ken texts what the story needs from your businesses; gold rings on the map\n"
+                           "Credit=1             ; buy a business with a quarter down, the rest paid from your businesses' income\n"
+                           "Swimming=1           ; Tommy swims instead of drowning\n"
+                           "Climbing=1           ; jump vaults low walls, climbs ledges and climbs out of the water\n"
                            "LookSensitivity=1    ; right stick camera speed\n"
                            "AimSensitivity=0.45  ; right stick speed while aiming or scoped (1 = as when not aiming)\n"
                            "Margin=0.025         ; distance from the screen corner\n"
@@ -68,12 +78,32 @@ void Apply(const char *key, const char *value)
 		gConfig.dpadActions = b;
 	else if (!strcasecmp(key, "ModernTriggers"))
 		gConfig.modernTriggers = b;
+	else if (!strcasecmp(key, "ModernButtons"))
+		gConfig.modernButtons = b;
 	else if (!strcasecmp(key, "AimCamera"))
 		gConfig.aimCamera = b;
 	else if (!strcasecmp(key, "DriveByAim"))
 		gConfig.driveByAim = b;
 	else if (!strcasecmp(key, "Phone"))
 		gConfig.phone = b;
+	else if (!strcasecmp(key, "Rumble"))
+		gConfig.rumble = b;
+	else if (!strcasecmp(key, "Interactions"))
+		gConfig.interactions = b;
+	else if (!strcasecmp(key, "CarRadios"))
+		gConfig.carRadios = b;
+	else if (!strcasecmp(key, "RadioLogo"))
+		gConfig.radioLogo = b;
+	else if (!strcasecmp(key, "Places"))
+		gConfig.places = b;
+	else if (!strcasecmp(key, "StoryHints"))
+		gConfig.storyHints = b;
+	else if (!strcasecmp(key, "Credit"))
+		gConfig.credit = b;
+	else if (!strcasecmp(key, "Swimming"))
+		gConfig.swim = b;
+	else if (!strcasecmp(key, "Climbing"))
+		gConfig.climb = b;
 	else if (!strcasecmp(key, "AimSensitivity") && f > 0.05f && f <= 2.0f)
 		gConfig.aimSensitivity = f;
 	else if (!strcasecmp(key, "LookSensitivity") && f > 0.05f && f <= 4.0f)

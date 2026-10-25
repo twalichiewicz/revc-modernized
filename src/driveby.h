@@ -7,6 +7,8 @@
 // points his arm at it, and RB shoots there. The game's own drive-by does the
 // rest (animation, ammo, reloading).
 
+#include <cstdint>
+
 namespace driveby {
 
 bool Install();
@@ -18,5 +20,7 @@ void SetInput(bool aim, bool fire, float yaw, float pitch);
 bool Aiming();
 // The crosshair, from CHud::Draw.
 void Draw();
+// From CPed::PreRender (player.cpp), before the skeleton is rebuilt: his arm points at the crosshair.
+void PreRender(uint8_t *ped);
 
 } // namespace driveby

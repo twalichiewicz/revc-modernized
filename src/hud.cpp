@@ -1,6 +1,7 @@
 #include "hud.h"
 #include "aimcam.h"
 #include "config.h"
+#include "credit.h"
 #include "draw.h"
 #include "game.h"
 #include "hooks.h"
@@ -13,6 +14,7 @@
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
+#include <dlfcn.h>
 
 using namespace game;
 
@@ -28,18 +30,25 @@ struct CallSite {
 	Site site;
 };
 constexpr CallSite kPrintSites[] = {{0x1f8284, kMoney}, {0x1fa5b0, kClock}, {0x1f8b00, kAmmo}, {0x1f9674, kStars}};
-constexpr CallSite kScaleSites[] = {{0x1f89dc, kAmmo}, {0x1f94f0, kStars}, {0x1fa4b8, kClock}};
+constexpr CallSite kScaleSites[] = {{0x1f89dc, kAmmo}, {0x1fa4b8, kClock}};
 constexpr CallSite kDrawSites[] = {{0x1f8800, kWeapon}, {0x1f8968, kWeapon}};
 // The third-person (free-aim camera) crosshair: the M4, Ruger and M60's, and every other gun's.
 constexpr uint32_t kCrosshairSites[] = {0x1f7be8, 0x1fc714};
 
 constexpr float kWeaponScale = 0.5f;
+// Our stars, in the clock's font scale (CHud::Draw gives both 0.7 x 1.25 units).
 constexpr float kStarScale = 0.5f;
+constexpr int kStarSlots = 6;
+constexpr float kStarSpacing = 23.0f / 0.7f; // the vanilla row: 23 units apart at a 0.7 scale
+constexpr uint32_t kStarFlashMs = 2000;      // a new star blinks (CHud::Draw)
+constexpr float kStarsIn = 0.25f, kStarsOut = 0.4f; // seconds
 constexpr float kClockScale = 0.3f; // relative to the vanilla clock
 constexpr CRGBA kClockText{240, 242, 245, 255};
 constexpr CRGBA kClockBox{0, 0, 0, 190};
 constexpr float kPillTextScale = 0.36f; // relative to the vanilla clock
 constexpr CRGBA kPillFill{0, 0, 0, 205};
+constexpr CRGBA kGained{120, 214, 112, 255}, kSpent{236, 86, 78, 255}, kOwedText{246, 182, 84, 255};
+constexpr uint32_t kMoneyNewsMs = 4000; // the money shows this long after it changes
 constexpr float kShopRadius = 9.0f;     // around Ammu-Nation counter pickups
 constexpr float kPropertyRadius = 3.0f; // around a "for sale" pickup
 
@@ -56,13 +65,21 @@ bool gHideClock;       // our clock replaces the vanilla one this frame
 bool gWeaponAnchorThisFrame;
 Vec2 gWeaponAnchor;    // top-right of the vanilla weapon icon
 bool gHaveWeaponAnchor;
-float gStarMinX = 1e9f, gStarMaxX = -1e9f, gStarY; // vanilla star anchors (right-justified)
-int gStarScreenW;
+bool gHudDrawn;        // CHud::Draw drew the weapon or clock this frame
 Vec2 gClockScaleXY;
 bool gHaveClockScale;
-float gMoneyAlpha;     // money pill fade, 0..1
+const CRGBA *gWantedColour, *gNotWantedColour; // the game's star colours
+float gStars;          // the stars' fade, 0..1
+int gStarsLevel;       // the level they show (kept while they fade out)
+float gWeaponDrop;     // how far the stars push the weapon down
+uint32_t gLastStarsMs;
+float gMoneyAlpha, gDeltaAlpha, gOwedAlpha; // pill fades, 0..1
 bool gTestMoney;       // VCHUD_TEST_MONEY: always show the money pill
 uint32_t gLastPillMs;
+bool gHaveMoney;       // gLastMoney is this game's
+int32_t gLastMoney, gMoneyDelta; // what changed since the money showed up
+bool gMoneyNews;
+uint32_t gMoneyNewsAt;
 
 template <size_t N>
 Site Find(const CallSite (&sites)[N], const void *ret)
@@ -90,25 +107,42 @@ float Margin() { return std::max(8.0f, ScreenHeight() * gConfig.margin); }
 
 Vec2 Remap(Vec2 p, Vec2 from, Vec2 to, float scale) { return {to.x + (p.x - from.x) * scale, to.y + (p.y - from.y) * scale}; }
 
-Vec2 WeaponTarget() { return {ScreenWidth() - Margin(), Margin()}; }
+Vec2 WeaponTarget() { return {ScreenWidth() - Margin(), Margin() + gWeaponDrop}; }
 
-int PlayerWantedLevel()
+float Fade(float v, bool in, float dt, float inFor, float outFor)
+{
+	return in ? std::min(1.0f, v + dt / inFor) : std::max(0.0f, v - dt / outFor);
+}
+
+float Smooth(float t) { return t * t * (3 - 2 * t); }
+
+// CPed::m_pWanted: the level at +0x20, when it last changed at +0xc.
+const uint8_t *PlayerWanted()
 {
 	const uint8_t *ped = api.FindPlayerPed();
-	const uint8_t *wanted = ped ? *reinterpret_cast<uint8_t *const *>(ped + 0x778) : nullptr;
-	return wanted ? *reinterpret_cast<const int32_t *>(wanted + 0x20) : 0;
+	return ped ? *reinterpret_cast<uint8_t *const *>(ped + 0x778) : nullptr;
+}
+int WantedLevel(const uint8_t *wanted) { return wanted ? *reinterpret_cast<const int32_t *>(wanted + 0x20) : 0; }
+uint32_t WantedChangedAt(const uint8_t *wanted) { return *reinterpret_cast<const uint32_t *>(wanted + 0xc); }
+
+text::Style HudText(float scale, CRGBA colour, bool proportional);
+
+// The vanilla star: ">" in font 1.
+text::Style StarStyle(CRGBA colour)
+{
+	text::Style s = HudText(kStarScale, colour, true);
+	s.font = 1;
+	return s;
 }
 
-// Vanilla stars are right-justified at 6 evenly spaced anchors; the row's
-// centre is half a glyph left of the anchors' midpoint.
-bool StarSource(Vec2 &src)
+float StarRowHeight()
 {
-	if (gStarMaxX <= gStarMinX)
-		return false;
-	const float spacing = (gStarMaxX - gStarMinX) / 5.0f;
-	src = {(gStarMinX + gStarMaxX - spacing) * 0.5f, gStarY};
-	return true;
+	float top, bottom;
+	text::LineExtent(StarStyle({255, 255, 255, 255}), 0.0f, top, bottom);
+	return bottom - top;
 }
+
+int32_t Money(const uint8_t *info) { return *reinterpret_cast<const int32_t *>(info + 0xc8); }
 
 // Standing at an Ammu-Nation counter or a property for sale.
 bool MoneyUsableHere()
@@ -132,7 +166,8 @@ bool MoneyUsableHere()
 	return false;
 }
 
-// "$1,234,567"
+} // namespace
+
 void FormatMoney(int32_t money, char *out, size_t size)
 {
 	char digits[16];
@@ -150,6 +185,8 @@ void FormatMoney(int32_t money, char *out, size_t size)
 	}
 	out[o] = '\0';
 }
+
+namespace {
 
 text::Style HudText(float scale, CRGBA colour, bool proportional)
 {
@@ -174,23 +211,10 @@ __attribute__((noinline)) void Hook_PrintString(float x, float y, uint16_t *str)
 			y = p.y;
 		}
 		break;
-	case kStars: {
-		if (gStarScreenW != ScreenWidth()) { // resolution changed: relearn the row
-			gStarScreenW = ScreenWidth();
-			gStarMinX = 1e9f;
-			gStarMaxX = -1e9f;
-		}
-		gStarMinX = std::min(gStarMinX, x);
-		gStarMaxX = std::max(gStarMaxX, x);
-		gStarY = y;
-		Vec2 src;
-		if (PlayerWantedLevel() <= 0 || !StarSource(src))
+	case kStars: // DrawWanted draws our own
+		if (gWantedColour)
 			return;
-		const Vec2 p = Remap({x, y}, src, {ScreenWidth() * 0.5f, Margin()}, kStarScale);
-		x = p.x;
-		y = p.y;
 		break;
-	}
 	default:
 		break;
 	}
@@ -206,13 +230,9 @@ __attribute__((noinline)) void Hook_SetScale(float sx, float sy)
 		sx *= kWeaponScale;
 		sy *= kWeaponScale;
 		break;
-	case kStars:
-		sx *= kStarScale;
-		sy *= kStarScale;
-		break;
 	case kClock:
 		gClockScaleXY = {sx, sy};
-		gHaveClockScale = true;
+		gHaveClockScale = gHudDrawn = true;
 		break;
 	default:
 		break;
@@ -240,7 +260,7 @@ __attribute__((noinline)) void Hook_DrawUV(const CSprite2d *sprite, const float 
 		// CRect: x at 0 and 8, y at 4 and 12 (whichever order the fields are in).
 		if (!gWeaponAnchorThisFrame) {
 			gWeaponAnchor = {std::max(rect[0], rect[2]), std::min(rect[1], rect[3])};
-			gWeaponAnchorThisFrame = gHaveWeaponAnchor = true;
+			gWeaponAnchorThisFrame = gHaveWeaponAnchor = gHudDrawn = true;
 		}
 		const Vec2 to = WeaponTarget();
 		float moved[4];
@@ -262,6 +282,10 @@ bool Install()
 	if (!gText || !Verify(kPrintSites, "_ZN5CFont11PrintStringEffPt") || !Verify(kScaleSites, "_ZN5CFont8SetScaleEff") ||
 	    !Verify(kDrawSites, "_ZN9CSprite2d4DrawERK5CRectRK5CRGBAffffffff"))
 		return false;
+	gWantedColour = static_cast<const CRGBA *>(dlsym(RTLD_MAIN_ONLY, "WANTED_COLOR"));
+	gNotWantedColour = static_cast<const CRGBA *>(dlsym(RTLD_MAIN_ONLY, "NOTWANTED_COLOR"));
+	if (!gNotWantedColour)
+		gWantedColour = nullptr; // the vanilla stars stay
 	gCrosshairOnlyWhenAiming = gConfig.aimCamera;
 	for (uint32_t site : kCrosshairSites)
 		gCrosshairOnlyWhenAiming =
@@ -275,7 +299,48 @@ void BeginFrame(bool minimapShown)
 {
 	gActive = orig_PrintString && gConfig.enabled && gConfig.hud;
 	gHideClock = gActive && minimapShown;
-	gWeaponAnchorThisFrame = false;
+	gWeaponAnchorThisFrame = gHudDrawn = false;
+
+	// The stars fade in at the top right while he's wanted, pushing the weapon down.
+	const uint32_t now = *api.timeMs;
+	const float dt = gLastStarsMs && now >= gLastStarsMs ? std::min(now - gLastStarsMs, 100u) / 1000.0f : 0.0f;
+	gLastStarsMs = now;
+	const int level = gActive && gWantedColour ? WantedLevel(PlayerWanted()) : 0;
+	if (level > 0)
+		gStarsLevel = std::min(level, kStarSlots);
+	gStars = Fade(gStars, level > 0, dt, kStarsIn, kStarsOut);
+	gWeaponDrop = gHaveClockScale && gStars > 0.0f ? Smooth(gStars) * StarRowHeight() * 1.35f : 0.0f;
+}
+
+void DrawWanted()
+{
+	if (!gActive || !gWantedColour || !gHudDrawn || !gHaveClockScale || gStars <= 0.0f)
+		return;
+	const uint8_t *wanted = PlayerWanted();
+	const uint32_t now = *api.timeMs;
+	// For two seconds after it goes up, the stars he has blink (to the unlit colour here).
+	const bool blinkOff = WantedLevel(wanted) > 0 && now <= WantedChangedAt(wanted) + kStarFlashMs && (now / 130) % 2;
+	const float a = Smooth(gStars), H = float(ScreenHeight());
+	const text::Style base = StarStyle({255, 255, 255, 255});
+	float top, bottom;
+	text::LineExtent(base, 0.0f, top, bottom);
+	const float glyph = text::Width(">", base), edge = std::max(1.0f, H / 540.0f);
+	const float spacing = std::max(base.scaleX * kStarSpacing, glyph + 3 * edge);
+	const float right = ScreenWidth() - Margin(), y = Margin() - top;
+	// Right to left, as the game fills them; every outline first so none covers a star.
+	const text::Style outline = StarStyle({0, 0, 0, uint8_t(215 * a)});
+	for (int i = 0; i < kStarSlots; i++) {
+		const float x = right - glyph - i * spacing;
+		for (int dy = -1; dy <= 1; dy++)
+			for (int dx = -1; dx <= 1; dx++)
+				if (dx || dy)
+					text::Draw(x + dx * edge, y + dy * edge, ">", outline);
+	}
+	for (int i = 0; i < kStarSlots; i++) {
+		const CRGBA c = i < gStarsLevel && !blinkOff ? *gWantedColour : *gNotWantedColour;
+		text::Draw(right - glyph - i * spacing, y, ">", StarStyle({c.r, c.g, c.b, uint8_t(255 * a)}));
+	}
+	text::Flush();
 }
 
 void DrawClock(Canvas &canvas, float mapX, float mapY, float mapW, float mapH)
@@ -300,30 +365,83 @@ void DrawClock(Canvas &canvas, float mapX, float mapY, float mapW, float mapH)
 	text::Draw(left, top, label, style);
 }
 
-void DrawPills(Canvas &canvas, float mapX, float mapY, float mapW, float mapH)
+namespace {
+
+// A pill with its bottom at `bottom`; returns its height.
+float Pill(Canvas &canvas, float x, float bottom, const char *label, CRGBA colour, float alpha)
+{
+	const text::Style style = HudText(kPillTextScale, {colour.r, colour.g, colour.b, uint8_t(colour.a * alpha)}, true);
+	float t, b;
+	text::LineExtent(style, 0.0f, t, b);
+	const float h = (b - t) * 1.25f;
+	const float w = text::Width(label, style) + h; // half a height of padding per rounded end
+	const float y = bottom - h;
+	canvas.SetTexture(nullptr);
+	canvas.Pill(x, y, w, h, {kPillFill.r, kPillFill.g, kPillFill.b, uint8_t(kPillFill.a * alpha)});
+	canvas.Flush();
+	text::Draw(x + h * 0.5f, y + h * 0.5f - (t + b) * 0.5f, label, style);
+	return h;
+}
+
+} // namespace
+
+void DrawPills(Canvas &canvas, float mapX, float mapY, float mapW, float mapH, bool expanded)
 {
 	const uint32_t now = *api.timeMs;
+	if (gLastPillMs && now < gLastPillMs) // a save loaded: its money isn't news
+		gHaveMoney = false;
 	const float dt = gLastPillMs && now >= gLastPillMs ? std::min(now - gLastPillMs, 100u) / 1000.0f : 0.0f;
 	gLastPillMs = now;
-	const bool want = gActive && gConfig.moneyPill && (gTestMoney || MoneyUsableHere());
-	gMoneyAlpha = want ? std::min(1.0f, gMoneyAlpha + dt / 0.2f) : std::max(0.0f, gMoneyAlpha - dt / 0.35f);
+
+	// What he gains or spends shows for a while: the money, counting up or
+	// down as the game does, and the change above it.
+	const uint8_t *info = PlayerInfo();
+	const int32_t money = Money(info);
+	if (!gHaveMoney) {
+		gHaveMoney = true;
+		gLastMoney = money;
+		gMoneyDelta = 0;
+		gMoneyNews = false;
+	} else if (money != gLastMoney) {
+		gMoneyDelta += money - gLastMoney;
+		gLastMoney = money;
+		gMoneyNews = true;
+		gMoneyNewsAt = now;
+	}
+	if (gMoneyNews && now - gMoneyNewsAt >= kMoneyNewsMs)
+		gMoneyNews = false;
+	if (!gMoneyNews && gDeltaAlpha <= 0.0f)
+		gMoneyDelta = 0;
+
+	// D-pad down (the expanded map) shows them all, what he owes on credit too.
+	const bool on = gActive && gConfig.moneyPill, counting = VisibleMoney(info) != money;
+	const int32_t owed = credit::Owed();
+	gMoneyAlpha = Fade(gMoneyAlpha, on && (gTestMoney || expanded || gMoneyNews || counting || MoneyUsableHere()), dt,
+	                   0.2f, 0.35f);
+	gDeltaAlpha = Fade(gDeltaAlpha, on && gMoneyNews && gMoneyDelta != 0, dt, 0.2f, 0.35f);
+	gOwedAlpha = Fade(gOwedAlpha, on && expanded && owed > 0, dt, 0.2f, 0.35f);
 	if (!gActive || !gHaveClockScale || gMoneyAlpha <= 0.0f)
 		return;
 
-	char label[24];
-	FormatMoney(VisibleMoney(PlayerInfo()), label, sizeof label);
-	const auto fade = [](uint8_t a) { return uint8_t(a * gMoneyAlpha); };
-	const text::Style style = HudText(kPillTextScale, {255, 255, 255, fade(255)}, true);
-	float t, b;
-	text::LineExtent(style, 0.0f, t, b);
-	// Pills stack upwards from the map's bottom edge, just right of it.
-	const float h = (b - t) * 1.25f;
-	const float w = text::Width(label, style) + h; // half a height of padding per rounded end
-	const float x = mapX + mapW + std::max(4.0f, mapH * 0.035f), y = mapY + mapH - h;
-	canvas.SetTexture(nullptr);
-	canvas.Pill(x, y, w, h, {kPillFill.r, kPillFill.g, kPillFill.b, fade(kPillFill.a)});
-	canvas.Flush();
-	text::Draw(x + h * 0.5f, y + h * 0.5f - (t + b) * 0.5f, label, style);
+	// They stack upwards from the map's bottom edge, just right of it.
+	const float x = mapX + mapW + std::max(4.0f, mapH * 0.035f), gap = std::max(2.0f, mapH * 0.02f);
+	float bottom = mapY + mapH;
+	char label[32];
+	FormatMoney(VisibleMoney(info), label, sizeof label);
+	bottom -= Pill(canvas, x, bottom, label, {255, 255, 255, 255}, gMoneyAlpha) + gap;
+	if (gDeltaAlpha > 0.0f && gMoneyDelta != 0) {
+		char amount[24];
+		FormatMoney(gMoneyDelta, amount, sizeof amount);
+		snprintf(label, sizeof label, "%s%s", gMoneyDelta > 0 ? "+" : "", amount);
+		bottom -= (Pill(canvas, x, bottom, label, gMoneyDelta > 0 ? kGained : kSpent, gDeltaAlpha) + gap) *
+		          Smooth(gDeltaAlpha);
+	}
+	if (gOwedAlpha > 0.0f && owed > 0) {
+		char amount[24];
+		FormatMoney(owed, amount, sizeof amount);
+		snprintf(label, sizeof label, "OWED %s", amount);
+		Pill(canvas, x, bottom, label, kOwedText, gOwedAlpha);
+	}
 }
 
 } // namespace hud

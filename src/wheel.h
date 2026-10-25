@@ -15,5 +15,7 @@ void Steer(float x, float y);
 void Close(bool apply);
 // From CHud::Draw, on top of the HUD.
 void Draw();
+// A radio station's logo (an RwRaster), loaded on first use; null for the MP3 player and off.
+void *StationLogo(int channel);
 
 } // namespace wheel

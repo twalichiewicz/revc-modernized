@@ -3,11 +3,13 @@
 #include "game.h"
 #include "hooks.h"
 #include "log.h"
+#include "player.h"
 
 #include <algorithm>
 #include <chrono>
 #include <cmath>
 #include <cstdlib>
+#include <dlfcn.h>
 
 using namespace game;
 
@@ -23,8 +25,12 @@ constexpr float kShoulder = 0.6f;    // to the right
 constexpr float kRise = 0.18f;
 constexpr float kAimFov = 52.0f;     // the follow camera's is 70
 constexpr float kEaseIn = 0.15f, kEaseOut = 0.2f; // seconds
+constexpr float kWalkFrom = 0.2f;                  // of a full (walking) push: he's walking, not standing
 
 void (*orig_Process)(uint8_t *cam, const CVector &target, float, float, float);
+bool gInstalled;
+bool gGunRaised;   // we put him in PED_AIM_GUN for aiming
+uint8_t *gFreeCam; // CCamera::bFreeCam: 1 for the classic movement, 0 for the PC's mouse-aim movement
 volatile uint64_t *gRifleThirdPerson; // skip patch: the M4/Ruger/M60 don't switch to first person
 float gBlend;              // 0 = the game's camera, 1 = fully over the shoulder
 Clock::time_point gLastFrame;
@@ -107,6 +113,43 @@ CVector HipFireDirection(uint8_t *ped, uint8_t *cam)
 	return Dot(dir, dir) > 0.5f ? dir : Front(cam);
 }
 
+// CPlayerPed::ProcessPlayerWeapon raises the gun on the target button only for
+// one-handed weapons (weapon flag 0x80), the rest only while firing. Holding
+// LT raises any gun, the way a mouse-camera shot does, and lowers it again.
+// He's walking while aiming: the left stick past a nudge (the pad hook has
+// already scaled it down to a walk).
+bool Walking(const uint8_t *pad)
+{
+	const float x = *reinterpret_cast<const int16_t *>(pad + kPadLeftStickX);
+	const float y = *reinterpret_cast<const int16_t *>(pad + kPadLeftStickY);
+	return std::hypot(x, y) > 128.0f * kWalkStick * kWalkFrom;
+}
+
+// The run-around control runs after ProcessPlayerWeapon and turns him to
+// TheCamera.Orientation, which with the pad's camera is the aim mirrored (he
+// fired backwards): so he's turned back to the aim once it's done. It also
+// walks him along his facing, its own strafing bending that by 50 degrees at
+// most (CPed::CalculateNewVelocity): so the step the walk animation took this
+// frame is pointed along the stick instead, camera-relative.
+void FaceAndStrafe(uint8_t *ped)
+{
+	const float h = CameraHeading();
+	FaceHeading(ped, h);
+	const uint8_t *pad = api.GetPad(0);
+	if (!Walking(pad))
+		return;
+	CVector &v = *reinterpret_cast<CVector *>(ped + 0x84);
+	const float speed = std::hypot(v.x, v.y);
+	const float x = *reinterpret_cast<const int16_t *>(pad + kPadLeftStickX);
+	const float y = -*reinterpret_cast<const int16_t *>(pad + kPadLeftStickY); // up is forward
+	const float fx = -sinf(h), fy = cosf(h), rx = cosf(h), ry = sinf(h);  // forward, right
+	const float mx = rx * x + fx * y, my = ry * x + fy * y, len = std::hypot(mx, my);
+	if (speed < 1e-4f || len < 1e-3f)
+		return;
+	v.x = mx / len * speed;
+	v.y = my / len * speed;
+}
+
 void Hook_Process(uint8_t *cam, const CVector &target, float a, float b, float c)
 {
 	if (cam == gMovedCam) { // the game carries on from where it left its camera, not from ours
@@ -150,6 +193,70 @@ void Hook_Process(uint8_t *cam, const CVector &target, float a, float b, float c
 
 } // namespace
 
+// CPlayerPed::ProcessPlayerWeapon raises the gun on the target button only for
+// one-handed weapons (weapon flag 0x80), the rest only while firing. Holding
+// LT raises any gun the way a mouse-camera shot does: standing, in PED_AIM_GUN
+// (the full aiming pose); walking, out of it, since that state's full-body
+// pose holds the walk on the spot, with the aim flag alone pointing his arms
+// (CPed::AimGun).
+void AfterPlayerWeapon(uint8_t *ped, uint8_t *pad)
+{
+	if (!gInstalled || ped != api.FindPlayerPed())
+		return;
+	if (!Aiming()) {
+		if (gGunRaised && PedState(ped) == kPedAimGun && !api.PadGetWeapon(pad))
+			api.ClearPointGunAt(ped);
+		gGunRaised = false;
+		return;
+	}
+	const float heading = CameraHeading();
+	FaceHeading(ped, heading);
+	gGunRaised = true;
+	if (api.PadGetWeapon(pad)) // firing aims the gun already
+		return;
+	api.SetLookFlag(ped, heading, true, true);
+	api.SetAimFlag(ped, heading);
+	api.SetLookTimer(ped, 0x7fffffff);
+	*reinterpret_cast<float *>(ped + 0x888) = api.Find3rdPersonQuickAimPitch(api.theCamera); // the arm's pitch
+	ped[0x8a8] = 1;
+	const int32_t state = PedState(ped);
+	if (Walking(pad)) {
+		if (state == kPedAimGun)
+			api.ClearPointGunAt(ped);
+		api.SetAimFlag(ped, heading); // ClearPointGunAt lowers it
+	} else if (state != kPedAttack && state != kPedFight && state != kPedAimGun) {
+		api.SetPointGunAt(ped, nullptr);
+	}
+}
+
+void Lower(uint8_t *ped)
+{
+	if (gGunRaised && PedState(ped) == kPedAimGun)
+		api.ClearPointGunAt(ped);
+	gGunRaised = false;
+}
+
+// With the gun up, the classic movement (CPlayerPed::PlayerControlZelda)
+// turns him to where he walks; the PC's mouse-aim movement
+// (PlayerControl1stPersonRunAround) walks facing the camera, with the walk
+// animation. bFreeCam picks between them, and only the camera reads it
+// otherwise, later on.
+bool BeforeControl()
+{
+	const bool strafe = gInstalled && gGunRaised && gFreeCam && *gFreeCam;
+	if (strafe)
+		*gFreeCam = 0;
+	return strafe;
+}
+
+void AfterControl(uint8_t *ped, bool strafed)
+{
+	if (strafed)
+		*gFreeCam = 1;
+	if (gInstalled && gGunRaised && ped == api.FindPlayerPed() && !PedInVehicle(ped) && api.IsPedInControl(ped))
+		FaceAndStrafe(ped);
+}
+
 bool Aiming()
 {
 	uint8_t *ped = api.FindPlayerPed();
@@ -167,6 +274,10 @@ bool Install()
 		return false;
 	gLastFrame = Clock::now();
 	gTestAim = getenv("VCHUD_TEST_AIM") != nullptr;
+	gInstalled = true;
+	if (!player::ControlHooked())
+		Log("aimcam: Tommy only raises two-handed guns once he fires, and stands still aiming (re-run install.sh)");
+	gFreeCam = static_cast<uint8_t *>(dlsym(RTLD_MAIN_ONLY, "_ZN7CCamera8bFreeCamE"));
 	gRifleThirdPerson = hooks::Flag("skip:rifle_first_person");
 	if (!gRifleThirdPerson)
 		Log("aimcam: the M4, Ruger and M60 keep first-person aiming (re-run install.sh)");

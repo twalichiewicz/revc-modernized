@@ -1,6 +1,7 @@
 #include "game.h"
 #include "log.h"
 
+#include <cmath>
 #include <dlfcn.h>
 
 namespace game {
@@ -78,6 +79,7 @@ bool Resolve()
 	Bind(api.txdPool, "_ZN9CTxdStore11ms_pTxdPoolE");
 	Bind(api.GetRadarTraceColour, "_ZN6CRadar19GetRadarTraceColourEjb");
 	Bind(api.ToggleTargetMarker, "_ZN6CRadar18ToggleTargetMarkerEff");
+	Bind(api.TransformRealWorldPointToRadarSpace, "_ZN6CRadar35TransformRealWorldPointToRadarSpaceER9CVector2DRKS0_");
 	Bind(api.playerInStadium, "_ZN11CTheScripts21bPlayerIsInTheStatiumE");
 
 	Bind(api.frontEndMenuManager, "FrontEndMenuManager");
@@ -149,6 +151,13 @@ bool Resolve()
 	Bind(api.Find3rdPersonCamTargetVector, "_ZN7CCamera28Find3rdPersonCamTargetVectorEf7CVectorRS0_S1_");
 	Bind(api.ProcessLineOfSight, "_ZN6CWorld18ProcessLineOfSightERK7CVectorS2_R9CColPointRP7CEntitybbbbbbbb");
 	Bind(api.ignoreEntity, "_ZN6CWorld13pIgnoreEntityE");
+	Bind(api.timeStep, "_ZN6CTimer12ms_fTimeStepE", RTLD_MAIN_ONLY, false);
+	Bind(api.GetWaterLevel, "_ZN11CWaterLevel13GetWaterLevelEfffPfb", RTLD_MAIN_ONLY, false);
+	Bind(api.ProcessVerticalLine,
+	     "_ZN6CWorld19ProcessVerticalLineERK7CVectorfR9CColPointRP7CEntitybbbbbbP15CStoredCollPoly", RTLD_MAIN_ONLY,
+	     false);
+	Bind(api.TestSphereAgainstWorld, "_ZN6CWorld22TestSphereAgainstWorldE7CVectorfP7CEntitybbbbbb", RTLD_MAIN_ONLY,
+	     false);
 	Bind(api.GetAnimHierarchyFromSkinClump, "_Z29GetAnimHierarchyFromSkinClumpPN2rw5ClumpE");
 	Bind(api.HAnimIDGetIndex, "_Z17RpHAnimIDGetIndexPN2rw14HAnimHierarchyEi");
 	Bind(api.HAnimMatrixArray, "_Z30RpHAnimHierarchyGetMatrixArrayPN2rw14HAnimHierarchyE");
@@ -162,6 +171,18 @@ bool Resolve()
 	Bind(api.IsPedInControl, "_ZN4CPed14IsPedInControlEv");
 	Bind(api.PadGetTarget, "_ZN4CPad9GetTargetEv");
 	Bind(api.PadGetWeapon, "_ZN4CPad9GetWeaponEv");
+	Bind(api.SetLookFlag, "_ZN4CPed11SetLookFlagEfbb");
+	Bind(api.SetAimFlag, "_ZN4CPed10SetAimFlagEf");
+	Bind(api.SetLookTimer, "_ZN4CPed12SetLookTimerEi");
+	Bind(api.SetPointGunAt, "_ZN4CPed13SetPointGunAtEP7CEntity");
+	Bind(api.ClearPointGunAt, "_ZN4CPed15ClearPointGunAtEv");
+	Bind(api.Find3rdPersonQuickAimPitch, "_ZN7CCamera26Find3rdPersonQuickAimPitchEv");
+	Bind(api.SetHeading, "_ZN10CPlaceable10SetHeadingEf");
+	Bind(api.Say, "_ZN4CPed3SayEt");
+	Bind(api.SetChat, "_ZN4CPed7SetChatEP7CEntityj");
+	Bind(api.SetObjective, "_ZN4CPed12SetObjectiveE10eObjectivePv");
+	Bind(api.IsGangMember, "_ZNK4CPed12IsGangMemberEv");
+	Bind(api.CleanUpOldReference, "_ZN7CEntity19CleanUpOldReferenceEPPS_");
 	Bind(api.scriptSpace, "_ZN11CTheScripts11ScriptSpaceE");
 	Bind(api.activeScripts, "_ZN11CTheScripts14pActiveScriptsE");
 
@@ -179,6 +200,26 @@ bool Resolve()
 	Bind(api.glfwGetJoystickName, "glfwGetJoystickName", RTLD_DEFAULT, false);
 	Bind(api.glfwUpdateGamepadMappings, "glfwUpdateGamepadMappings", RTLD_DEFAULT, false);
 	return gOk;
+}
+
+CVector HeadingForward(float heading) { return {-std::sin(heading), std::cos(heading), 0.0f}; }
+
+float HeadingOf(float x, float y) { return std::atan2(-x, y); }
+
+float CameraHeading()
+{
+	constexpr float kPi = 3.14159265f;
+	float h = -*reinterpret_cast<const float *>(api.theCamera + 0x168);
+	if (!std::isfinite(h))
+		return 0.0f;
+	h = std::fmod(h + kPi, 2 * kPi);
+	return h < 0 ? h + kPi : h - kPi;
+}
+
+void FaceHeading(uint8_t *ped, float heading)
+{
+	*reinterpret_cast<float *>(ped + 0x46c) = *reinterpret_cast<float *>(ped + 0x470) = heading;
+	api.SetHeading(ped + 8, heading);
 }
 
 // CTxdStore::GetSlot(slot)->texDict

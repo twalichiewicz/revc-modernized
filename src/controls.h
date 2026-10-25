@@ -7,12 +7,16 @@
 //   - on foot, holding LB opens the weapon wheel (wheel.cpp, GTA V), LT aims
 //     and RT fires; the right stick looks smoothly (aimcam.cpp aims),
 //   - in a vehicle, RT is the throttle and LT the brake, R3 looks behind, and
-//     holding LB aims a drive-by, RB shooting (driveby.cpp).
+//     holding LB aims a drive-by, RB shooting (driveby.cpp),
+//   - while a response prompt is up (interact.cpp), X / Square and B / Circle
+//     answer it, as RDR2's greet and antagonize.
 // The gamepad is read through GLFW directly, so this works whatever the
 // game's own button mapping is.
 
 namespace controls {
 
 bool Install();
+// A PlayStation pad is connected (for the button prompts' symbols).
+bool PlayStationPad();
 
 } // namespace controls

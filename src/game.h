@@ -131,6 +131,7 @@ struct Api {
 	uint8_t **txdPool;    // CPool<TxdDef>*: entries at +0 (32-byte TxdDef, texDict first), size at +0x10
 	uint32_t (*GetRadarTraceColour)(uint32_t colour, bool dim);
 	void (*ToggleTargetMarker)(float x, float y);
+	void (*TransformRealWorldPointToRadarSpace)(CVector2D &out, const CVector2D &in);
 	uint8_t *playerInStadium;
 
 	// UI state
@@ -211,6 +212,16 @@ struct Api {
 	                           bool ignoreSomeObjects, bool ignoreShootThrough);
 	uint8_t **ignoreEntity; // CWorld::pIgnoreEntity: skipped by the line-of-sight checks
 
+	// water, and the world around the player (swim.cpp, climb.cpp; optional)
+	float *timeStep; // CTimer::ms_fTimeStep: this frame's length, in 1/50 s
+	bool (*GetWaterLevel)(float x, float y, float z, float *level, bool dontCheckZ);
+	// The first thing straight down to `toZ`: a CColPoint (point at +0, normal at +0x10).
+	bool (*ProcessVerticalLine)(const CVector &from, float toZ, uint8_t *colPoint, uint8_t *&entity, bool buildings,
+	                            bool vehicles, bool peds, bool objects, bool dummies, bool ignoreSeeThrough,
+	                            void *storedPoly);
+	uint8_t *(*TestSphereAgainstWorld)(CVector centre, float radius, uint8_t *ignore, bool buildings, bool vehicles,
+	                                   bool peds, bool objects, bool dummies, bool ignoreSeeThrough);
+
 	// ped skeletons (RpHAnim): world matrices per bone, keyframes in AnimBlendFrameData
 	uint8_t *(*GetAnimHierarchyFromSkinClump)(uint8_t *clump);
 	int (*HAnimIDGetIndex)(uint8_t *hierarchy, int boneTag);
@@ -227,6 +238,22 @@ struct Api {
 	bool (*IsPedInControl)(uint8_t *ped);
 	bool (*PadGetTarget)(uint8_t *pad); // aiming, in the pad's controller mode
 	bool (*PadGetWeapon)(uint8_t *pad); // firing
+
+	// raising a gun (what CPlayerPed::ProcessPlayerWeapon does to fire with the mouse camera)
+	void (*SetLookFlag)(uint8_t *ped, float heading, bool, bool);
+	void (*SetAimFlag)(uint8_t *ped, float heading);
+	void (*SetLookTimer)(uint8_t *ped, int ms);
+	void (*SetPointGunAt)(uint8_t *ped, uint8_t *target); // null: no target, PED_AIM_GUN
+	void (*ClearPointGunAt)(uint8_t *ped);
+	float (*Find3rdPersonQuickAimPitch)(uint8_t *camera);
+	void (*SetHeading)(uint8_t *placeable, float heading); // CPlaceable, at entity + 8
+
+	// peds talking to each other, and to Tommy
+	void (*Say)(uint8_t *ped, uint16_t line);
+	void (*SetChat)(uint8_t *ped, uint8_t *partner, uint32_t ms);
+	void (*SetObjective)(uint8_t *ped, int objective, void *target);
+	bool (*IsGangMember)(const uint8_t *ped);
+	void (*CleanUpOldReference)(uint8_t *entity, uint8_t **ref); // `entity` is the one referred to
 
 	// mission scripts
 	uint8_t *scriptSpace;    // CTheScripts::ScriptSpace: main.scm as loaded, globals first (4 bytes each)
@@ -340,6 +367,7 @@ inline float Stamina(const uint8_t *player) { return PedField(player, 0x78c); } 
 inline float MaxStamina(const uint8_t *player) { return PedField(player, 0x790); }
 inline const uint8_t *PlayerInfo() { return api.worldPlayers + size_t(*api.playerInFocus) * 0x1a0; }
 inline bool InfiniteSprint(const uint8_t *info) { return info[0x16c] != 0; }
+inline bool FastReload(const uint8_t *info) { return info[0x16d] != 0; }
 inline int MaxHealth(const uint8_t *info) { return info[0x16f]; }
 inline int MaxArmour(const uint8_t *info) { return info[0x170]; }
 // The HUD's money, counting towards the real amount at +0xc8.
@@ -375,7 +403,40 @@ enum CamModeId : uint16_t {
 inline int32_t PedState(const uint8_t *ped) { return *reinterpret_cast<const int32_t *>(ped + 0x2fc); }
 inline uint8_t *EntityClump(uint8_t *entity) { return *reinterpret_cast<uint8_t **>(entity + 0x58); }
 inline int32_t PedHandModel(const uint8_t *ped) { return *reinterpret_cast<const int32_t *>(ped + 0x684); }
-constexpr int32_t kPedDriving = 0x32;
+constexpr int32_t kPedAttack = 0x10, kPedFight = 0x11, kPedAimGun = 0x16, kPedSolicit = 0x1c, kPedDriving = 0x32;
+constexpr int32_t kPedIdle = 1, kPedJump = 0x29, kPedFall = 0x2a, kPedGetUp = 0x2b, kPedDie = 0x36, kPedDead = 0x37;
+inline void SetPedState(uint8_t *ped, int32_t state) { *reinterpret_cast<int32_t *>(ped + 0x2fc) = state; }
+inline int32_t PedMoveState(const uint8_t *ped) { return *reinterpret_cast<const int32_t *>(ped + 0x304); } // 5: sprint
+// CPed flags at +0x188: standing (bit 0), was standing (1), in the air (11),
+// landing (12), being put ashore after falling in (60).
+inline uint64_t &PedFlags(uint8_t *ped) { return *reinterpret_cast<uint64_t *>(ped + 0x188); }
+constexpr uint64_t kPedStanding = 1ull << 0, kPedWasStanding = 1ull << 1, kPedInTheAir = 1ull << 11,
+                   kPedLanding = 1ull << 12, kPedReachingDryLand = 1ull << 60;
+// Moving (per 1/50 s), and its collision (CEntity bUsesCollision: bit 8 at +0x60).
+inline CVector &EntitySpeed(uint8_t *entity) { return *reinterpret_cast<CVector *>(entity + 0x84); }
+inline uint32_t &EntityFlags(uint8_t *entity) { return *reinterpret_cast<uint32_t *>(entity + 0x60); }
+constexpr uint32_t kEntityUsesCollision = 1u << 8;
+inline bool IsVehicle(const uint8_t *entity) { return (*reinterpret_cast<const uint32_t *>(entity + 0x60) & 7) == 2; }
+// Headings as CPlaceable has them: forward is (-sin h, cos h).
+CVector HeadingForward(float heading);
+float HeadingOf(float x, float y); // of a direction
+// The heading the camera looks along (CCamera::Orientation, negated and wrapped).
+float CameraHeading();
+// Turns a ped to a heading at once (as it stands and as it's turning to).
+void FaceHeading(uint8_t *ped, float heading);
+// Peds near a ped (CPed::m_nearPeds, kept up to date by the game), the car it
+// heads for (m_carInObjective, a registered reference), its chat timer, who
+// created it (2: a mission script) and its type (ePedType: 4/5 civilians, 6 cop,
+// 7-15 gangs, 18 criminal, 20 prostitute).
+inline uint8_t *PedNearby(const uint8_t *ped, int i) { return reinterpret_cast<uint8_t *const *>(ped + 0x6c0)[i]; }
+inline int PedNearbyCount(const uint8_t *ped) { return *reinterpret_cast<const uint16_t *>(ped + 0x710); }
+inline uint8_t *&PedCarInObjective(uint8_t *ped) { return *reinterpret_cast<uint8_t **>(ped + 0x1b0); }
+inline uint32_t &PedChatTimer(uint8_t *ped) { return *reinterpret_cast<uint32_t *>(ped + 0x694); }
+inline bool PedFromMission(const uint8_t *ped) { return ped[0x19a] == 2; }
+inline int32_t PedObjective(const uint8_t *ped) { return *reinterpret_cast<const int32_t *>(ped + 0x19c); } // 0: none
+inline int32_t PedType(const uint8_t *ped) { return *reinterpret_cast<const int32_t *>(ped + 0x4f8); }
+// The way an entity faces (its matrix's forward row).
+inline const CVector &EntityForward(const uint8_t *entity) { return *reinterpret_cast<const CVector *>(entity + 0x18); }
 
 // CRunningScript: name at +0x10, GOSUB return addresses at +0x1c, their count at +0x34.
 inline uint8_t *ScriptNext(uint8_t *script) { return *reinterpret_cast<uint8_t **>(script); }
@@ -400,6 +461,8 @@ inline bool IsAircraft(const uint8_t *vehicle)
 // 0x18 bytes at +0x550 (type, state, ammo in clip at +8, total ammo at +0xc),
 // the current slot at +0x64c and the slot to switch to at +0x798.
 constexpr int kWeaponSlots = 10;
+constexpr int32_t kFirstThrownWeapon = 12, kFirstGun = 17;   // eWeaponType: fists and melee come first
+constexpr int32_t kWeaponReady = 0, kWeaponReloading = 2;    // CWeapon state at +4 (clip +8, timer +0x10)
 inline uint8_t *PedWeapon(uint8_t *ped, int slot) { return ped + 0x550 + slot * 0x18; }
 inline int32_t WeaponType(const uint8_t *weapon) { return *reinterpret_cast<const int32_t *>(weapon); }
 inline int32_t WeaponAmmoTotal(const uint8_t *weapon) { return *reinterpret_cast<const int32_t *>(weapon + 0xc); }

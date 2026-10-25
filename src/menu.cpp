@@ -8,7 +8,9 @@
 
 #include <algorithm>
 #include <cmath>
+#include <cstdlib>
 #include <cstring>
+#include <dlfcn.h>
 #include <utility>
 
 using namespace game;
@@ -36,7 +38,10 @@ constexpr uint32_t kLegendBoxSite = 0xf83ec;            // PrintMap: CSprite2d::
 constexpr uint32_t kLegendTitleSite = 0xf8498;          // PrintMap: CFont::PrintString of "FE_MLG"
 constexpr uint32_t kLegendEntryScaleSite = 0xf8510;     // PrintMap: CFont::SetScale for the entries
 
-constexpr float kLegendScale = 0.55f;
+constexpr int kStickInUse = 32;        // of 128: a stick pushed this far is the controller in use
+
+constexpr float kLegendScale = 0.55f;  // at most
+constexpr float kLegendMaxHeight = 0.6f; // of the screen: a long legend shrinks to fit
 constexpr CRGBA kWhite{255, 255, 255, 255};
 
 struct Box {
@@ -51,6 +56,7 @@ void (*orig_DrawRect)(const CRect &, const CRGBA &);
 void (*orig_Draw2DPolygon)(float, float, float, float, float, float, float, float, const CRGBA &);
 void (*orig_DrawLegend)(int, int, int);
 SpriteDrawFn gSpriteDraw;
+CVector2D *gMapCrosshair; // PrintMap's crosshair, in screen pixels
 
 const uint8_t *gText; // image base, for call sites
 bool gTabsOn, gLegendOn, gCircleBack;
@@ -76,6 +82,7 @@ int gNumCursor;
 bool gLegendBoxKnown; // this frame's legend background has been seen
 bool gInLegend;       // inside CRadar::DrawLegend
 Vec2 gLegendFrom, gLegendTo;
+float gLegendScale = kLegendScale; // this frame's (the title is scaled before the box is seen: last frame's)
 
 uint32_t Offset(const void *ret) { return uint32_t(static_cast<const uint8_t *>(ret) - gText); }
 
@@ -164,8 +171,12 @@ void TabInput(uint8_t *menu)
 	gPrevLB = lb;
 	gPrevRB = rb;
 	const int32_t page = MenuScreen(menu);
-	if (page == kPageMap) // RB zooms the map in; it switches tabs now, so LT takes that over
+	if (page == kPageMap) { // RB zooms the map in; it switches tabs now, so LT takes that over
 		PadNew(pad, kPadRB) = PadNew(pad, kPadLT);
+		// X (Square) shows or hides the legend, as L does (CMenuManager::m_PrefsShowLegends).
+		if (PadNew(pad, kPadSquare) && !PadOld(pad, kPadSquare))
+			menu[0x21] = !menu[0x21];
+	}
 	const int tab = RootTab(page);
 	if (tab < 0)
 		return;
@@ -182,6 +193,34 @@ void TabInput(uint8_t *menu)
 			}
 	if (next >= 0 && next != tab)
 		GoToPage(menu, kTabs[next].page);
+}
+
+// The controller (not the keyboard or mouse, which reach the pad state too) is in use.
+bool ControllerInUse(uint8_t *pad)
+{
+	for (PadButton axis : {kPadLeftStickX, kPadLeftStickY, kPadRightStickX, kPadRightStickY})
+		if (std::abs(PadJoy(pad, axis)) > kStickInUse)
+			return true;
+	for (PadButton b : {kPadLB, kPadRB, kPadDPadUp, kPadDPadDown, kPadDPadLeft, kPadDPadRight, kPadSquare, kPadTriangle,
+	                    kPadCross, kPadCircle})
+		if (PadJoy(pad, b))
+			return true;
+	return false;
+}
+
+// The map's crosshair follows the mouse while its pointer is shown, and
+// otherwise stays where it is (PrintMap): moving the map with a stick hides
+// the pointer, so the crosshair stayed where the mouse had left it. With the
+// controller in use the pointer goes and the crosshair sits in the middle of
+// the screen, the map moving under it (zooming in and the waypoint go by it).
+void ControllerCrosshair(uint8_t *menu, uint8_t *pad)
+{
+	if (!gMapCrosshair || MenuScreen(menu) != kPageMap)
+		return;
+	if (pad && ControllerInUse(pad))
+		menu[0x1b4] = 0; // CMenuManager::m_bShowMouse
+	if (!menu[0x1b4])
+		*gMapCrosshair = {float(ScreenWidth()) * 0.5f, float(ScreenHeight()) * 0.5f};
 }
 
 void DrawTabs(const uint8_t *menu, int current)
@@ -202,7 +241,9 @@ void DrawTabs(const uint8_t *menu, int current)
 	int hover = -1;
 	SetHudRenderStates();
 	gCanvas.SetTexture(nullptr);
-	gCanvas.VerticalGradient(0, 0, W, rowY * 2 + tabH, {0, 0, 0, 210}, {0, 0, 0, 150});
+	// A backing behind the tabs only, so the page's own title and the legend stay clear.
+	const float back = tabH * 0.25f;
+	gCanvas.Pill((W - total) * 0.5f - back, rowY - back, total + 2 * back, tabH + 2 * back, {0, 0, 0, 170});
 	float x = (W - total) * 0.5f;
 	for (int i = 0; i < kNumTabs; i++) {
 		gTabBoxes[i] = {x, rowY, x + widths[i], rowY + tabH};
@@ -249,39 +290,38 @@ bool BoxInQuad(const Vec2 (&quad)[4], Vec2 boxMin, Vec2 boxMax, float inset)
 	return true;
 }
 
+// The legend sits in the screen's bottom-right corner, shrunk if it's long.
 // The pause screens show through a slanted frame (animated between pages), and
-// DrawBackground paints everything outside it black right after PrintMap, so the
-// legend goes into the frame's bottom-right corner: from there it moves up,
-// left or inwards, whichever fits first.
+// DrawBackground paints everything outside it black right after PrintMap, so
+// if the frame doesn't reach that corner the legend moves up, left or towards
+// the frame's centre until it's inside. (Starting from the frame's own corner
+// put it off screen where the frame runs past the screen's edge.)
 void LegendPlace(const float *rect)
 {
 	const float x0 = std::min(rect[0], rect[2]), x1 = std::max(rect[0], rect[2]);
 	const float y0 = std::min(rect[1], rect[3]), y1 = std::max(rect[1], rect[3]);
 	const float W = float(ScreenWidth()), H = float(ScreenHeight());
-	const Vec2 size{(x1 - x0) * kLegendScale, (y1 - y0) * kLegendScale};
+	gLegendScale = std::min(kLegendScale, kLegendMaxHeight * H / std::max(y1 - y0, 1.0f));
+	const Vec2 size{(x1 - x0) * gLegendScale, (y1 - y0) * gLegendScale};
+	const Vec2 corner{W - H * 0.04f, H * 0.96f};
 	gLegendFrom = {x0, y0};
-	gLegendTo = {W - H * 0.04f - size.x, H * 0.96f - size.y}; // no frame: the screen corner
+	gLegendTo = {corner.x - size.x, corner.y - size.y};
 	gLegendBoxKnown = true;
 
 	Vec2 quad[4];
-	int corner = 0;
-	for (int i = 0; i < 4; i++) {
+	for (int i = 0; i < 4; i++)
 		quad[i] = {api.menuFrame[2 * i] * W / 640.0f, api.menuFrame[2 * i + 1] * H / 448.0f};
-		if (quad[i].x + quad[i].y > quad[corner].x + quad[corner].y)
-			corner = i;
-	}
-	const Vec2 centre = QuadCentre(quad);
-	const float toCentre = std::hypot(centre.x - quad[corner].x, centre.y - quad[corner].y);
-	if (toCentre < size.y)
-		return;
-	const Vec2 inwards{(centre.x - quad[corner].x) / toCentre, (centre.y - quad[corner].y) / toCentre};
-	const Vec2 dirs[3] = {{0, -1}, {-1, 0}, inwards};
 	const float inset = H * 0.02f, step = H * 0.004f;
-	for (int i = 0; i < 500; i++)
+	if (BoxInQuad(quad, gLegendTo, corner, inset))
+		return;
+	const Vec2 centre = QuadCentre(quad);
+	const float toCentre = std::max(std::hypot(centre.x - corner.x, centre.y - corner.y), 1.0f);
+	const Vec2 dirs[3] = {{0, -1}, {-1, 0}, {(centre.x - corner.x) / toCentre, (centre.y - corner.y) / toCentre}};
+	for (int i = 1; i < 500; i++)
 		for (const Vec2 &d : dirs) {
-			const Vec2 max{quad[corner].x + d.x * step * i, quad[corner].y + d.y * step * i};
+			const Vec2 max{corner.x + d.x * step * i, corner.y + d.y * step * i};
 			const Vec2 min{max.x - size.x, max.y - size.y};
-			if (BoxInQuad(quad, min, max, inset)) {
+			if (min.x >= 0 && min.y >= 0 && BoxInQuad(quad, min, max, inset)) {
 				gLegendTo = min;
 				return;
 			}
@@ -290,7 +330,7 @@ void LegendPlace(const float *rect)
 
 Vec2 LegendMap(float x, float y)
 {
-	return {gLegendTo.x + (x - gLegendFrom.x) * kLegendScale, gLegendTo.y + (y - gLegendFrom.y) * kLegendScale};
+	return {gLegendTo.x + (x - gLegendFrom.x) * gLegendScale, gLegendTo.y + (y - gLegendFrom.y) * gLegendScale};
 }
 
 // CRect: x at 0 and 2, y at 1 and 3.
@@ -341,7 +381,9 @@ void Hook_UserInput(uint8_t *menu)
 		SwapTriangleCircle(pad);
 	if (TabsActive(menu))
 		TabInput(menu);
+	ControllerCrosshair(menu, pad);
 	orig_UserInput(menu);
+	ControllerCrosshair(menu, nullptr); // after it moved the map, for PrintMap
 	if (gCircleBack)
 		SwapTriangleCircle(pad);
 }
@@ -426,7 +468,8 @@ bool Install(SpriteDrawFn spriteDraw, bool fontHooks)
 	if ((tabs || legend) &&
 	    !hooks::Install("_ZN12CMenuManager14DrawBackgroundEb", Hook_DrawBackground, orig_DrawBackground))
 		tabs = legend = false;
-	const bool input = (tabs || gConfig.circleBack) &&
+	gMapCrosshair = static_cast<CVector2D *>(dlsym(RTLD_MAIN_ONLY, "mapCrosshair"));
+	const bool input = (tabs || gConfig.circleBack || gMapCrosshair) &&
 	                   hooks::Install("_ZN12CMenuManager9UserInputEv", Hook_UserInput, orig_UserInput);
 	gTabsOn = tabs && input;
 	gCircleBack = gConfig.circleBack && input;
@@ -434,8 +477,10 @@ bool Install(SpriteDrawFn spriteDraw, bool fontHooks)
 	            hooks::Install("_ZN9CSprite2d13Draw2DPolygonEffffffffRK5CRGBA", Hook_Draw2DPolygon,
 	                           orig_Draw2DPolygon) &&
 	            hooks::Install("_ZN6CRadar10DrawLegendEiii", Hook_DrawLegend, orig_DrawLegend);
-	Log("menu: tabs %s, compact legend %s, back on %s", gTabsOn ? "on" : "off", gLegendOn ? "on" : "off",
-	    gCircleBack ? "Circle" : "Triangle");
+	if (!input)
+		gMapCrosshair = nullptr;
+	Log("menu: tabs %s, compact legend %s, back on %s, map crosshair %s", gTabsOn ? "on" : "off",
+	    gLegendOn ? "on" : "off", gCircleBack ? "Circle" : "Triangle", gMapCrosshair ? "centred for the pad" : "vanilla");
 	return true;
 }
 
@@ -481,8 +526,8 @@ void AdjustScale(const void *ret, float &sx, float &sy)
 		return;
 	const uint32_t off = Offset(ret);
 	if (off == kLegendTitleScaleSite || off == kLegendEntryScaleSite) {
-		sx *= kLegendScale;
-		sy *= kLegendScale;
+		sx *= gLegendScale;
+		sy *= gLegendScale;
 	}
 }
 

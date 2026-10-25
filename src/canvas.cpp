@@ -33,6 +33,21 @@ void Canvas::Pill(float x, float y, float w, float h, CRGBA col)
 	Fan(v, n, col); // convex, so a fan from any vertex works
 }
 
+void Canvas::RoundRect(float x, float y, float w, float h, float r, CRGBA col)
+{
+	constexpr int kSeg = 6; // per corner
+	r = std::min(r, std::min(w, h) * 0.5f);
+	const Vec2 centres[4] = {{x + w - r, y + r}, {x + w - r, y + h - r}, {x + r, y + h - r}, {x + r, y + r}};
+	Vtx v[4 * (kSeg + 1)];
+	int n = 0;
+	for (int c = 0; c < 4; c++) // clockwise from the top-right corner
+		for (int i = 0; i <= kSeg; i++) {
+			const float a = float(M_PI) * 0.5f * (float(c) - 1.0f + float(i) / kSeg);
+			v[n++] = {centres[c].x + r * cosf(a), centres[c].y + r * sinf(a), 0, 0};
+		}
+	Fan(v, n, col);
+}
+
 void Canvas::VerticalGradient(float x, float y, float w, float h, CRGBA top, CRGBA bottom)
 {
 	const Vtx tl{x, y, 0, 0}, tr{x + w, y, 0, 0}, br{x + w, y + h, 0, 0}, bl{x, y + h, 0, 0};
