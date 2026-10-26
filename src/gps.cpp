@@ -31,6 +31,7 @@ Route gRoute;
 bool gHaveRoute;
 uint32_t gUpdated; // game time of the last Update
 CVector gLastTarget;
+CVector gLoggedTarget; // the last target the log was told of
 int gLastStartNode = -2;
 uint32_t gLastSearch;
 CPathNode *gNodes[kMaxNodes];
@@ -156,6 +157,12 @@ void Update(const CVector &player)
 {
 	gHaveRoute = false;
 	gUpdated = *api.timeMs;
+	// Flying: no way by road to show.
+	uint8_t *ped = api.FindPlayerPed();
+	if (ped && PedInVehicle(ped) && PedVehicle(ped) && IsAircraft(PedVehicle(ped))) {
+		gLastStartNode = -2;
+		return;
+	}
 	const Target target = PickTarget(player);
 	if (!target.valid || NumCarPathNodes() <= 0) {
 		gLastStartNode = -2;
@@ -176,9 +183,12 @@ void Update(const CVector &player)
 	const bool startMoved = startNode != gLastStartNode && elapsed >= kMinIntervalMs;
 	if (targetMoved || startMoved || elapsed >= kRefreshMs || now < gLastSearch) {
 		Search(player, target, startNode);
-		if (targetMoved)
+		// (A new target, not one on the move: a car's blip would log every second.)
+		if (targetMoved && (gLoggedTarget.x == 0.0f || Dist2D(target.pos, gLoggedTarget) > 150.0f)) {
 			Log("gps: %s at %.0f,%.0f -> %zu road nodes", target.waypoint ? "waypoint" : "objective", target.pos.x,
 			    target.pos.y, gPath.size());
+			gLoggedTarget = target.pos;
+		}
 		gLastTarget = target.pos;
 		gLastStartNode = startNode;
 		gLastSearch = now;

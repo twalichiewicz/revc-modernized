@@ -57,6 +57,7 @@ void (*orig_ProcessBuoyancy)(uint8_t *ped);
 bool (*orig_IsTargetInWater)(uint8_t *cam, const CVector &source);
 bool (*orig_CanPedExitCar)(uint8_t *vehicle, bool jumpExit);
 void (*orig_PlayFootSteps)(uint8_t *ped);
+bool (*gExitVehicle)(uint8_t *pad); // CPad::GetExitVehicle
 void (*gAddParticle)(int type, const CVector &pos, const CVector &velocity, uint8_t *entity, float size,
                      const CRGBA &colour, int rotationSpeed, int rotation, int frame, int life);
 void (*gPlayOneShot)(uint8_t *audio, int entity, uint16_t sound, float volume);
@@ -189,7 +190,7 @@ bool Hook_IsTargetInWater(uint8_t *cam, const CVector &source)
 
 // He can get out of a vehicle in the water. The game lets him out only once
 // it has all but stopped turning (CVehicle::CanPedExitCar), which a car
-// bobbing and sinking never does, so he was stuck in it.
+// bobbing and sinking never does, so he was stuck in it. (And see OutOfTheWater.)
 bool Hook_CanPedExitCar(uint8_t *vehicle, bool jumpExit)
 {
 	if (orig_CanPedExitCar(vehicle, jumpExit))
@@ -210,6 +211,31 @@ void Hook_PlayFootSteps(uint8_t *ped)
 
 // In a vehicle that's sunk (its ProcessBuoyancy drowns those inside).
 bool InSunkVehicle(const uint8_t *ped) { return gCarUnderSeen && PedInVehicle(ped) && *api.timeMs - gCarUnderAt < kCarUnderFor; }
+
+// The exit button in a car in the water. The game's (CPlayerInfo::Process)
+// does nothing while the car is "in the water", that is drowning those in it
+// (CAutomobile::ProcessBuoyancy: the water bearing up all of it, or most with
+// a wheel hanging free). A car bobbing upright is only now and then, so he
+// got out in the end; one floating on its roof, its wheels all free, always
+// is, and he was shut in it. Here the button asks him out all the same, as
+// the game would: CPed::SetExitCar has him crawl out, or puts him clear of it
+// if its doors are blocked.
+constexpr int32_t kObjectiveLeaveCar = 16;         // eObjective OBJECTIVE_LEAVE_CAR
+constexpr int32_t kBoat = 1;                       // CVehicle::m_vehType at +0x348
+constexpr uint8_t kTrainMoving = 6;                // eEntityStatus, beside a wreck's 5
+constexpr int32_t kLockedPlayerInside = 4;         // eCarLock, CVehicle::m_nDoorLock at +0x2d8
+void OutOfTheWater(uint8_t *ped)
+{
+	uint8_t *vehicle = PedInVehicle(ped) ? PedVehicle(ped) : nullptr;
+	if (!vehicle || !gExitVehicle || !api.GetPad || !api.SetObjective || PedState(ped) != kPedDriving ||
+	    !(*reinterpret_cast<const uint16_t *>(vehicle + 0x156) & kInWater) ||
+	    *reinterpret_cast<const int32_t *>(vehicle + 0x348) == kBoat || Wrecked(vehicle) ||
+	    (vehicle[0x60] >> 3) == kTrainMoving || *reinterpret_cast<const int32_t *>(vehicle + 0x2d8) == kLockedPlayerInside)
+		return;
+	uint8_t *pad = api.GetPad(0);
+	if (pad && gExitVehicle(pad))
+		api.SetObjective(ped, kObjectiveLeaveCar, vehicle);
+}
 
 float Random(float from, float to) { return from + (to - from) * float(std::rand()) / float(RAND_MAX); }
 
@@ -398,7 +424,10 @@ void Dive(uint8_t *ped)
 
 void AfterControl(uint8_t *ped)
 {
-	if (!gInstalled || ped != gPed)
+	if (!gInstalled)
+		return;
+	OutOfTheWater(ped); // (before he's been on foot since a load, too)
+	if (ped != gPed)
 		return;
 	const float step = std::clamp(*api.timeStep, 0.01f, 3.0f), dt = step / 50.0f;
 	if (gSwimming && PedInVehicle(ped)) // into a boat
@@ -569,6 +598,9 @@ bool Install()
 	gAddParticle = reinterpret_cast<decltype(gAddParticle)>(
 	    dlsym(RTLD_MAIN_ONLY, "_ZN9CParticle11AddParticleE13tParticleTypeRK7CVectorS3_P7CEntityfRKN2rw4RGBAEiiii"));
 	gPlayOneShot = reinterpret_cast<decltype(gPlayOneShot)>(dlsym(RTLD_MAIN_ONLY, "_ZN8cDMAudio11PlayOneShotEitf"));
+	gExitVehicle = reinterpret_cast<decltype(gExitVehicle)>(dlsym(RTLD_MAIN_ONLY, "_ZN4CPad14GetExitVehicleEv"));
+	if (!gExitVehicle)
+		Log("swim: the exit button can't get him out of a car on its roof in the water");
 	Log("swim: Tommy swims and dives");
 	return true;
 }

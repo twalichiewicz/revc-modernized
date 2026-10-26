@@ -1,16 +1,21 @@
 #include "camera.h"
 #include "aimcam.h"
 #include "climb.h"
+#include "combat.h"
 #include "config.h"
 #include "controls.h"
 #include "driveby.h"
 #include "game.h"
+#include "heli.h"
 #include "hooks.h"
 #include "log.h"
 #include "phone.h"
+#include "police.h"
 #include "swim.h"
 #include "traffic.h"
 #include "viewmodel.h"
+#include "wanted.h"
+#include "watch.h"
 
 #include <algorithm>
 #include <cmath>
@@ -406,6 +411,12 @@ void InTheDoor(uint8_t *ped, uint8_t *vehicle, bool gettingIn, float dt)
 // pointed and the free camera is on.
 bool Hook_Fire(uint8_t *weapon, uint8_t *shooter, CVector *source)
 {
+	if (shooter && shooter != api.FindPlayerPed() && !combat::MayFire(weapon, shooter, source))
+		return false; // it can't see its target (combat.cpp)
+	if (shooter && shooter == api.FindPlayerPed()) {
+		combat::PlayerShot(Row(0x30), Row(0x10)); // gunmen near the shot take cover
+		police::PlayerFired(WeaponType(weapon));  // and cops draw their guns
+	}
 	if (!gOnFoot || !shooter || shooter != api.FindPlayerPed())
 		return orig_Fire(weapon, shooter, source);
 	*reinterpret_cast<CVector *>(shooter + kAimedSource) = Row(0x30);
@@ -505,7 +516,11 @@ bool Shake(uint8_t *ped, float dt, bool firstPerson)
 void Hook_Process(uint8_t *cam)
 {
 	orig_Process(cam);
+	wanted::Update();
 	traffic::AfterCamera();
+	police::Update();
+	heli::Update();
+	watch::Frame();
 	phone::AfterWorld();
 	uint8_t *ped = api.FindPlayerPed();
 	const float dt = *api.timeStep / 50.0f; // s

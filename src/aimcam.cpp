@@ -1,4 +1,5 @@
 #include "aimcam.h"
+#include "body.h"
 #include "camera.h"
 #include "config.h"
 #include "game.h"
@@ -53,6 +54,46 @@ float &Fov(uint8_t *cam) { return *reinterpret_cast<float *>(cam + 0xb4); }
 
 // The weapons CHud::Draw gives the third-person crosshair: pistols to the
 // Ruger, the flamethrower, M60 and minigun.
+// CPed::bIsDucking or bCrouchWhenShooting (bits 36 and 35 of the flags at +0x188).
+bool Crouched(const uint8_t *ped) { return (*reinterpret_cast<const uint64_t *>(ped + 0x188) >> 35 & 3) != 0; }
+// Both: CPed::SetPointGunAt raises the gun in the crouch's firing pose.
+bool CrouchFiring(const uint8_t *ped) { return (*reinterpret_cast<const uint64_t *>(ped + 0x188) >> 35 & 3) == 3; }
+bool gAimCrouched; // the aiming pose he's in is the crouch's
+uint32_t gAimStart; // when he raised it (game time)
+
+// Two-handed guns (no CWeaponInfo flag 0x80, "aims with the arm": the shotguns,
+// the MP5, rifles, the M60) are aimed by the torso alone (CPedIK::PointGunInDirection),
+// the arms holding the gun as the animation has it: up at the shoulder in the
+// standing aim (PED_AIM_GUN), down at the hip in the walk. So his arms in the
+// standing aim are learnt, for each such gun, relative to his chest, and laid
+// on the walk while he walks aiming. The first time with a gun he stands to
+// aim a moment while they're learnt.
+uint8_t *(*gWeaponInfo)(int32_t type);
+constexpr int kWeaponTypes = 40;
+constexpr uint32_t kLearnAfter = 300, kLearnFor = 700; // ms in the standing aim: its pose is in; at most, to learn it
+constexpr float kArmsBlend = 8.0f;                     // per second, into and out of it
+// The shoulders stay with the chest; the arms go with the aim.
+constexpr body::Bone kShoulders[] = {body::kClavicleL, body::kClavicleR};
+constexpr body::Bone kArms[] = {body::kUpperArmL, body::kForearmL, body::kHandL, body::kFingerL,
+                                body::kUpperArmR, body::kForearmR, body::kHandR, body::kFingerR};
+body::Held gShoulders[kWeaponTypes], gArms[kWeaponTypes];
+bool gKnown[kWeaponTypes];
+void *gArmsClump;     // whose they are
+uint32_t gAimGunSince; // since when he's been in the standing aim (0: he isn't)
+float gArmsWeight;
+int gArmsType = -1;
+
+bool TwoHanded(int32_t type)
+{
+	const uint8_t *info = type > 0 && type < kWeaponTypes && gWeaponInfo ? gWeaponInfo(type) : nullptr;
+	return info && !(*reinterpret_cast<const uint32_t *>(info + 0x5c) & 0x80);
+}
+// A gun whose shouldered arms aren't known yet, just raised: he stands to aim.
+bool Learning(int32_t type)
+{
+	return TwoHanded(type) && !gKnown[type] && *api.timeMs - gAimStart < kLearnFor && !camera::FirstPersonOnFoot();
+}
+
 bool ThirdPersonGun(int32_t type) { return (type >= 17 && type <= 27) || (type >= 31 && type <= 33); }
 // Of those, the ones the game aims in first person (MODE_M16_1STPERSON) unless patched.
 bool FirstPersonRifle(int32_t type) { return type == 26 || type == 27 || type == 32; }
@@ -205,34 +246,106 @@ void Hook_Process(uint8_t *cam, const CVector &target, float a, float b, float c
 // LT raises any gun the way a mouse-camera shot does: standing, in PED_AIM_GUN
 // (the full aiming pose); walking, out of it, since that state's full-body
 // pose holds the walk on the spot, with the aim flag alone pointing his arms
-// (CPed::AimGun).
+// (CPed::AimGun). Crouched, the game's crouched firing pose holds the gun and
+// he turns to aim, as the game has it: the arm-pointing (made for the standing
+// pose) would twist the gun off to the left of the crouch's turned torso.
 void AfterPlayerWeapon(uint8_t *ped, uint8_t *pad)
 {
 	if (!gInstalled || ped != api.FindPlayerPed())
 		return;
 	if (!Aiming()) {
-		if (gGunRaised && PedState(ped) == kPedAimGun && !api.PadGetWeapon(pad))
+		// Let go: the aim we raised, and an aiming pose the game took up again
+		// (a frame late, after a shot) once the button was up. Not mid-shot.
+		const int32_t state = PedState(ped);
+		gAimCrouched = CrouchFiring(ped);
+		if (api.PadGetWeapon(pad) || state == kPedAttack)
+			return;
+		if (gGunRaised || (state == kPedAimGun && !PadNew(pad, kPadRB)))
 			api.ClearPointGunAt(ped);
 		gGunRaised = false;
 		return;
 	}
 	const float heading = CameraHeading();
 	FaceHeading(ped, heading);
+	if (!gGunRaised)
+		gAimStart = *api.timeMs;
 	gGunRaised = true;
 	if (api.PadGetWeapon(pad)) // firing aims the gun already
 		return;
+	int32_t state = PedState(ped);
+	// Crouched or stood up with the gun raised: it's raised again, in the pose
+	// for how he is now (SetPointGunAt picks the crouch's or the standing one;
+	// left as it was, the other pose held the gun pointing off to the side).
+	if (state == kPedAimGun && CrouchFiring(ped) != gAimCrouched) {
+		api.ClearPointGunAt(ped);
+		state = PedState(ped);
+	}
+	gAimCrouched = CrouchFiring(ped);
+	if (Crouched(ped)) {
+		if (state != kPedAttack && state != kPedFight && state != kPedAimGun)
+			api.SetPointGunAt(ped, nullptr);
+		return;
+	}
 	api.SetLookFlag(ped, heading, true, true);
 	api.SetAimFlag(ped, heading);
 	api.SetLookTimer(ped, 0x7fffffff);
 	*reinterpret_cast<float *>(ped + 0x888) = api.Find3rdPersonQuickAimPitch(api.theCamera); // the arm's pitch
 	ped[0x8a8] = 1;
-	const int32_t state = PedState(ped);
-	if (Walking(pad)) {
+	if (Walking(pad) && !Learning(WeaponType(PedWeapon(ped, PedCurrentWeaponSlot(ped))))) {
 		if (state == kPedAimGun)
 			api.ClearPointGunAt(ped);
 		api.SetAimFlag(ped, heading); // ClearPointGunAt lowers it
 	} else if (state != kPedAttack && state != kPedFight && state != kPedAimGun) {
 		api.SetPointGunAt(ped, nullptr);
+	}
+}
+
+// The way he aims, as a turn in his own frame (x right, y forward, z up):
+// where the camera, and so the crosshair, looks, as a yaw and a pitch.
+body::Quat AimFrame(const uint8_t *ped)
+{
+	const CVector &look = *reinterpret_cast<const CVector *>(api.theCamera + 0x10); // its matrix (no vtable)
+	const CVector a{body::Dot(look, *reinterpret_cast<const CVector *>(ped + 0x08)),
+	                body::Dot(look, EntityForward(ped)), body::Dot(look, *reinterpret_cast<const CVector *>(ped + 0x28))};
+	return body::Z(std::atan2(-a.x, a.y)) * body::X(std::atan2(a.z, std::hypot(a.x, a.y)));
+}
+
+void PoseArms(uint8_t *ped)
+{
+	if (!gInstalled || !gWeaponInfo)
+		return;
+	const uint32_t now = *api.timeMs;
+	const int32_t state = PedState(ped), type = WeaponType(PedWeapon(ped, PedCurrentWeaponSlot(ped)));
+	const bool upright = Aiming() && gGunRaised && !Crouched(ped) && !camera::FirstPersonOnFoot() && TwoHanded(type);
+	if (EntityClump(ped) != gArmsClump) { // another model (his clothes): learnt again
+		gArmsClump = EntityClump(ped);
+		std::fill(std::begin(gKnown), std::end(gKnown), false);
+		gArmsWeight = 0.0f;
+	}
+	// Standing aiming a while: his arms as the aim has them, relative to the
+	// way he aims (not his chest: walking, that sways and stays upright, and
+	// the gun pointed where it had when they were learnt, not at the crosshair).
+	gAimGunSince = state == kPedAimGun ? (gAimGunSince ? gAimGunSince : now) : 0;
+	if (upright && state == kPedAimGun && now - gAimGunSince > kLearnAfter && body::Prepare(ped) &&
+	    body::Hold(ped, gShoulders[type], body::kSpine1, kShoulders, int(std::size(kShoulders))) &&
+	    body::HoldIn(ped, gArms[type], AimFrame(ped), kArms, int(std::size(kArms)))) {
+		if (!gKnown[type])
+			Log("aimcam: weapon type %d's shouldered arms learnt for walking aimed", type);
+		gKnown[type] = true;
+	}
+	// Walking aiming (not shooting: that pose holds it up already): laid on the walk.
+	const bool walking = upright && gKnown[type] && state != kPedAimGun && state != kPedAttack && !PedInVehicle(ped);
+	if (walking)
+		gArmsType = type;
+	const float dt = std::clamp(*api.timeStep, 0.01f, 3.0f) / 50.0f;
+	gArmsWeight += ((walking ? 1.0f : 0.0f) - gArmsWeight) * std::min(1.0f, dt * kArmsBlend);
+	if (gArmsWeight < 0.01f) {
+		gArmsWeight = 0.0f;
+		return;
+	}
+	if (gArmsType >= 0 && body::Prepare(ped)) {
+		body::Restore(ped, gShoulders[gArmsType], body::Smooth(gArmsWeight));
+		body::RestoreIn(ped, gArms[gArmsType], AimFrame(ped), body::Smooth(gArmsWeight));
 	}
 }
 
@@ -285,6 +398,9 @@ bool Install()
 	if (!player::ControlHooked())
 		Log("aimcam: Tommy only raises two-handed guns once he fires, and stands still aiming (re-run install.sh)");
 	gFreeCam = static_cast<uint8_t *>(dlsym(RTLD_MAIN_ONLY, "_ZN7CCamera8bFreeCamE"));
+	gWeaponInfo = reinterpret_cast<decltype(gWeaponInfo)>(dlsym(RTLD_MAIN_ONLY, "_ZN11CWeaponInfo13GetWeaponInfoE11eWeaponType"));
+	if (!gWeaponInfo || !player::PoseHooked())
+		Log("aimcam: Tommy holds two-handed guns at the hip while he walks aiming");
 	gRifleThirdPerson = hooks::Flag("skip:rifle_first_person");
 	if (!gRifleThirdPerson)
 		Log("aimcam: the M4, Ruger and M60 keep first-person aiming (re-run install.sh)");

@@ -378,4 +378,138 @@ void Apply(uint8_t *ped, const Pose &pose, float weight)
 	rootT = Lerp(rootT, Add(gSkel.restPos[kRoot], pose.rootMove), weight);
 }
 
+namespace {
+// Each bone's orientation (ped frame) for ApplyOver: the pose's where it's
+// set, else its animation's on top of its parent's.
+void Over(const Pose &pose, Quat (&d)[kBones])
+{
+	for (int b = 0; b < kBones; b++) {
+		Quat keyed = KeyRotation(Key(gSkel.frame[b]));
+		if (gSkel.inverted)
+			keyed = Conjugate(keyed);
+		const Quat parent = b == kRoot ? Quat{} : d[gSkel.parent[b]];
+		d[b] = pose.set[b] ? pose.whole * pose.turn[b] * gSkel.rest[b] : parent * keyed;
+	}
+}
+} // namespace
+
+CVector JointOver(uint8_t *ped, const Pose &pose, Bone b)
+{
+	if (!gSkel.ok || EntityClump(ped) != gSkel.clump)
+		return {};
+	Quat d[kBones];
+	Over(pose, d);
+	CVector p[kBones];
+	p[kRoot] = pose.set[kRoot] ? Add(gSkel.restPos[kRoot], pose.rootMove) : KeyTranslation(Key(gSkel.frame[kRoot]));
+	for (int c = 1; c <= b; c++) {
+		const int up = gSkel.parent[c];
+		p[c] = Add(p[up], Rotate(d[up] * Conjugate(gSkel.rest[up]), Sub(gSkel.restPos[c], gSkel.restPos[up])));
+	}
+	return p[b];
+}
+
+void TurnOver(uint8_t *ped, Pose &pose, Bone b, const Quat &by)
+{
+	if (!gSkel.ok || EntityClump(ped) != gSkel.clump)
+		return;
+	Quat d[kBones];
+	Over(pose, d);
+	pose.Turn(b, Conjugate(pose.whole) * by * d[b] * Conjugate(gSkel.rest[b]));
+}
+
+void ApplyOver(uint8_t *ped, const Pose &pose, float weight)
+{
+	if (!gSkel.ok || EntityClump(ped) != gSkel.clump || weight <= 0.0f)
+		return;
+	weight = std::min(weight, 1.0f);
+	Quat d[kBones];
+	Over(pose, d);
+	for (int b = 0; b < kBones; b++) {
+		if (!pose.set[b])
+			continue;
+		const Quat local = b == kRoot ? d[b] : Conjugate(d[gSkel.parent[b]]) * d[b];
+		Quat &key = KeyRotation(Key(gSkel.frame[b]));
+		key = Slerp(key, gSkel.inverted ? Conjugate(local) : local, weight);
+	}
+	if (pose.set[kRoot]) {
+		CVector &rootT = KeyTranslation(Key(gSkel.frame[kRoot]));
+		rootT = Lerp(rootT, Add(gSkel.restPos[kRoot], pose.rootMove), weight);
+	}
+}
+
+namespace {
+
+// The bones held, relative to `frame` (a turn in the ped's frame).
+bool HoldAbout(uint8_t *ped, Held &held, const Quat *frame, Bone base, const Bone *bones, int count)
+{
+	if (!gSkel.ok || EntityClump(ped) != gSkel.clump)
+		return false;
+	Quat d[kBones];
+	Over(Pose{}, d);
+	held = Held{};
+	held.base = base;
+	const Quat about = frame ? *frame : d[base];
+	for (int i = 0; i < count; i++) {
+		held.rel[bones[i]] = Conjugate(about) * d[bones[i]];
+		held.set[bones[i]] = true;
+	}
+	return true;
+}
+
+void RestoreAbout(uint8_t *ped, const Held &held, const Quat *frame, float weight)
+{
+	if (!gSkel.ok || EntityClump(ped) != gSkel.clump || weight <= 0.0f)
+		return;
+	weight = std::min(weight, 1.0f);
+	Quat d[kBones]; // each as it ends up, for its children
+	for (int b = 0; b < kBones; b++) {
+		const Quat parent = b == kRoot ? Quat{} : d[gSkel.parent[b]];
+		Quat &key = KeyRotation(Key(gSkel.frame[b]));
+		if (held.set[b]) {
+			const Quat local = Conjugate(parent) * (frame ? *frame : d[held.base]) * held.rel[b];
+			key = Slerp(key, gSkel.inverted ? Conjugate(local) : local, weight);
+		}
+		d[b] = parent * (gSkel.inverted ? Conjugate(key) : key);
+	}
+}
+
+} // namespace
+
+bool Hold(uint8_t *ped, Held &held, Bone base, const Bone *bones, int count)
+{
+	return HoldAbout(ped, held, nullptr, base, bones, count);
+}
+void Restore(uint8_t *ped, const Held &held, float weight) { RestoreAbout(ped, held, nullptr, weight); }
+bool HoldIn(uint8_t *ped, Held &held, const Quat &frame, const Bone *bones, int count)
+{
+	return HoldAbout(ped, held, &frame, kRoot, bones, count);
+}
+void RestoreIn(uint8_t *ped, const Held &held, const Quat &frame, float weight)
+{
+	RestoreAbout(ped, held, &frame, weight);
+}
+
+// Two-bone reach: the elbow, bent towards `pole`, for the hand at `hand` (it
+// stops short where the arm can't reach).
+void Reach(Pose &p, Bone upper, Bone fore, CVector hand, const CVector &pole, float weight)
+{
+	if (weight <= 0.0f)
+		return;
+	const CVector shoulder = Joint(p, upper);
+	const float a = Length(upper), b = Length(fore);
+	CVector d = Sub(hand, shoulder);
+	const float len = std::clamp(std::sqrt(Dot(d, d)), std::fabs(a - b) + 0.01f, a + b - 0.002f);
+	const CVector u = Normalised(d);
+	hand = Add(shoulder, Scale(u, len));
+	const float x = (a * a - b * b + len * len) / (2 * len), y = std::sqrt(std::max(0.0f, a * a - x * x));
+	const CVector v = Normalised(Sub(pole, Scale(u, Dot(pole, u))));
+	const CVector elbow = Add(shoulder, Add(Scale(u, x), Scale(v, y)));
+	Pose reached = p;
+	Point(reached, upper, Sub(elbow, shoulder));
+	Point(reached, fore, Sub(hand, elbow));
+	const Pose mixed = Mix(p, reached, weight);
+	p.Turn(upper, mixed.turn[upper]);
+	p.Turn(fore, mixed.turn[fore]);
+}
+
 } // namespace body

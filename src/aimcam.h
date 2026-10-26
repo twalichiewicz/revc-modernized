@@ -7,7 +7,8 @@
 // skip patch in CPlayerPed::ProcessPlayerWeapon); scoped weapons keep scopes.
 // Bullets still go where the crosshair points: the game aims along the same
 // camera (CCamera::Find3rdPersonCamTargetVector). Tommy raises the gun while
-// aiming, not only once he fires, so the first shot goes at once.
+// aiming, not only once he fires, so the first shot goes at once, and keeps a
+// two-handed gun up at the shoulder while he walks.
 
 #include <cstdint>
 
@@ -24,6 +25,9 @@ bool Aiming();
 void AfterPlayerWeapon(uint8_t *ped, uint8_t *pad);
 // The game's weapon handling was skipped (swimming, climbing): the gun goes down.
 void Lower(uint8_t *ped);
+// From CPed::PreRender (player.cpp), with no other pose on him: a two-handed
+// gun held up at the shoulder while he walks aiming (the standing aim's arms).
+void PoseArms(uint8_t *ped);
 bool BeforeControl();
 void AfterControl(uint8_t *ped, bool strafed);
 

@@ -370,6 +370,32 @@ void SetInput(bool aim, bool fire, float yaw, float pitch)
 	gFireHeld = fire;
 }
 
+bool gPilotHolstered; // his gun was put away while he flew
+
+void PilotHolster(uint8_t *ped)
+{
+	if (!api.RemoveWeaponModel || !api.AddWeaponModel)
+		return;
+	uint8_t *vehicle = PedInVehicle(ped) ? PedVehicle(ped) : nullptr;
+	void *const model = *reinterpret_cast<void *const *>(ped + 0x290); // CPed::m_pWeaponModel
+	if (vehicle && IsAircraft(vehicle) && *reinterpret_cast<uint8_t *const *>(vehicle + 0x218) == ped) { // the pilot
+		if (model) {
+			api.RemoveWeaponModel(ped, -1);
+			gPilotHolstered = true;
+		}
+		return;
+	}
+	if (!gPilotHolstered || PedInVehicle(ped))
+		return;
+	// Out (CPed::ReplaceWeaponWhenExitingVehicle doesn't add the SMG he went in with back).
+	gPilotHolstered = false;
+	const int32_t type = WeaponType(PedWeapon(ped, PedCurrentWeaponSlot(ped)));
+	const uint8_t *info = type > 0 ? api.GetWeaponInfo(type) : nullptr;
+	const int32_t id = info ? *reinterpret_cast<const int32_t *>(info + 0x54) : -1; // CWeaponInfo::m_nModelId
+	if (!model && id > 0)
+		api.AddWeaponModel(ped, id);
+}
+
 void PreRender(uint8_t *ped)
 {
 	if (!gInstalled || gArmOff || ped != api.FindPlayerPed())
