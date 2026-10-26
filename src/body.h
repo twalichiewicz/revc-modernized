@@ -69,8 +69,38 @@ float Length(Bone b);
 void Point(Pose &pose, Bone b, const CVector &direction);
 // Each turn of one pose `t` of the way to the other's.
 Pose Mix(const Pose &a, const Pose &b, float t);
+// Two-bone reach: the elbow, bent towards `pole`, for the hand at `hand` (it
+// stops short where the arm can't reach), `weight` of the way from the pose's arm.
+void Reach(Pose &p, Bone upper, Bone fore, CVector hand, const CVector &pole, float weight = 1.0f);
 // From CPed::PreRender, before the skeleton is rebuilt from the keyframes:
 // poses him `weight` (0..1) of the way from his animation.
 void Apply(uint8_t *ped, const Pose &pose, float weight);
+// As Apply, but only the bones the pose sets (each laid as the pose has it,
+// whatever its parent does); the rest keep the animation, following their
+// posed parents (the arms holding a gun as the game has them, on a posed
+// torso). The root moves only if it's set.
+void ApplyOver(uint8_t *ped, const Pose &pose, float weight);
+// A joint's place (ped frame) as ApplyOver would pose him (from CPed::PreRender,
+// the animation's keyframes as they are).
+CVector JointOver(uint8_t *ped, const Pose &pose, Bone b);
+// Sets a bone to where ApplyOver would have it, turned `by` (in the ped's
+// frame): its unset children follow, as animated.
+void TurnOver(uint8_t *ped, Pose &pose, Bone b, const Quat &by);
+
+// Some bones as an animation has them, held relative to another (the arms to
+// the chest, say): read off the keyframes as they are (from CPed::PreRender),
+// and laid so again on another animation's, `weight` of the way, about the
+// base bone as that one has it. The base comes before them in kBones.
+struct Held {
+	Quat rel[kBones];
+	bool set[kBones] = {};
+	Bone base = kRoot;
+};
+bool Hold(uint8_t *ped, Held &held, Bone base, const Bone *bones, int count);
+void Restore(uint8_t *ped, const Held &held, float weight);
+// As Hold and Restore, but held relative to a frame given (a turn in the ped's
+// frame) instead of a bone: the arms to the way he aims, say.
+bool HoldIn(uint8_t *ped, Held &held, const Quat &frame, const Bone *bones, int count);
+void RestoreIn(uint8_t *ped, const Held &held, const Quat &frame, float weight);
 
 } // namespace body

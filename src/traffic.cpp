@@ -3,6 +3,7 @@
 #include "game.h"
 #include "hooks.h"
 #include "log.h"
+#include "wanted.h"
 
 #include <algorithm>
 #include <cmath>
@@ -26,6 +27,11 @@ constexpr int kTurnoverFrames = 90;       // between loading car models (the gam
 constexpr int kTries = 4;                 // picks of a car model, the least common kept
 constexpr size_t kVehicleSize = 0x6f0;    // a vehicle in CPools::ms_pVehiclePool
 constexpr size_t kModelIndex = 0x6a;      // CEntity::m_modelIndex (int16)
+constexpr size_t kWanted = 0x778, kMaxCops = 0x19; // CPlayerPed::m_pWanted; CWanted::m_MaxCops (uint8)
+constexpr size_t kLevel = 0x20;                      // CWanted::m_nWantedLevel
+// From three stars, now and then, CPopulation::AddToPopulation makes a cop
+// with a spike strip by him while he drives (forceAddingCop).
+constexpr int32_t kSpikeCopStars = 3;
 // CStreaming::StreamVehiclesAndPeds's countdown to the next car model (a
 // static) and the instructions that set it to 350 (mov w8, #0x15e; str w8,
 // [x20, #0x290]): checked, as another build has it elsewhere.
@@ -36,7 +42,9 @@ int32_t *gDesiredModels;              // desiredNumVehiclesLoaded
 size_t *gStreamingMemory;             // CStreaming::ms_memoryAvailable
 int32_t *gModelTimer;
 uint8_t **gVehiclePool, **gPedPool;
+int32_t *gArea; // CGame::currArea: 0 outdoors
 int32_t (*orig_ChooseCarModel)(int32_t vehclass);
+void (*orig_AddToPopulation)(float minDist, float maxDist, float minDistOffScreen, float maxDistOffScreen);
 int (*gGetAlpha)(void *clump);
 void (*gSetAlpha)(void *clump, int alpha);
 bool gStarted;
@@ -152,6 +160,35 @@ int32_t Hook_ChooseCarModel(int32_t vehclass)
 	return best;
 }
 
+// Wanted on foot, the game adds street cops near him as it adds people (to
+// CWanted::m_MaxCops of them), on any path for people out of sight: inside a
+// walled lot with him too. While it adds people then, that cap is 0, so
+// police come by car (in a vehicle, and indoors where no car comes, the game
+// adds them as it did).
+void Hook_AddToPopulation(float minDist, float maxDist, float minDistOffScreen, float maxDistOffScreen)
+{
+	uint8_t *ped = api.FindPlayerPed();
+	uint8_t *wanted = ped ? *reinterpret_cast<uint8_t **>(ped + kWanted) : nullptr;
+	// While the police don't know where he is (the wanted overhaul), no cops
+	// made by him at all: not the street cops, nor the spike strip ones at
+	// three stars (the game makes those where he is, not where they think).
+	const bool unseen = wanted && wanted::Active() && !wanted::OnHim();
+	const bool onFoot = wanted && gConfig.copsByCar && (!gArea || *gArea == 0) && !PedInVehicle(ped);
+	if (!unseen && !onFoot) {
+		orig_AddToPopulation(minDist, maxDist, minDistOffScreen, maxDistOffScreen);
+		return;
+	}
+	const uint8_t maxCops = wanted[kMaxCops];
+	int32_t &level = *reinterpret_cast<int32_t *>(wanted + kLevel);
+	const int32_t was = level;
+	wanted[kMaxCops] = 0;
+	if (unseen)
+		level = std::min(level, kSpikeCopStars - 1); // (for this call only)
+	orig_AddToPopulation(minDist, maxDist, minDistOffScreen, maxDistOffScreen);
+	level = was;
+	wanted[kMaxCops] = maxCops;
+}
+
 } // namespace
 
 void AfterCamera()
@@ -200,6 +237,7 @@ bool Install()
 	gDesiredModels = static_cast<int32_t *>(dlsym(RTLD_MAIN_ONLY, "desiredNumVehiclesLoaded"));
 	gStreamingMemory = static_cast<size_t *>(dlsym(RTLD_MAIN_ONLY, "_ZN10CStreaming18ms_memoryAvailableE"));
 	gVehiclePool = static_cast<uint8_t **>(dlsym(RTLD_MAIN_ONLY, "_ZN6CPools15ms_pVehiclePoolE"));
+	gArea = static_cast<int32_t *>(dlsym(RTLD_MAIN_ONLY, "_ZN5CGame8currAreaE"));
 	auto *base = static_cast<uint8_t *>(const_cast<void *>(hooks::ImageBase()));
 	const auto *code = reinterpret_cast<const uint32_t *>(base + kModelTimerSet);
 	if (code[0] == kModelTimerCode[0] && code[1] == kModelTimerCode[1])
@@ -208,6 +246,8 @@ bool Install()
 		Log("traffic: the car model timer isn't where expected; car models turn over as before");
 	if (!gVehiclePool || !hooks::Install("_ZN8CCarCtrl14ChooseCarModelEi", Hook_ChooseCarModel, orig_ChooseCarModel))
 		return false;
+	if (!hooks::Install("_ZN11CPopulation15AddToPopulationEffff", Hook_AddToPopulation, orig_AddToPopulation))
+		Log("traffic: no CPopulation::AddToPopulation hook (re-run install.sh); street cops still appear on foot");
 	return true;
 }
 

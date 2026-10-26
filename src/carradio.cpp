@@ -34,6 +34,8 @@ void (*alGenFilters)(int, ALuint *);
 void (*alFilteri)(ALuint, int, int);
 void (*alFilterf)(ALuint, int, float);
 void (*alSourcei)(ALuint, int, int);
+void (*alSource3f)(ALuint, int, float, float, float);
+constexpr int kAlPosition = 0x1004;
 constexpr int kAlFilterType = 0x8001, kAlFilterLowpass = 1, kAlLowpassGain = 1, kAlLowpassGainHF = 2;
 constexpr int kAlDirectFilter = 0x20005;
 
@@ -50,6 +52,10 @@ constexpr auto kStuckWindow = std::chrono::seconds(4);
 constexpr int32_t kStuckBelow = 2000;       // ms the song moves on in that time, at least
 constexpr auto kRestartsApart = std::chrono::seconds(20);
 constexpr size_t kPlayingTrack = 0x3988;    // cMusicManager::m_nPlayingTrack
+// cMusicManager::m_bGameplayAllowsRadio: last frame's, which ServiceGameMode
+// takes as "the radio's already on" (m_bRadioStreamReady) and so keeps the
+// station it was playing. Off, it starts the car's own (GetCarTuning).
+constexpr size_t kGameplayAllowsRadio = 0x3996;
 constexpr int32_t kNoTrack = 0x4c9;         // NO_TRACK
 bool (*IsStreamPlaying)(uint8_t *samples, uint8_t stream);
 int32_t (*GetStreamedFilePosition)(uint8_t *samples, uint8_t stream);
@@ -67,6 +73,7 @@ bool gFiltered;
 bool gDeciding;   // inside cMusicManager::ServiceGameMode
 uint8_t *gCar;    // the car being heard from outside, or null
 uint8_t *gOwnCar; // the last one he drove
+uint8_t *gHeard;  // the car the music manager played last frame (his, or one outside)
 Clock::time_point gLeftOwnCar;
 float gGain = 1.0f, gHighs = 1.0f;
 uint8_t gPan = 63;
@@ -74,7 +81,6 @@ uint8_t gVolume, gEffect; // what the music manager last asked for
 bool gHaveVolume, gLogged;
 
 uint8_t *Driver(const uint8_t *vehicle) { return *reinterpret_cast<uint8_t *const *>(vehicle + 0x218); }
-bool Wrecked(const uint8_t *vehicle) { return (vehicle[0x60] & 0xf8) == 0x28; } // STATUS_WRECKED
 float Speed(const uint8_t *vehicle)
 {
 	const CVector &v = *reinterpret_cast<const CVector *>(vehicle + 0x84); // CPhysical::m_vecMoveSpeed
@@ -100,8 +106,14 @@ void ForEachVehicle(Fn fn)
 				fn(v);
 }
 
+bool HasRadioOn(uint8_t *v) { return !Wrecked(v) && VehicleRadio(v) < kRadioOff && !IsAircraft(v) && RadioUsable(v); }
+
+// Getting into a car (opening it, pulling someone out): ePedState.
+constexpr int32_t kPedCarjack = 56, kPedEnterCar = 58, kPedStealCar = 59;
+
 // The nearest car he'd hear: his own (recently left), or a slow or stopped one
-// with a driver, with its radio on.
+// with a driver, with its radio on. Getting into a car, only that one (none,
+// for a police car: its radio is the scanner, inside).
 uint8_t *Pick(uint8_t *player)
 {
 	const Clock::time_point now = Clock::now();
@@ -109,6 +121,11 @@ uint8_t *Pick(uint8_t *player)
 		gOwnCar = PedVehicle(player);
 		gLeftOwnCar = now;
 		return nullptr;
+	}
+	const int32_t state = PedState(player);
+	if (state == kPedCarjack || state == kPedEnterCar || state == kPedStealCar) {
+		uint8_t *entering = PedVehicle(player);
+		return entering && HasRadioOn(entering) ? entering : nullptr;
 	}
 	const CVector &pos = EntityPos(player);
 	uint8_t *best = nullptr;
@@ -119,7 +136,7 @@ uint8_t *Pick(uint8_t *player)
 		ownCarExists = ownCarExists || own;
 		if (own ? now - gLeftOwnCar > kOwnCarPlays : !Driver(v) || Speed(v) > kStoppedBelow)
 			return;
-		if (Wrecked(v) || VehicleRadio(v) >= kRadioOff || IsAircraft(v) || !RadioUsable(v))
+		if (!HasRadioOn(v))
 			return;
 		const float d = Distance(EntityPos(v), pos) - (v == gCar ? kKeepBias : 0.0f);
 		if (d < bestDistance) {
@@ -166,6 +183,32 @@ void Mix(const uint8_t *player)
 	gPan = uint8_t(std::clamp(63.0f + 63.0f * (dx * right.x + dy * right.y) / len, 0.0f, 127.0f));
 }
 
+// From outside, the car is where the music comes from: both of the stream's
+// sources (its left and right, which CStream::SetPan only spreads apart, so
+// the music stayed wide on his ears like headphones) put the way to the car,
+// in the listener's frame (they're relative to it: x right, y up, -z ahead).
+// The game's own SetPan (on his own radio) puts them back.
+bool gPlaced;
+void Place()
+{
+	if (!alSource3f || !gStreamSources || !gCar)
+		return;
+	const CVector &right = *reinterpret_cast<const CVector *>(api.theCamera);         // its matrix (no vtable)
+	const CVector &ahead = *reinterpret_cast<const CVector *>(api.theCamera + 0x10);
+	const CVector &up = *reinterpret_cast<const CVector *>(api.theCamera + 0x20);
+	const CVector &cam = *reinterpret_cast<const CVector *>(api.theCamera + 0x30);
+	const CVector &car = EntityPos(gCar);
+	CVector d{car.x - cam.x, car.y - cam.y, car.z + 0.5f - cam.z};
+	const float len = std::max(std::sqrt(d.x * d.x + d.y * d.y + d.z * d.z), 0.01f);
+	d = {d.x / len, d.y / len, d.z / len};
+	const float x = d.x * right.x + d.y * right.y + d.z * right.z, y = d.x * up.x + d.y * up.y + d.z * up.z,
+	            z = -(d.x * ahead.x + d.y * ahead.y + d.z * ahead.z);
+	const ALuint *sources = gStreamSources + 2 * kMusicStream;
+	for (int c = 0; c < 2; c++)
+		alSource3f(sources[c], kAlPosition, x, y, z);
+	gPlaced = true;
+}
+
 // The low-pass on the radio stream's sources (left and right); highs < 0 takes it off.
 void Muffle(float highs)
 {
@@ -208,6 +251,8 @@ void Hook_SetStreamedVolumeAndPan(uint8_t *samples, uint8_t volume, uint8_t pan,
 		}
 	}
 	orig_SetStreamedVolumeAndPan(samples, volume, pan, effect, stream);
+	if (stream == kMusicStream && gCar)
+		Place(); // (after SetPan, which spread them out again)
 }
 
 // Every frame of the game's music (not while paused): is his radio moving on?
@@ -263,14 +308,25 @@ void Hook_ServiceGameMode(uint8_t *music)
 	const int16_t oldLB = PadOld(pad, kPadLB);
 	if (gCar)
 		PadOld(pad, kPadLB) = PadNew(pad, kPadLB);
+	// Another car than the one it was playing (his own once he's in, after the
+	// one he heard outside): that car's radio, from its start, not the station on.
+	uint8_t *heard = player && PedInVehicle(player) ? PedVehicle(player) : gCar;
+	if (heard && gHeard && heard != gHeard)
+		music[kGameplayAllowsRadio] = 0;
+	gHeard = heard;
 	gDeciding = true;
 	orig_ServiceGameMode(music);
 	gDeciding = false;
 	if (gCar)
 		PadOld(pad, kPadLB) = oldLB;
 	// Again every frame: he moves while the music manager sets the volume only now and then.
-	if (gCar && gHaveVolume)
+	if (gCar && gHaveVolume) {
 		orig_SetStreamedVolumeAndPan(gSampleManager, uint8_t(gVolume * gGain), gPan, gEffect, kMusicStream);
+		Place();
+	} else if (gPlaced && gHaveVolume) { // (his own radio again: SetPan puts its two sides back)
+		orig_SetStreamedVolumeAndPan(gSampleManager, gVolume, 63, gEffect, kMusicStream);
+		gPlaced = false;
+	}
 	Muffle(gCar ? gHighs : -1.0f);
 	Watch(music, player);
 }
@@ -288,6 +344,7 @@ bool Install()
 	alFilteri = reinterpret_cast<decltype(alFilteri)>(dlsym(RTLD_DEFAULT, "alFilteri"));
 	alFilterf = reinterpret_cast<decltype(alFilterf)>(dlsym(RTLD_DEFAULT, "alFilterf"));
 	alSourcei = reinterpret_cast<decltype(alSourcei)>(dlsym(RTLD_DEFAULT, "alSourcei"));
+	alSource3f = reinterpret_cast<decltype(alSource3f)>(dlsym(RTLD_DEFAULT, "alSource3f"));
 	IsOpenTopCar = reinterpret_cast<decltype(IsOpenTopCar)>(dlsym(RTLD_MAIN_ONLY, "_ZN11CAutomobile12IsOpenTopCarEv"));
 	IsDoorClosed = reinterpret_cast<decltype(IsDoorClosed)>(dlsym(RTLD_MAIN_ONLY, "_ZN11CAutomobile12IsDoorClosedE6eDoors"));
 	IsDoorMissing =

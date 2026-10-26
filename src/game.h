@@ -457,6 +457,13 @@ inline bool IsAircraft(const uint8_t *vehicle)
 		return *reinterpret_cast<const int32_t *>(vehicle + 0x348) == 4; // m_vehType: plane
 	}
 }
+// CVehicle::m_fHealth (1000 new; the CVehicle constructor, CAutomobile::BlowUpCar):
+// on fire under 250, and it blows up 5 s later (CAutomobile::ProcessControl);
+// smoking black under 390. A wreck (status 5, bits 3-7 of +0x60) has blown up.
+constexpr float kVehicleOnFire = 250.0f, kVehicleSmoking = 390.0f;
+inline float VehicleHealth(const uint8_t *vehicle) { return *reinterpret_cast<const float *>(vehicle + 0x2a0); }
+inline bool Wrecked(const uint8_t *vehicle) { return (vehicle[0x60] >> 3) == 5; }
+inline bool OnFire(const uint8_t *vehicle) { return !Wrecked(vehicle) && VehicleHealth(vehicle) < kVehicleOnFire; }
 
 // CPlayerPed weapons (see CPlayerPed::ProcessWeaponSwitch): 10 CWeapon slots of
 // 0x18 bytes at +0x550 (type, state, ammo in clip at +8, total ammo at +0xc),

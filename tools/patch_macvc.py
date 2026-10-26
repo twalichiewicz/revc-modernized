@@ -116,6 +116,16 @@ DEFAULT_HOOKS = [
     "_ZN8CCarCtrl14ChooseCarModelEi",
     "_ZN9CRenderer21SetupEntityVisibilityEP7CEntity",
     "_ZN7CWeapon4FireEP7CEntityP7CVector",
+    # gunmen: cover and moving
+    "_ZN4CPed19KillCharOnFootArmedER7CVectorS1_S1_",
+    # the police helicopter: hits where it is, smoke, less health
+    "_ZN7CWeapon14DoBulletImpactEP7CEntityS1_P7CVectorS3_P9CColPoint9CVector2D",
+    "_ZN5CHeli19TestBulletCollisionEP7CVectorS1_S1_i",
+    "_ZN5CHeli15PreRenderAlwaysEv",
+    # ... no belly gun, SWAT in its doors, searching where he was seen (the wanted overhaul)
+    "_ZN5CHeli14ProcessControlEv",
+    # police come by car, not made on foot near a wanted player
+    "_ZN11CPopulation15AddToPopulationEffff",
     # clouds and lighting; the port's ray-traced shadows' reports
     "_Z9re3_debugPKcz",
     "_ZN7CClouds6RenderEv",

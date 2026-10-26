@@ -26,5 +26,9 @@ CVector AimDirection();
 void Draw();
 // From CPed::PreRender (player.cpp), before the skeleton is rebuilt: his arm points at the crosshair.
 void PreRender(uint8_t *ped);
+// Also from CPed::PreRender: flying an aircraft, no gun in his hand (the game
+// puts his SMG there in any vehicle, for drive-bys, which a pilot can't do),
+// and it's back once he's out.
+void PilotHolster(uint8_t *ped);
 
 } // namespace driveby

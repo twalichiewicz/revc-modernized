@@ -38,6 +38,15 @@ const char kDefaultIni[] = "; VC Modern HUD for macVC. Delete this file to resto
                            "Credit=1             ; buy a business with a quarter down, the rest paid from your businesses' income\n"
                            "Swimming=1           ; Tommy swims instead of drowning\n"
                            "Climbing=1           ; jump vaults low walls, climbs ledges and climbs out of the water\n"
+                           "CrouchWalk=1         ; crouched, Tommy walks crouched instead of standing up\n"
+                           "SmarterEnemies=1     ; gunmen take cover, shoot over it and move about between bursts\n"
+                           "BulletTime=1         ; aiming: R3 slows time (uses stamina); jump with the stick dives\n"
+                           "HeliDamage=1         ; the police helicopter takes hits where it is, smokes, and goes down sooner\n"
+                           "HeliGunners=1        ; police helicopters with SWAT door gunners instead of a belly gun, two from 4 stars, the Hunter at 6\n"
+                           "CopsByCar=1          ; wanted on foot, police arrive by car instead of appearing on foot nearby\n"
+                           "SmarterPolice=1      ; police units all over the city sent to you by road, more the longer it lasts\n"
+                           "Roadblocks=1         ; from two stars, roadblocks round where you are, more and heavier as it goes on\n"
+                           "RealisticWanted=1    ; police know you by what they've seen: witnesses, your clothes and car, a search, an APB until you save\n"
                            "Clouds=1             ; volumetric clouds instead of the flat cloud sprites\n"
                            "ModernLighting=1     ; bloom, sun shafts, filmic highlights and a touch of contrast\n"
                            "LightGlow=1          ; cars' brake, reverse and headlights glow on the model\n"
@@ -112,6 +121,24 @@ void Apply(const char *key, const char *value)
 		gConfig.swim = b;
 	else if (!strcasecmp(key, "Climbing"))
 		gConfig.climb = b;
+	else if (!strcasecmp(key, "CrouchWalk"))
+		gConfig.crouchWalk = b;
+	else if (!strcasecmp(key, "SmarterEnemies"))
+		gConfig.smarterEnemies = b;
+	else if (!strcasecmp(key, "BulletTime"))
+		gConfig.bulletTime = b;
+	else if (!strcasecmp(key, "HeliDamage"))
+		gConfig.heliDamage = b;
+	else if (!strcasecmp(key, "HeliGunners"))
+		gConfig.heliGunners = b;
+	else if (!strcasecmp(key, "CopsByCar"))
+		gConfig.copsByCar = b;
+	else if (!strcasecmp(key, "SmarterPolice"))
+		gConfig.smarterPolice = b;
+	else if (!strcasecmp(key, "Roadblocks"))
+		gConfig.roadblocks = b;
+	else if (!strcasecmp(key, "RealisticWanted"))
+		gConfig.realisticWanted = b;
 	else if (!strcasecmp(key, "FirstPerson"))
 		gConfig.firstPerson = b;
 	else if (!strcasecmp(key, "CameraShake"))

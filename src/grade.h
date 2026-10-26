@@ -8,5 +8,7 @@
 namespace grade {
 
 bool Install();
+// How much of bullet time's look (0..1: less colour, a deeper vignette).
+void SlowMotion(float amount);
 
 } // namespace grade

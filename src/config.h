@@ -30,6 +30,15 @@ struct Config {
 	bool credit = true;         // buy a business with a quarter of its price down, the rest out of its income
 	bool swim = true;           // Tommy swims instead of drowning
 	bool climb = true;          // the jump button vaults, climbs ledges and climbs out of the water
+	bool crouchWalk = true;     // crouched, he walks crouched instead of standing up
+	bool smarterEnemies = true; // gunmen take cover, shoot over it and move between bursts
+	bool bulletTime = true;     // aiming: the right stick's click slows time, jump with the stick dives
+	bool heliDamage = true;     // the police helicopter takes hits where it is, smokes, and goes down sooner
+	bool heliGunners = true;    // SWAT in the police helicopters' doors (no belly gun), two from 4 stars, the Hunter at 6
+	bool copsByCar = true;      // wanted on foot, police arrive by car instead of appearing on foot nearby
+	bool smarterPolice = true;  // police units spread over the city, sent by road, more the longer it goes on
+	bool roadblocks = true;     // from two stars, roadblocks on the roads out of a ring about you, heavier as it goes on
+	bool realisticWanted = true; // police know you by what they've seen: witnesses, your clothes and car, a search, an APB
 	bool clouds = true;         // volumetric clouds instead of the flat cloud sprites
 	bool modernLighting = true; // bloom, sun shafts, filmic highlights and a touch of contrast
 	bool lightGlow = true;      // cars' brake, reverse and headlights glow on the model

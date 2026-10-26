@@ -610,6 +610,19 @@ uint16_t *Hook_TextGet(uint8_t *text, const char *key)
 	uint16_t *found = orig_TextGet(text, key);
 	if (found != gWideError || !key)
 		return found;
+	// The lookup is case-sensitive and the keys are capitals, but default.ide
+	// names the police car POLIcar (the vehicle name read "missing").
+	char upper[16];
+	size_t n = 0;
+	bool lower = false;
+	for (; key[n] && n + 1 < sizeof upper; n++) {
+		lower |= key[n] >= 'a' && key[n] <= 'z';
+		upper[n] = char(key[n] >= 'a' && key[n] <= 'z' ? key[n] - 'a' + 'A' : key[n]);
+	}
+	upper[n] = 0;
+	if (lower && !key[n])
+		if (uint16_t *again = orig_TextGet(text, upper); again != gWideError)
+			return again;
 	static uint16_t wide[sizeof kExtraText / sizeof kExtraText[0]][64];
 	for (size_t i = 0; i < sizeof kExtraText / sizeof kExtraText[0]; i++)
 		if (!strcmp(key, kExtraText[i].key)) {

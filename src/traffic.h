@@ -15,6 +15,10 @@
 // a class with one model loaded fills the street with it. More models stay
 // loaded, they turn over every 1.5 s or so, and a model that's already on
 // the road several times is passed over for another loaded one.
+//
+// Police: wanted on foot, cops come by car, not made on foot near him
+// (CPopulation::AddToPopulation): it had them appear on any path for people
+// out of sight, inside walls with him too.
 #include <cstdint>
 
 namespace traffic {

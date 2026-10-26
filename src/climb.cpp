@@ -321,29 +321,6 @@ CVector Path(float s)
 	}
 }
 
-// Two-bone reach: the elbow, bent towards `pole`, for the hand at `hand` (it
-// stops short where the arm can't reach).
-void Reach(body::Pose &p, Bone upper, Bone fore, CVector hand, const CVector &pole, float weight)
-{
-	if (weight <= 0.0f)
-		return;
-	const CVector shoulder = Joint(p, upper);
-	const float a = Length(upper), b = Length(fore);
-	CVector d = Sub(hand, shoulder);
-	const float len = std::clamp(std::sqrt(Dot(d, d)), std::fabs(a - b) + 0.01f, a + b - 0.002f);
-	const CVector u = Normalised(d);
-	hand = Add(shoulder, Scale(u, len));
-	const float x = (a * a - b * b + len * len) / (2 * len), y = std::sqrt(std::max(0.0f, a * a - x * x));
-	const CVector v = Normalised(Sub(pole, Scale(u, Dot(pole, u))));
-	const CVector elbow = Add(shoulder, Add(Scale(u, x), Scale(v, y)));
-	body::Pose reached = p;
-	Point(reached, upper, Sub(elbow, shoulder));
-	Point(reached, fore, Sub(hand, elbow));
-	const body::Pose mixed = Mix(p, reached, weight);
-	p.Turn(upper, mixed.turn[upper]);
-	p.Turn(fore, mixed.turn[fore]);
-}
-
 void Leg(body::Pose &p, Bone thigh, Bone calf, float hip, float knee, float swing = 0)
 {
 	p.Turn(thigh, Z(swing) * X(hip));

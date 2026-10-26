@@ -7,7 +7,10 @@
 #include "hooks.h"
 #include "log.h"
 #include "menu.h"
+#include "shapes.h"
 #include "text.h"
+#include "wanted.h"
+#include "wantedhud.h"
 
 #include <algorithm>
 #include <cmath>
@@ -34,6 +37,7 @@ constexpr CallSite kScaleSites[] = {{0x1f89dc, kAmmo}, {0x1fa4b8, kClock}};
 constexpr CallSite kDrawSites[] = {{0x1f8800, kWeapon}, {0x1f8968, kWeapon}};
 // The third-person (free-aim camera) crosshair: the M4, Ruger and M60's, and every other gun's.
 constexpr uint32_t kCrosshairSites[] = {0x1f7be8, 0x1fc714};
+constexpr float kCrosshairScale = 0.5f; // of the game's size, while aiming
 
 constexpr float kWeaponScale = 0.5f;
 // Our stars, in the clock's font scale (CHud::Draw gives both 0.7 x 1.25 units).
@@ -41,6 +45,8 @@ constexpr float kStarScale = 0.5f;
 constexpr int kStarSlots = 6;
 constexpr float kStarSpacing = 23.0f / 0.7f; // the vanilla row: 23 units apart at a 0.7 scale
 constexpr uint32_t kStarFlashMs = 2000;      // a new star blinks (CHud::Draw)
+constexpr float kStarInner = 0.45f;          // a star's inner corners, of the way to its points
+constexpr float kStarBorder = 1.5f;          // px at 1080p: the wanted icons' rims (wantedhud.cpp)
 constexpr float kStarsIn = 0.25f, kStarsOut = 0.4f; // seconds
 constexpr float kClockScale = 0.3f; // relative to the vanilla clock
 constexpr CRGBA kClockText{240, 242, 245, 255};
@@ -256,6 +262,15 @@ __attribute__((noinline)) void Hook_DrawUV(const CSprite2d *sprite, const float 
 		gDotCanvas.Flush();
 		return;
 	}
+	if (gCrosshairOnlyWhenAiming && (site == kCrosshairSites[0] || site == kCrosshairSites[1])) {
+		// Smaller than the game's: it read as a wide spread.
+		const float cx = *api.crosshairMultX * ScreenWidth(), cy = *api.crosshairMultY * ScreenHeight();
+		float scaled[4];
+		for (int i = 0; i < 4; i++)
+			scaled[i] = i % 2 == 0 ? cx + (rect[i] - cx) * kCrosshairScale : cy + (rect[i] - cy) * kCrosshairScale;
+		orig_DrawUV(sprite, scaled, col, u0, v0, u1, v1, u3, v3, u2, v2);
+		return;
+	}
 	if (gActive && Find(kDrawSites, __builtin_return_address(0)) == kWeapon) {
 		// CRect: x at 0 and 8, y at 4 and 12 (whichever order the fields are in).
 		if (!gWeaponAnchorThisFrame) {
@@ -305,7 +320,10 @@ void BeginFrame(bool minimapShown)
 	const uint32_t now = *api.timeMs;
 	const float dt = gLastStarsMs && now >= gLastStarsMs ? std::min(now - gLastStarsMs, 100u) / 1000.0f : 0.0f;
 	gLastStarsMs = now;
-	const int level = gActive && gWantedColour ? WantedLevel(PlayerWanted()) : 0;
+	// Under the overhaul, the stars the police have on him (they stay up, hollow, under the APB).
+	const int level = !gActive || !gWantedColour ? 0
+	                  : wanted::Active()         ? wanted::ShownStars()
+	                                             : WantedLevel(PlayerWanted());
 	if (level > 0)
 		gStarsLevel = std::min(level, kStarSlots);
 	gStars = Fade(gStars, level > 0, dt, kStarsIn, kStarsOut);
@@ -318,29 +336,45 @@ void DrawWanted()
 		return;
 	const uint8_t *wanted = PlayerWanted();
 	const uint32_t now = *api.timeMs;
-	// For two seconds after it goes up, the stars he has blink (to the unlit colour here).
+	// For two seconds after it goes up, the stars he has blink (to unlit).
 	const bool blinkOff = WantedLevel(wanted) > 0 && now <= WantedChangedAt(wanted) + kStarFlashMs && (now / 130) % 2;
 	const float a = Smooth(gStars), H = float(ScreenHeight());
 	const text::Style base = StarStyle({255, 255, 255, 255});
-	float top, bottom;
-	text::LineExtent(base, 0.0f, top, bottom);
 	const float glyph = text::Width(">", base), edge = std::max(1.0f, H / 540.0f);
 	const float spacing = std::max(base.scaleX * kStarSpacing, glyph + 3 * edge);
-	const float right = ScreenWidth() - Margin(), y = Margin() - top;
-	// Right to left, as the game fills them; every outline first so none covers a star.
-	const text::Style outline = StarStyle({0, 0, 0, uint8_t(215 * a)});
-	for (int i = 0; i < kStarSlots; i++) {
-		const float x = right - glyph - i * spacing;
-		for (int dy = -1; dy <= 1; dy++)
-			for (int dx = -1; dx <= 1; dx++)
-				if (dx || dy)
-					text::Draw(x + dx * edge, y + dy * edge, ">", outline);
+	const float r = glyph * 0.56f, right = ScreenWidth() - Margin(), cy = Margin() + r;
+	const float border = kStarBorder * H / 1080.0f; // (as the wanted icons' rims)
+	// As GTA IV and V have them: white while they're on him, pulsing grey while
+	// they search, hollow (a white rim) under the APB; unlit ones faint.
+	const wanted::StarLook look = wanted::Active() ? wanted::Look() : wanted::StarLook::Filled;
+	const float pulse = 0.5f + 0.5f * std::sin(float(now % 1600) / 1600.0f * 6.2831853f);
+	const uint8_t grey = uint8_t(120 + 80 * pulse);
+	auto alpha = [a](float k) { return uint8_t(std::clamp(255.0f * a * k, 0.0f, 255.0f)); };
+	SetHudRenderStates();
+	gDotCanvas.SetTexture(nullptr);
+	for (int i = 0; i < kStarSlots; i++) { // right to left, as the game fills them
+		const Vec2 at{right - glyph / 2 - i * spacing, cy};
+		const bool lit = i < gStarsLevel && !blinkOff;
+		const std::vector<Vec2> star = shapes::Star(at, r, kStarInner);
+		shapes::Fill(gDotCanvas, shapes::Grow(star, border), {0, 0, 0, alpha(lit ? 0.85f : 0.22f)}); // its border
+		if (!lit) {
+			shapes::Fill(gDotCanvas, star, {30, 30, 30, alpha(0.18f)});
+			continue;
+		}
+		switch (look) {
+		case wanted::StarLook::Filled:
+			shapes::Fill(gDotCanvas, star, {255, 255, 255, alpha(1.0f)});
+			break;
+		case wanted::StarLook::Dim:
+			shapes::Fill(gDotCanvas, star, {grey, grey, grey, alpha(1.0f)});
+			break;
+		case wanted::StarLook::Hollow:
+			shapes::Fill(gDotCanvas, star, {255, 255, 255, alpha(1.0f)});
+			shapes::Fill(gDotCanvas, shapes::Star(at, r * 0.52f, kStarInner), {15, 15, 15, alpha(0.85f)});
+			break;
+		}
 	}
-	for (int i = 0; i < kStarSlots; i++) {
-		const CRGBA c = i < gStarsLevel && !blinkOff ? *gWantedColour : *gNotWantedColour;
-		text::Draw(right - glyph - i * spacing, y, ">", StarStyle({c.r, c.g, c.b, uint8_t(255 * a)}));
-	}
-	text::Flush();
+	gDotCanvas.Flush();
 }
 
 void DrawClock(Canvas &canvas, float mapX, float mapY, float mapW, float mapH)
@@ -423,9 +457,10 @@ void DrawPills(Canvas &canvas, float mapX, float mapY, float mapW, float mapH, b
 	if (!gActive || !gHaveClockScale || gMoneyAlpha <= 0.0f)
 		return;
 
-	// They stack upwards from the map's bottom edge, just right of it.
+	// They stack upwards from the map's bottom edge, just right of it (over the wanted icons).
 	const float x = mapX + mapW + std::max(4.0f, mapH * 0.035f), gap = std::max(2.0f, mapH * 0.02f);
-	float bottom = mapY + mapH;
+	const float icons = wantedhud::RowHeight(mapH);
+	float bottom = mapY + mapH - (icons > 0.0f ? icons + 6.0f * ScreenHeight() / 1080.0f : 0.0f);
 	char label[32];
 	FormatMoney(VisibleMoney(info), label, sizeof label);
 	bottom -= Pill(canvas, x, bottom, label, {255, 255, 255, 255}, gMoneyAlpha) + gap;

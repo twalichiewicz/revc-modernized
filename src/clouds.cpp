@@ -18,6 +18,8 @@ constexpr float kLeanX = 260.0f, kLeanY = 90.0f; // how far the tops lean downwi
 constexpr float kSigma = 0.09f;                  // extinction at density 1, per m (crisp edges)
 constexpr float kLightAbsorption = 0.2f;         // of it, towards the sun (more light gets in, as it scatters on)
 constexpr float kErode = 0.6f;                   // how much the detail eats the edges
+// Where they are narrows over the bottom of the layer, and towards each one's top (of its height).
+constexpr float kRoundUnder = 0.15f, kRoundOver = 0.55f;
 constexpr float kMaxDistance = 50000.0f, kMaxSpan = 12000.0f, kHaze = 16000.0f;
 constexpr float kWindX = 7.0f, kWindY = 3.0f; // m/s
 constexpr float kStride = 120.0f, kStrideGrowth = 0.025f; // m between samples outside cloud (and per m away)
@@ -157,17 +159,21 @@ float Density(const Noise &n, const Weather &weather, float px, float py, float 
 	float wx, wy;
 	Wind(weather.time, wx, wy);
 	const float qx = px + wx, qy = py + wy;
+	// The weather map leans with height too (so their sides do), and where
+	// they are narrows near the bottom and the top: rounded undersides and
+	// domes, not flat-bottomed blocks with straight sides.
+	const float lx = (qx + kLeanX * h) / kWeatherTile, ly = (qy + kLeanY * h) / kWeatherTile;
+	const float type = Saturate(Sample2(n.weather, kWeatherSize, lx, ly, 1) + weather.rain * 0.5f);
+	const float top = Lerp(0.3f, 1.0f, type), up = Saturate(h / top);
 	const float cover = weather.cover;
-	const float coverage =
-	    Smoothstep(1.0f - cover, 1.0f - cover + 0.3f, Sample2(n.weather, kWeatherSize, qx / kWeatherTile, qy / kWeatherTile, 0));
+	const float coverage = Smoothstep(1.0f - cover, 1.0f - cover + 0.3f, Sample2(n.weather, kWeatherSize, lx, ly, 0)) *
+	                       Smoothstep(0.0f, kRoundUnder, h) * (1.0f - Smoothstep(kRoundOver, 1.0f, up));
 	if (coverage <= 0.0f)
 		return 0.0f;
-	const float type = Saturate(Sample2(n.weather, kWeatherSize, qx / kWeatherTile, qy / kWeatherTile, 1) + weather.rain * 0.5f);
 	const float su = (qx + kLeanX * h) / kShapeTile, sv = (qy + kLeanY * h) / kShapeTile,
 	            sw = (h * (kTop - kBase) + weather.time * 0.5f) / kShapeTile;
 	const float fbm = Sample3(n.shape, kShapeSize, su, sv, sw, 1) * 0.625f + Sample3(n.shape, kShapeSize, su, sv, sw, 2) * 0.25f +
 	                  Sample3(n.shape, kShapeSize, su, sv, sw, 3) * 0.125f;
-	const float top = Lerp(0.3f, 1.0f, type), up = Saturate(h / top);
 	const float profile = Smoothstep(0.0f, 0.07f, h) * (1.0f - up * up);
 	float base = Remap(Sample3(n.shape, kShapeSize, su, sv, sw, 0), fbm - 1.0f, 1.0f, 0.0f, 1.0f) * profile;
 	base = Saturate(Remap(base, 1.0f - coverage, 1.0f, 0.0f, 1.0f)) * coverage;
@@ -190,10 +196,11 @@ std::string Constants()
 	         "const float kShapeTile = %.1f, kDetailTile = %.1f, kWeatherTile = %.1f;\n"
 	         "const vec2 kLean = vec2(%.1f, %.1f);\n"
 	         "const float kSigma = %.4f, kLightAbsorption = %.3f, kErode = %.3f;\n"
+	         "const float kRoundUnder = %.3f, kRoundOver = %.3f;\n"
 	         "const float kMaxDistance = %.1f, kMaxSpan = %.1f, kHaze = %.1f;\n"
 	         "const float kStride = %.1f, kStrideGrowth = %.4f;\n"
 	         "const int kSteps = %d, kLightSteps = %d, kShapeSize = %d, kDetailSize = %d;\n",
-	         kPlanet, kBase, kTop, kShapeTile, kDetailTile, kWeatherTile, kLeanX, kLeanY, kSigma, kLightAbsorption, kErode, kMaxDistance, kMaxSpan,
+	         kPlanet, kBase, kTop, kShapeTile, kDetailTile, kWeatherTile, kLeanX, kLeanY, kSigma, kLightAbsorption, kErode, kRoundUnder, kRoundOver, kMaxDistance, kMaxSpan,
 	         kHaze, kStride, kStrideGrowth, kSteps, kLightSteps, kShapeSize, kDetailSize);
 	return s;
 }
@@ -244,17 +251,21 @@ float Density(vec3 p, float h, bool detail, float size)
 	if (h <= 0.0 || h >= 1.0)
 		return 0.0;
 	vec2 q = p.xy + u_cloudWind.xy;
-	vec2 weather = textureLod(u_weather, q / kWeatherTile, 0.0).rg;
+	// The weather map leans with height too (so their sides do), and where
+	// they are narrows near the bottom and the top: rounded undersides and
+	// domes, not flat-bottomed blocks with straight sides.
+	vec2 weather = textureLod(u_weather, (q + kLean * h) / kWeatherTile, 0.0).rg;
+	float type = Saturate(weather.g + u_cloudView.z * 0.5);
+	float top = mix(0.3, 1.0, type), up = Saturate(h / top);
 	float cover = u_cloudView.y;
-	float coverage = smoothstep(1.0 - cover, 1.0 - cover + 0.3, weather.r);
+	float coverage = smoothstep(1.0 - cover, 1.0 - cover + 0.3, weather.r) * smoothstep(0.0, kRoundUnder, h) *
+	                 (1.0 - smoothstep(kRoundOver, 1.0, up));
 	if (coverage <= 0.0)
 		return 0.0;
-	float type = Saturate(weather.g + u_cloudView.z * 0.5);
 	vec3 s3 = vec3(q + kLean * h, h * (kTop - kBase) + u_cloudView.x * 0.5) / kShapeTile;
 	vec4 s = textureLod(u_shape, s3, max(log2(size * float(kShapeSize) / kShapeTile), 0.0));
 	float fbm = s.g * 0.625 + s.b * 0.25 + s.a * 0.125;
-	// Flat bottoms, narrowing upwards into domes and towers (lower for flatter kinds).
-	float top = mix(0.3, 1.0, type), up = Saturate(h / top);
+	// Narrowing upwards into domes and towers (lower for flatter kinds).
 	float profile = smoothstep(0.0, 0.07, h) * (1.0 - up * up);
 	float base = Remap(s.r, fbm - 1.0, 1.0, 0.0, 1.0) * profile;
 	base = Saturate(Remap(base, 1.0 - coverage, 1.0, 0.0, 1.0)) * coverage;

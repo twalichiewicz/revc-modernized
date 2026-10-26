@@ -16,10 +16,15 @@
 // open, the radar mode is not "map & blips", or the minimap is disabled.
 // The rest of the HUD is in hud.cpp, the pause menu in menu.cpp.
 #include "aimcam.h"
+#include "alert.h"
 #include "anims.h"
 #include "camera.h"
 #include "carlights.h"
 #include "carradio.h"
+#include "combat.h"
+#include "shootdodge.h"
+#include "heli.h"
+#include "hunter.h"
 #include "steering.h"
 #include "driveby.h"
 #include "config.h"
@@ -35,6 +40,7 @@
 #include "menu.h"
 #include "minimap.h"
 #include "phone.h"
+#include "police.h"
 #include "grade.h"
 #include "places.h"
 #include "player.h"
@@ -52,6 +58,9 @@
 #include "rumble.h"
 #include "scene.h"
 #include "wheel.h"
+#include "wanted.h"
+#include "wantedhud.h"
+#include "watch.h"
 
 #include <algorithm>
 #include <chrono>
@@ -355,9 +364,32 @@ void Hook_DrawRadarMap()
 	gScene.buildingScale = gConfig.buildingScale;
 	gScene.route = route;
 	DrawScene(gCanvas, gProj, gScene);
+	wantedhud::DrawOnMap(
+	    gCanvas,
+	    [](const Vec2 *world, int n, CRGBA col) { // clipped to the map, as the fallback tiles are
+		    ClipVert in[12], clipped[16];
+		    n = std::min(n, 12);
+		    for (int i = 0; i < n; i++)
+			    in[i] = {WorldToGround(world[i].x, world[i].y), world[i]};
+		    const int m = gProj.ClipPolygon(in, n, clipped);
+		    Vtx v[16];
+		    for (int i = 0; i < m; i++) {
+			    Vec2 px;
+			    if (!gProj.GroundToScreen(clipped[i].g, px))
+				    return;
+			    v[i] = {px.x, px.y, 0, 0};
+		    }
+		    if (m >= 3)
+			    gCanvas.Fan(v, m, col);
+	    },
+	    [](float x, float y, Vec2 &out) {
+		    const Vec2 g = WorldToGround(x, y);
+		    return gProj.Inside(g) && gProj.GroundToScreen(g, out);
+	    });
 	DrawStatusBars();
 	hud::DrawClock(gCanvas, gProj.X(), gProj.Y(), gProj.W(), gProj.H());
 	hud::DrawPills(gCanvas, gProj.X(), gProj.Y(), gProj.W(), gProj.H(), Clock::now() < gExpandedUntil);
+	wantedhud::Draw(gCanvas, gProj.X(), gProj.Y(), gProj.W(), gProj.H());
 	gMapDrawn = true;
 	gLastMapMs = std::max(*api.timeMs, 1u);
 }
@@ -378,6 +410,8 @@ void Hook_HudDraw()
 	menu::OnGameplayFrame();
 	orig_HudDraw();
 	hud::DrawWanted();
+	SetHudRenderStates();
+	wantedhud::DrawEyes(gCanvas);
 	driveby::Draw();
 	radiohud::Draw();
 	credit::Update();
@@ -522,6 +556,7 @@ __attribute__((constructor)) void Init()
 	LogOpen((SupportDir() + "/vcmodernhud.log").c_str());
 	Log("VC Modern HUD loaded");
 	LoadConfig(); // gConfig is constant-initialised, so this survives static init
+	watch::Install();
 	if (!hooks::Init(kBuildUuid) || !Resolve()) {
 		Log("staying vanilla");
 		return;
@@ -583,6 +618,16 @@ __attribute__((constructor)) void Init()
 		Log("traffic: hook missing (re-run install.sh); car models are picked as before");
 	if (!carlights::Install())
 		Log("carlights: hook missing (re-run install.sh); cars' light boxes stay");
+	if (!combat::Install())
+		Log("combat: the world's line-of-sight test is missing; enemies shoot as the game has them");
+	if (!heli::Install())
+		Log("heli: hooks missing (re-run install.sh); the police helicopter takes hits as the game has it");
+	hunter::Install();
+	police::Install();
+	wanted::Install();
+	alert::Install();
+	if (!shootdodge::Install())
+		Log("shootdodge: CPed::ClearDuck is missing; no bullet time or dive");
 	if (!steering::Install())
 		Log("steering: functions missing; the steering wheels are the game's own");
 	if (!viewmodel::Install())

@@ -4,6 +4,9 @@
 #include "aimcam.h"
 #include "body.h"
 #include "climb.h"
+#include "combat.h"
+#include "crouch.h"
+#include "shootdodge.h"
 #include "driveby.h"
 #include "game.h"
 #include "hooks.h"
@@ -30,6 +33,8 @@ void Hook_ProcessControl(uint8_t *ped)
 	aimcam::AfterControl(ped, strafed);
 	swim::AfterControl(ped);
 	climb::AfterControl(ped);
+	crouch::AfterControl(ped); // crouched, his walk is its
+	shootdodge::AfterControl(ped); // last: diving, his speed is its
 }
 
 void Hook_ProcessPlayerWeapon(uint8_t *ped, uint8_t *pad)
@@ -45,12 +50,23 @@ void Hook_ProcessPlayerWeapon(uint8_t *ped, uint8_t *pad)
 void Hook_PreRender(uint8_t *ped)
 {
 	if (ped == api.FindPlayerPed()) {
+		driveby::PilotHolster(ped);
 		driveby::PreRender(ped);
 		if ((swim::Posing() || climb::Posing()) && body::Prepare(ped)) {
 			body::Pose pose;
 			float weight = swim::Pose(pose);
 			weight = climb::Pose(pose, weight);
 			body::Apply(ped, pose, weight);
+		} else if (shootdodge::Posing() && body::Prepare(ped)) {
+			body::Pose pose; // laid out in the air; his arms as the game aims them
+			const float weight = shootdodge::Pose(ped, pose);
+			body::ApplyOver(ped, pose, weight);
+		} else if (crouch::Posing() && body::Prepare(ped)) {
+			body::Pose pose; // his legs only: the rest is the game's crouch
+			const float weight = crouch::Pose(ped, pose);
+			body::ApplyOver(ped, pose, weight);
+		} else {
+			aimcam::PoseArms(ped);
 		}
 	}
 	orig_PreRender(ped);
@@ -64,8 +80,10 @@ bool Hook_InflictDamage(uint8_t *ped, uint8_t *by, int32_t weapon, float damage,
 	if (swim::RefusesDamage(ped, weapon))
 		return false;
 	const bool hurt = orig_InflictDamage(ped, by, weapon, damage, piece, direction);
-	if (hurt)
+	if (hurt) {
 		rumble::Damaged(ped, by, weapon, damage);
+		combat::Hurt(ped, by, Health(ped) <= 0.0f);
+	}
 	return hurt;
 }
 

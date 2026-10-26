@@ -18,6 +18,7 @@ namespace {
 
 constexpr float kBloom = 0.6f, kShafts = 0.45f;
 constexpr float kContrast = 0.18f, kSaturation = 1.1f, kVignette = 0.22f, kExposure = 1.0f;
+float gSlowMotion; // 0..1
 
 // Bloom and the sun's shafts are worked out at a quarter of the frame's
 // resolution each way (they're soft anyway): the bright parts of the frame,
@@ -197,7 +198,8 @@ void Hook_RenderMotionBlur(uint8_t *camera)
 	const float shows = SunShows(sky, *gSunX, *gSunY);
 	shaders::Set(uFrame, w, h, kBloom, kShafts);
 	shaders::Set(uSun, *gSunX * w / W, h - *gSunY * h / H, shows);
-	shaders::Set(uLook, kContrast, kSaturation, kVignette, kExposure);
+	// Bullet time: less colour, a deeper vignette.
+	shaders::Set(uLook, kContrast, kSaturation * (1.0f - 0.55f * gSlowMotion), kVignette + 0.3f * gSlowMotion, kExposure);
 
 	const shaders::SavedStates saved;
 	SetHudRenderStates();
@@ -218,6 +220,8 @@ void Hook_RenderMotionBlur(uint8_t *camera)
 }
 
 } // namespace
+
+void SlowMotion(float amount) { gSlowMotion = amount; }
 
 bool Install()
 {
