@@ -35,6 +35,8 @@ constexpr int kBars = 16;
 constexpr int kSettings = 3; // VIBRATION, INVERT LOOK, LOOK SENSITIVITY
 constexpr int kLookSlider = 2;
 constexpr int kMouseRows = 3; // SENSITIVITY, INVERT LOOK, MOUSE STEERING
+constexpr float kHeadingPx = 40; // the page's headings: as tall as the frontend's own rows (scale 1 of 448)
+constexpr float kStripY = 717;   // the pad's settings, clear of Back (at 396 of 448: 796 of the stage)
 
 constexpr CRGBA kPink{255, 150, 225, 255}, kGreen{124, 204, 116, 255}, kAmber{232, 176, 74, 255};
 constexpr CRGBA kWhite{255, 255, 255, 255}, kDim{255, 255, 255, 153}, kBox{0, 0, 0, 158}, kInk{17, 17, 17, 255};
@@ -81,8 +83,8 @@ text::Style Font(int16_t font, float px, CRGBA col)
 		text::LineExtent({font, 1.0f, 1.0f, col}, 0.0f, t, b);
 		unit[font] = b - t > 0 ? b - t : 1.0f;
 	}
-	const float scale = Now().L(px) / unit[font];
-	return {font, scale, scale, col};
+	const cm::TextScale scale = cm::ScaleFor(Now().L(px), unit[font]);
+	return {font, scale.x, scale.y, col};
 }
 
 // Text vertically centred on `cy` (screen pixels), from `x`.
@@ -298,27 +300,28 @@ void ControllerTab(const Stage &st)
 {
 	// The situations
 	static const char *kSituations[] = {"on foot", "driving", "flying", "pause map"};
-	const float headPx = 60, gap = st.L(46);
+	const float headPx = kHeadingPx, gap = st.L(40);
 	float total = 0;
 	for (const char *s : kSituations)
 		total += Width(s, Font(2, headPx, kWhite));
 	total += gap * 3;
 	float x = st.ox + st.L(800) - total / 2;
-	const float cy = st.L(236 + 30);
+	const float cy = st.L(258);
 	for (int i = 0; i < 4; i++) {
 		const bool on = int(gFocus.situation) == i;
 		const float w = Width(kSituations[i], Font(2, headPx, kWhite));
-		gTargets.push_back({x, cy - st.L(30), x + w, cy + st.L(30), Hit::kSituation, i, 0});
+		gTargets.push_back({x, cy - st.L(20), x + w, cy + st.L(20), Hit::kSituation, i, 0});
 		Heading(x, cy, kSituations[i], headPx, on ? kPink : CRGBA{255, 255, 255, 153});
 		if (on && gFocus.area == cm::Area::kSituations)
-			gCanvas.Quad({x, cy + st.L(26)}, {x + w, cy + st.L(26)}, {x + w, cy + st.L(30)}, {x, cy + st.L(30)}, kPink);
+			gCanvas.Quad({x, cy + st.L(17)}, {x + w, cy + st.L(17)}, {x + w, cy + st.L(20)}, {x, cy + st.L(20)}, kPink);
 		x += w + gap;
 	}
 
 	// The pad, its buttons' rows down both sides, a line from each to its button
 	const int family = int(controls::Family());
 	const Picture &pic = kPictures[family];
-	const float picX = 520, picY = 282, picW = 560;
+	const float picX = 590, picY = 250, picW = 420;
+	const float leftDot = picX - 16, rightDot = picX + picW + 16, leftIcon = picX - 64, rightIcon = picX + picW + 22;
 	auto at = [&](Pad p) { return st.P(picX + pic.at[size_t(p)].x * picW / 256, picY + pic.at[size_t(p)].y * picW / 256); };
 	const auto rows = cm::Legend(hints::Switches(), gFocus.situation);
 	int left = 0, right = 0;
@@ -330,14 +333,14 @@ void ControllerTab(const Stage &st)
 	std::vector<Placed> placed;
 	for (const cm::LegendRow &row : rows) {
 		const bool l = LeftSide(row.pad);
-		placed.push_back({&row, l, l ? 392.0f + 50.0f * float(left++) : 392.0f + 46.0f * float(right++)});
+		placed.push_back({&row, l, l ? 336.0f + 46.0f * float(left++) : 336.0f + 44.0f * float(right++)});
 	}
 	for (const Placed &p : placed) { // the lines, and a held button's glow
-		const Vec2 to = at(p.row->pad), from = st.P(p.left ? 504 : 1096, p.y);
-		const Vec2 knee{to.x + (p.left ? -st.L(26) : st.L(26)), from.y};
+		const Vec2 to = at(p.row->pad), from = st.P(p.left ? leftDot : rightDot, p.y);
+		const Vec2 knee{to.x + (p.left ? -st.L(20) : st.L(20)), from.y};
 		const bool held = gFocus.situation != cm::PageSituation::kPauseMap && controls::Down(p.row->pad);
 		if (held)
-			Disc(to, st.L(24), {255, 150, 225, 140});
+			Disc(to, st.L(18), {255, 150, 225, 140});
 		Disc(from, st.L(4.5f), kInk);
 		Line(from, knee, st.L(3), kInk);
 		Line(knee, to, st.L(3), kInk);
@@ -349,7 +352,7 @@ void ControllerTab(const Stage &st)
 		const text::Style label = Font(1, 26, held ? kPink : kWhite);
 		const float cy = st.L(p.y), icon = st.L(40);
 		if (p.left) {
-			const float iconX = st.ox + st.L(456);
+			const float iconX = st.ox + st.L(leftIcon);
 			Icon(p.row->pad, iconX, cy - icon / 2, icon);
 			float textRight = iconX - st.L(10);
 			if (p.row->pad2 != Pad::kNone) {
@@ -358,7 +361,7 @@ void ControllerTab(const Stage &st)
 			}
 			TextAt(textRight - Width(p.row->label, label), cy, p.row->label, label);
 		} else {
-			const float iconX = st.ox + st.L(1102);
+			const float iconX = st.ox + st.L(rightIcon);
 			Icon(p.row->pad, iconX, cy - icon / 2, icon);
 			float textX = iconX + icon + st.L(10);
 			if (p.row->pad2 != Pad::kNone) {
@@ -372,14 +375,14 @@ void ControllerTab(const Stage &st)
 	}
 
 	// The pad's settings
-	gCanvas.Quad(st.P(450, 768), st.P(1460, 768), st.P(1460, 814), st.P(450, 814), kBox);
+	gCanvas.Quad(st.P(450, kStripY - 23), st.P(1460, kStripY - 23), st.P(1460, kStripY + 23), st.P(450, kStripY + 23), kBox);
 	const bool vibration = api.frontEndMenuManager[kVibration] != 0, invert = *api.invertLookForPad != 0;
 	const char *names[kSettings] = {"VIBRATION", "INVERT LOOK", "LOOK SENSITIVITY"};
 	const float slots[kSettings] = {500, 800, 1060};
 	for (int i = 0; i < kSettings; i++) {
 		const bool focused = gFocus.area == cm::Area::kSettings && gFocus.item == i;
 		const text::Style label = Font(1, 24, focused ? kPink : kDim);
-		const Vec2 p = st.P(slots[i], 791);
+		const Vec2 p = st.P(slots[i], kStripY);
 		gTargets.push_back({p.x, p.y - st.L(23), p.x + st.L(i < 2 ? 260 : 400), p.y + st.L(23), Hit::kSetting, i, 0});
 		TextAt(p.x, p.y, names[i], label);
 		const float vx = p.x + Width(names[i], label) + st.L(14);
@@ -412,7 +415,7 @@ void KeyboardTab(const Stage &st)
 	for (int box = 0; box < 2; box++) {
 		const float bx = box == 0 ? 130 : 820, by = 250, bw = 650, bh = 488;
 		gCanvas.Quad(st.P(bx, by), st.P(bx + bw, by), st.P(bx + bw, by + bh), st.P(bx, by + bh), kBox);
-		Heading(st.ox + st.L(bx + 28), st.L(by + 34), sections[size_t(box)].title, 62, kPink);
+		Heading(st.ox + st.L(bx + 28), st.L(by + 34), sections[size_t(box)].title, kHeadingPx, kPink);
 		// Its rows: the section's actions, and in the right box the mouse's heading and settings after them.
 		const int actionRows = int(sections[size_t(box)].actions.size());
 		const int mouseHead = box == 1 ? actionRows : -1; // the line the mouse's heading takes
@@ -430,7 +433,7 @@ void KeyboardTab(const Stage &st)
 			const float cy = st.L(by + 6 + 56 + 42 * float(l - gScroll[box]) + 21);
 			const float lx = st.ox + st.L(bx + 28), vx = st.ox + st.L(bx + 340);
 			if (l == mouseHead) {
-				Heading(lx, cy, "mouse", 62, kPink);
+				Heading(lx, cy, "mouse", kHeadingPx, kPink);
 				continue;
 			}
 			const int r = mouseHead >= 0 && l > mouseHead ? l - 1 : l;
@@ -486,8 +489,14 @@ void TrimList()
 		}
 	for (int i = 0; i < kMenuEntries; i++)
 		memset(MenuPageEntry(kPage, i), 0, kMenuEntrySize);
-	if (found)
-		memcpy(MenuPageEntry(kPage, 0), back, kMenuEntrySize);
+	if (!found)
+		return;
+	// Alone it would take the list's first line; it goes where Audio Setup's is, under its last row.
+	uint8_t *entry = MenuPageEntry(kPage, 0);
+	memcpy(entry, back, kMenuEntrySize);
+	*reinterpret_cast<uint16_t *>(entry + 32) = 320;
+	*reinterpret_cast<uint16_t *>(entry + 34) = 367 + 29;
+	entry[36] = 3;
 }
 
 const uint16_t *Wide(const char *ascii, uint16_t (&out)[32])
@@ -741,6 +750,10 @@ void Draw(uint8_t *)
 	gTargets.clear();
 	SetHudRenderStates();
 	gCanvas.SetTexture(nullptr);
+	// The frontend wraps text at x 630 of a centred 4:3 screen (1381 of the stage): words past it would go on the next line.
+	auto &wrapX = *reinterpret_cast<float *>(api.fontDetails + 0x2c);
+	const float wrap = wrapX;
+	api.FontSetWrapx(float(ScreenWidth()));
 	Pills({"CONTROLLER", "KEYBOARD & MOUSE"}, int(gFocus.tab), 128, 26, 36, gFocus.area == cm::Area::kTabs, st);
 	if (gFocus.tab == cm::Tab::kController) {
 		const cm::Status status = cm::PadStatus(controls::Pads(), controls::GameJoystickId());
@@ -758,6 +771,7 @@ void Draw(uint8_t *)
 	TextAt(st.ox + st.L(1576) - Width(help, style), st.L(876), help, style);
 	gCanvas.Flush();
 	text::Flush(); // the frontend has drawn its text for this frame
+	api.FontSetWrapx(wrap);
 }
 
 bool UserInput(uint8_t *menu)

@@ -1,6 +1,7 @@
 // Unit tests for the Controls page's model: make test
 #include "controlsmodel.h"
 
+#include <cmath>
 #include <cstdio>
 #include <string>
 
@@ -190,6 +191,16 @@ static void TestSituationsWrap()
 	CHECK(Apply(f, Input::kLeft, {3, 40}) && f.situation == PageSituation::kPauseMap);
 }
 
+// The mockup drew a glyph's cell (64x80 of the font sheet) px tall and 0.8 px
+// across; CFont::PrintChar draws it 32 x wide and 20 y tall.
+static void TestTextMatchesMockup()
+{
+	const float height = 26 * 1.2f;                  // 26 stage pixels, 1080 lines
+	const TextScale t = ScaleFor(height, 20.0f);     // GetTextRect's line at scale 1
+	CHECK(std::fabs(20 * t.y - height) < 0.01f);
+	CHECK(std::fabs(32 * t.x - 0.8f * height) < 0.01f);
+}
+
 int main()
 {
 	TestLegendOnFoot();
@@ -211,6 +222,7 @@ int main()
 	TestFocusMovesThroughAreas();
 	TestCaptureEscapeCancels();
 	TestSituationsWrap();
+	TestTextMatchesMockup();
 	if (gFailures) {
 		printf("%d controlsmodel test(s) failed\n", gFailures);
 		return 1;

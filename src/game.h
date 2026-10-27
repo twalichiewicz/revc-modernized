@@ -321,7 +321,9 @@ enum MenuPage : int32_t {
 };
 constexpr size_t kMenuPageSize = 752; // CMenuScreen
 constexpr int kMenuEntries = 18;
-constexpr size_t kMenuEntrySize = 40; // CMenuEntry: action at +0, name[8] at +4, target page at +28
+// CMenuEntry: action at +0, name[8] at +4, target page at +28, x and y at +32 and +34 (uint16, of 640x448;
+// 0: the row above's x, its y + 29), align at +36 (3: centred).
+constexpr size_t kMenuEntrySize = 40;
 inline uint8_t *MenuPageEntry(int32_t page, int entry)
 {
 	return api.menuScreens + size_t(page) * kMenuPageSize + 32 + size_t(entry) * kMenuEntrySize;

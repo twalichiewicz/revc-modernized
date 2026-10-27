@@ -78,6 +78,13 @@ bool Apply(Focus &f, Input in, const Sizes &sizes);
 // Left / right on the focused slider: -1 or +1 bar; else 0.
 int SliderStep(const Focus &f, Input in, const Sizes &sizes);
 
+// CFont's scale for text whose glyphs are `height` screen pixels tall, as the
+// mockup drew them; `lineAtOne` is CFont::GetTextRect's line at scale 1.
+struct TextScale {
+	float x, y;
+};
+TextScale ScaleFor(float height, float lineAtOne);
+
 // A left click while a key is wanted: on the cap that wants it, it's the key
 // (LEFT); on another of the page's targets, it's that target's click; elsewhere,
 // it cancels (a click meant for something else never takes FIRE's button).

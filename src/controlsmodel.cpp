@@ -349,4 +349,11 @@ CaptureClick OnClickWhileCapturing(bool onCap, bool onTarget)
 	return onCap ? CaptureClick::kBind : onTarget ? CaptureClick::kRedirect : CaptureClick::kCancel;
 }
 
+TextScale ScaleFor(float height, float lineAtOne)
+{
+	// CFont::PrintChar's cell is 32 x wide and 20 y tall; the mockup's, 0.8 as wide as it's tall.
+	const float y = height / lineAtOne;
+	return {y * 0.8f * 20 / 32, y};
+}
+
 } // namespace controlsmodel
