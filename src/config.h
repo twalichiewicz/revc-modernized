@@ -13,6 +13,7 @@ struct Config {
 	bool moneyPill = true;      // money next to the map where it can be spent
 	bool pauseTabs = true;      // pause menu opens on the map, other pages as tabs
 	bool compactLegend = true;  // pause map legend shrunk into a corner
+	bool mapIcons = true;       // pause map: the cursor snaps to icons, names them, picks one as the destination
 	bool circleBack = true;     // Circle (B) goes back in menus instead of Triangle (Y)
 	bool wheels = true;         // hold LB: weapon wheel on foot; hold D-pad left/right: radio wheel in a vehicle
 	bool dpadActions = true;    // D-pad: weapons / radio, expanded map, side missions (not movement)
@@ -54,6 +55,7 @@ struct Config {
 	float size = 1.25f;         // minimap height relative to the vanilla radar
 	float aspect = 1.55f;       // width / height
 	ViewParams view;
+	std::string modKeys[16]; // [Keys] MOD_ lines as written, by action - bindings::Action::kWeaponWheel
 };
 
 extern Config gConfig;
@@ -63,3 +65,5 @@ std::string SupportDir();
 
 // Reads vcmodernhud.ini, writing a commented default file if there is none.
 void LoadConfig();
+// Writes one setting into vcmodernhud.ini, the rest of it as it was (the Controls page).
+void SaveValue(const char *section, const char *key, const std::string &value);

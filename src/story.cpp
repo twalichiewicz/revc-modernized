@@ -19,14 +19,14 @@ namespace story {
 // From the scripts: the for-sale signs (the blips "Shakedown" adds), the
 // owned icons, and the flags each storyline's last mission sets.
 const Business kBusinesses[8] = {
-    {"the Print Works", -1059.6f, -274.5f, 24, 273},
-    {"Sunshine Autos", -1007.3f, -869.9f, 26, 628},
-    {"InterGlobal Films", 15.2f, 962.6f, 15, 633},
-    {"the Cherry Popper", -864.3f, -576.6f, 21, 612},
-    {"Kaufman Cabs", -1011.7f, 203.9f, 22, 623},
-    {"the Malibu", 487.2f, -81.5f, 13, 642},
-    {"the boatyard", -685.8f, -1495.6f, 12, 607},
-    {"Pole Position", 99.5f, -1468.5f, 20, 1096},
+    {"the Print Works", "Print Works", -1059.6f, -274.5f, 24, 273},
+    {"Sunshine Autos", "Sunshine Autos", -1007.3f, -869.9f, 26, 628},
+    {"InterGlobal Films", "InterGlobal Films", 15.2f, 962.6f, 15, 633},
+    {"the Cherry Popper", "Cherry Popper", -864.3f, -576.6f, 21, 612},
+    {"Kaufman Cabs", "Kaufman Cabs", -1011.7f, 203.9f, 22, 623},
+    {"the Malibu", "Malibu Club", 487.2f, -81.5f, 13, 642},
+    {"the boatyard", "Boatyard", -685.8f, -1495.6f, 12, 607},
+    {"Pole Position", "Pole Position", 99.5f, -1468.5f, 20, 1096},
 };
 
 namespace {

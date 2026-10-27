@@ -1,10 +1,13 @@
 #include "menu.h"
 #include "config.h"
 #include "controls.h"
+#include "controlspage.h"
 #include "draw.h"
 #include "game.h"
+#include "hints.h"
 #include "hooks.h"
 #include "log.h"
+#include "poi.h"
 #include "text.h"
 
 #include <algorithm>
@@ -99,6 +102,7 @@ int gNumCursor;
 // (top-left gLegendFrom) to the corner (gLegendTo) and scaled.
 bool gLegendBoxKnown; // this frame's legend background has been seen
 bool gInLegend;       // inside CRadar::DrawLegend
+bool gWaypointRow;    // ...drawing the waypoint's row
 Vec2 gLegendFrom, gLegendTo;
 float gLegendScale = kLegendScale; // this frame's (the title is scaled before the box is seen: last frame's)
 
@@ -295,8 +299,10 @@ void MapControl(uint8_t *menu, uint8_t *pad)
 	Vec2 move = StickSpeed(PadNew(pad, kPadLeftStickX), PadNew(pad, kPadLeftStickY), kMapCursorSpeed * H);
 	move.x += float((PadNew(pad, kPadDPadRight) != 0) - (PadNew(pad, kPadDPadLeft) != 0)) * kMapNudgeSpeed * H;
 	move.y += float((PadNew(pad, kPadDPadDown) != 0) - (PadNew(pad, kPadDPadUp) != 0)) * kMapNudgeSpeed * H;
-	cursor.x += move.x * dt;
-	cursor.y += move.y * dt;
+	const bool mapMoving = in > 0.0f || out > 0.0f || pan.x != 0.0f || pan.y != 0.0f;
+	const Vec2 to = poi::Steer({cursor.x, cursor.y}, {move.x * dt, move.y * dt}, mapMoving, dt);
+	cursor.x = to.x;
+	cursor.y = to.y;
 	const float edge = kMapEdge * H;
 	if (cursor.x < edge)
 		cx += edge - cursor.x, cursor.x = edge;
@@ -323,6 +329,44 @@ void MapInputBack(uint8_t *pad)
 	if (gMapInputHeld)
 		std::memcpy(pad, gMapInputSaved, sizeof gMapInputSaved);
 	gMapInputHeld = false;
+}
+
+// Where the map's cursor is: the crosshair, or the mouse's pointer while it's shown.
+Vec2 MapPointer(const uint8_t *menu)
+{
+	if (menu[kShowMouse])
+		return {float(MenuMouseX(menu)), float(MenuMouseY(menu))};
+	return {gMapCrosshair->x, gMapCrosshair->y};
+}
+
+// Cross/A or a right click on an icon makes it the destination (poi.h), out of
+// the game's sight: it would drop its waypoint beside the icon, or only clear
+// the one set elsewhere.
+bool gPressTaken;
+int16_t gCrossSaved;
+uint8_t gRightSaved;
+
+void MapPress(uint8_t *menu, uint8_t *pad)
+{
+	if (!gMapCrosshair || MenuScreen(menu) != kPageMap)
+		return;
+	const bool rightClick = api.newMouseState[1] && !api.oldMouseState[1];
+	if (!(CrossJustDown(pad) || rightClick) || !poi::Press(MapPointer(menu), menu[kShowMouse] != 0))
+		return;
+	gPressTaken = true;
+	gCrossSaved = PadNew(pad, kPadCross);
+	gRightSaved = api.newMouseState[1];
+	PadNew(pad, kPadCross) = 0;
+	api.newMouseState[1] = 0;
+}
+
+void MapPressBack(uint8_t *pad)
+{
+	if (!gPressTaken)
+		return;
+	PadNew(pad, kPadCross) = gCrossSaved;
+	api.newMouseState[1] = gRightSaved;
+	gPressTaken = false;
 }
 
 void DrawTabs(const uint8_t *menu, int current)
@@ -468,6 +512,11 @@ void Hook_DrawBackground(uint8_t *menu, bool transition)
 			MenuOptionCount(menu) = api.GetOptionCount(kPageMap);
 		}
 	}
+	static int32_t lastPage = -1;
+	const bool controlsPage = MenuScreen(menu) == controlspage::kPage;
+	if (controlsPage && lastPage != controlspage::kPage)
+		controlspage::Enter(menu);
+	lastPage = MenuScreen(menu);
 	gLegendBoxKnown = false;
 	const int tab = TabsActive(menu) ? TabOf(MenuScreen(menu)) : -1;
 	gDeferCursor = tab >= 0;
@@ -476,6 +525,10 @@ void Hook_DrawBackground(uint8_t *menu, bool transition)
 	gDeferCursor = false;
 	if (tab >= 0)
 		DrawTabs(menu, tab);
+	if (controlsPage)
+		controlspage::Draw(menu);
+	const bool onMap = gMapCrosshair && MenuScreen(menu) == kPageMap;
+	poi::DrawTooltip(onMap ? MapPointer(menu) : Vec2{0, 0}, menu[kShowMouse] != 0, onMap);
 	for (int i = 0; i < gNumCursor; i++)
 		gSpriteDraw(gCursor[i].sprite, AsRect(gCursor[i].rect), gCursor[i].col);
 	gNumCursor = 0;
@@ -489,8 +542,11 @@ void Hook_UserInput(uint8_t *menu)
 	if (TabsActive(menu))
 		TabInput(menu);
 	MapControl(menu, pad);
-	orig_UserInput(menu);
+	MapPress(menu, pad);
+	if (MenuScreen(menu) != controlspage::kPage || !controlspage::UserInput(menu))
+		orig_UserInput(menu);
 	MapInputBack(pad);
+	MapPressBack(pad);
 	if (gCircleBack)
 		SwapTriangleCircle(pad);
 }
@@ -498,6 +554,8 @@ void Hook_UserInput(uint8_t *menu)
 void Hook_ProcessUserInput(uint8_t *menu, uint8_t down, uint8_t up, uint8_t select, uint8_t back, int8_t change)
 {
 	const int32_t page = MenuScreen(menu);
+	if (page == controlspage::kPage)
+		controlspage::ProcessInput(menu, down, up, select, back, change);
 	// On the pause map Cross (A on Xbox pads) already toggles the waypoint in
 	// AdditionalOptionInput; it must not also select the page's only item, "Back".
 	if (select && page == kPageMap && CrossJustDown(api.GetPad(0)))
@@ -539,9 +597,11 @@ void Hook_Draw2DPolygon(float x1, float y1, float x2, float y2, float x3, float 
 
 void Hook_DrawLegend(int x, int y, int id)
 {
+	gWaypointRow = id == poi::kSpriteWaypoint && gConfig.mapIcons;
 	gInLegend = gLegendOn && gLegendBoxKnown;
 	if (!gInLegend) {
 		orig_DrawLegend(x, y, id);
+		gWaypointRow = false;
 		return;
 	}
 	// The entries wrap at a fixed x that the moved text could run past.
@@ -551,6 +611,7 @@ void Hook_DrawLegend(int x, int y, int id)
 	orig_DrawLegend(x, y, id);
 	api.FontSetWrapx(saved);
 	gInLegend = false;
+	gWaypointRow = false;
 }
 
 // Text reVC added for its own menus and messages, which the port's text files
@@ -607,6 +668,15 @@ const uint16_t *gWideError; // WideErrorString
 
 uint16_t *Hook_TextGet(uint8_t *text, const char *key)
 {
+	// The Controls page's names; hints whose controls the mod changed (hints.h).
+	if (const uint16_t *page = controlspage::Text(key))
+		return const_cast<uint16_t *>(page);
+	if (const uint16_t *rewritten = hints::RewriteText(key))
+		return const_cast<uint16_t *>(rewritten);
+	// The waypoint's legend row: "Destination", the mission destination's
+	// text, not "Target", which it shares with a mission's targets.
+	if (gWaypointRow && key && !strcmp(key, "LG_38"))
+		key = "LG_35";
 	uint16_t *found = orig_TextGet(text, key);
 	if (found != gWideError || !key)
 		return found;
@@ -665,19 +735,21 @@ bool Install(SpriteDrawFn spriteDraw, bool fontHooks)
 	              hooks::IsCallTo(kLegendBoxSite, "_ZN9CSprite2d8DrawRectERK5CRectRK5CRGBA") &&
 	              hooks::IsCallTo(kLegendTitleSite, "_ZN5CFont11PrintStringEffPt") &&
 	              hooks::IsCallTo(kLegendEntryScaleSite, "_ZN5CFont8SetScaleEff");
-	// Both draw from DrawBackground (the legend resets there every frame).
-	if ((tabs || legend) &&
-	    !hooks::Install("_ZN12CMenuManager14DrawBackgroundEb", Hook_DrawBackground, orig_DrawBackground))
+	// All draw from DrawBackground (the legend resets there every frame), the Controls page too.
+	const bool background = hooks::Install("_ZN12CMenuManager14DrawBackgroundEb", Hook_DrawBackground, orig_DrawBackground);
+	if (!background)
 		tabs = legend = false;
 	gMapCrosshair = static_cast<CVector2D *>(dlsym(RTLD_MAIN_ONLY, "mapCrosshair"));
-	const bool input = (tabs || gConfig.circleBack || gMapCrosshair) &&
-	                   hooks::Install("_ZN12CMenuManager9UserInputEv", Hook_UserInput, orig_UserInput);
+	const bool input = hooks::Install("_ZN12CMenuManager9UserInputEv", Hook_UserInput, orig_UserInput);
+	controlspage::SetAvailable(background && input);
 	gTabsOn = tabs && input;
 	gCircleBack = gConfig.circleBack && input;
-	gLegendOn = legend && hooks::Install("_ZN9CSprite2d8DrawRectERK5CRectRK5CRGBA", Hook_DrawRect, orig_DrawRect) &&
+	// DrawLegend also names the waypoint's row, with or without the compact legend.
+	const bool legendHook = hooks::Install("_ZN6CRadar10DrawLegendEiii", Hook_DrawLegend, orig_DrawLegend);
+	gLegendOn = legend && legendHook &&
+	            hooks::Install("_ZN9CSprite2d8DrawRectERK5CRectRK5CRGBA", Hook_DrawRect, orig_DrawRect) &&
 	            hooks::Install("_ZN9CSprite2d13Draw2DPolygonEffffffffRK5CRGBA", Hook_Draw2DPolygon,
-	                           orig_Draw2DPolygon) &&
-	            hooks::Install("_ZN6CRadar10DrawLegendEiii", Hook_DrawLegend, orig_DrawLegend);
+	                           orig_Draw2DPolygon);
 	if (!input)
 		gMapCrosshair = nullptr;
 	Log("menu: tabs %s, compact legend %s, back on %s, map crosshair %s", gTabsOn ? "on" : "off",
@@ -687,8 +759,10 @@ bool Install(SpriteDrawFn spriteDraw, bool fontHooks)
 
 void OnGameplayFrame()
 {
-	if (!MenuActive(api.frontEndMenuManager))
+	if (!MenuActive(api.frontEndMenuManager)) {
 		gFreshOpen = true;
+		poi::Forget();
+	}
 }
 
 bool SpriteDraw(const CSprite2d *sprite, const CRect &rect, const CRGBA &col, const void *ret)

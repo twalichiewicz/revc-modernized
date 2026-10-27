@@ -123,6 +123,30 @@ bool Resolve()
 	Bind(api.oldMouseState, "_ZN4CPad23OldMouseControllerStateE");
 	Bind(api.padAffectedByController, "_ZN4CPad22IsAffectedByControllerE");
 	Bind(api.invertLookForPad, "_ZN4CPad15bInvertLook4PadE");
+	Bind(api.controlsManager, "ControlsManager");
+	Bind(api.GetWideStringOfCommandKeys, "_ZN24CControllerConfigManager26GetWideStringOfCommandKeysEtPtt");
+	Bind(api.FontLoadButtons, "_ZN5CFont11LoadButtonsEPKc");
+	Bind(api.fontButtonsSlot, "_ZN5CFont11ButtonsSlotE");
+	Bind(api.fontPs2Symbol, "_ZN5CFont9PS2SymbolE");
+	Bind(api.fontButtonSprites, "_ZN5CFont12ButtonSpriteE");
+	Bind(api.GetIsKeyboardKeyDown, "_ZN24CControllerConfigManager20GetIsKeyboardKeyDownE10RsKeyCodes");
+	Bind(api.GetIsMouseButtonDown, "_ZN24CControllerConfigManager20GetIsMouseButtonDownE10RsKeyCodes");
+	Bind(api.mouseAccel, "_ZN7CCamera20m_fMouseAccelHorzntlE");
+	Bind(api.helpMessage, "_ZN4CHud13m_HelpMessageE");
+	Bind(api.lastHelpMessage, "_ZN4CHud17m_LastHelpMessageE");
+	Bind(api.helpMessageToPrint, "_ZN4CHud20m_HelpMessageToPrintE");
+	Bind(api.mousePointerStateHelper, "MousePointerStateHelper");
+	Bind(api.disableMouseSteering, "_ZN8CVehicle23m_bDisableMouseSteeringE");
+	Bind(api.SaveINISettings, "_Z15SaveINISettingsv");
+	Bind(api.SaveINIControllerSettings, "_Z25SaveINIControllerSettingsv");
+	Bind(api.ClearSettingsAssociatedWithAction,
+	     "_ZN24CControllerConfigManager33ClearSettingsAssociatedWithActionE18e_ControllerAction15eControllerType");
+	Bind(api.SetControllerKeyAssociatedWithAction,
+	     "_ZN24CControllerConfigManager36SetControllerKeyAssociatedWithActionE18e_ControllerActioni15eControllerType");
+	Bind(api.SetMouseButtonAssociatedWithAction,
+	     "_ZN24CControllerConfigManager34SetMouseButtonAssociatedWithActionE18e_ControllerActioni");
+	Bind(api.ResetSettingOrder, "_ZN24CControllerConfigManager17ResetSettingOrderE18e_ControllerAction");
+	Bind(api.GetIsKeyboardKeyJustDown, "_ZN24CControllerConfigManager24GetIsKeyboardKeyJustDownE10RsKeyCodes");
 	Bind(api.clockHours, "_ZN6CClock18ms_nGameClockHoursE");
 	Bind(api.clockMinutes, "_ZN6CClock20ms_nGameClockMinutesE");
 
@@ -198,6 +222,7 @@ bool Resolve()
 	Bind(api.glfwJoystickIsGamepad, "glfwJoystickIsGamepad", RTLD_DEFAULT, false); // only for controls.cpp
 	Bind(api.glfwGetGamepadState, "glfwGetGamepadState", RTLD_DEFAULT, false);
 	Bind(api.glfwGetJoystickName, "glfwGetJoystickName", RTLD_DEFAULT, false);
+	Bind(api.glfwJoystickPresent, "glfwJoystickPresent", RTLD_DEFAULT, false);
 	Bind(api.glfwUpdateGamepadMappings, "glfwUpdateGamepadMappings", RTLD_DEFAULT, false);
 	return gOk;
 }

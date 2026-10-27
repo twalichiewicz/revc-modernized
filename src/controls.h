@@ -13,11 +13,26 @@
 // The gamepad is read through GLFW directly, so this works whatever the
 // game's own button mapping is.
 
+#include "bindings.h"
+#include "controlsmodel.h"
+
+#include <vector>
+
 namespace controls {
 
 bool Install();
-// A PlayStation pad is connected (for the button prompts' symbols).
-bool PlayStationPad();
+// The joysticks connected (for the Controls page's status), and the one the game reads (-1: none).
+std::vector<controlsmodel::Joystick> Pads();
+int GameJoystickId();
+// The game reads this joystick from now on (the Controls page's USE THIS ONE).
+void UseJoystick(int id);
+// The pad's button is down now (the Controls page's live test).
+bool Down(bindings::Pad pad);
+// The button is down on this joystick, whichever the game reads (the Controls page's USE THIS ONE).
+bool Down(int joystick, bindings::Pad pad);
+// The kind of pad connected (PlayStation if any is, then Nintendo, else Xbox);
+// with none connected, the last one's.
+bindings::PadFamily Family();
 // The right stick's look this frame (radians: yaw to the right, pitch up), at
 // the on-foot camera's feel and sensitivity; false while it's at rest.
 bool LookTurn(float &yaw, float &pitch);

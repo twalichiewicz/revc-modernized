@@ -203,8 +203,8 @@ void Draw()
 	SetHudRenderStates();
 	gCanvas.SetTexture(nullptr);
 	const char *yes = !hooker ? "GREET" : CanAffordHooker() ? "PICK UP" : "NEED $100";
-	prompt::Draw(gCanvas, right, bottom - h * 1.75f, H, prompt::Button::kFaceWest, yes, gShow);
-	prompt::Draw(gCanvas, right, bottom - h * 0.5f, H, prompt::Button::kFaceEast, hooker ? "WAVE OFF" : "INSULT", gShow);
+	prompt::Draw(gCanvas, right, bottom - h * 1.75f, H, bindings::Action::kGreet, yes, gShow);
+	prompt::Draw(gCanvas, right, bottom - h * 0.5f, H, bindings::Action::kInsult, hooker ? "WAVE OFF" : "INSULT", gShow);
 	text::Flush();
 }
 

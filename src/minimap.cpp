@@ -8,7 +8,9 @@
 //                                        whole (larger) visible area are not clamped,
 //                                        then our north marker goes on top
 //   TransformRadarPointToScreenSpace  -> perspective projection, edge pinning
-//   DrawCoordBlip / DrawEntityBlip    -> tell the projection which blip it is
+//   DrawCoordBlip / DrawEntityBlip    -> tell the projection which blip it is; the
+//                                        destination's icon bordered, its waypoint
+//                                        square left out (poi.h)
 //   CSprite2d::Draw                   -> skips the round radar ring
 //   CHud::Draw                        -> hides the top-right health/armour (skip
 //                                        patches) while our bars are shown
@@ -33,6 +35,7 @@
 #include "game.h"
 #include "gps.h"
 #include "hooks.h"
+#include "hints.h"
 #include "hud.h"
 #include "interact.h"
 #include "log.h"
@@ -44,6 +47,7 @@
 #include "grade.h"
 #include "places.h"
 #include "player.h"
+#include "poi.h"
 #include "shaders.h"
 #include "sky.h"
 #include "climb.h"
@@ -101,6 +105,7 @@ bool gMapDrawn;   // our DrawRadarMap ran; consumed by DrawBlips
 bool gInBlips;    // inside CRadar::DrawBlips
 float gBlipScale; // radar range multiplier while blips draw
 int gCurBlip = -1; // blip being drawn by DrawCoordBlip/DrawEntityBlip
+bool gDestinationShown; // this DrawBlips: the destination's icon is drawn, so the waypoint's square isn't
 float gIconInset; // keeps pinned icons fully inside the rect
 uint32_t gLastMapMs; // game time our minimap was last drawn
 
@@ -465,26 +470,49 @@ void DrawMenuRoute()
 	gCanvas.Flush();
 }
 
+// The pause map: through its own transform, as CRadar::DrawCoordBlip does.
+bool MenuToScreen(float x, float y, Vec2 &out)
+{
+	CVector2D radar, screen;
+	api.TransformRealWorldPointToRadarSpace(radar, {x, y});
+	orig_TransformRadarPointToScreenSpace(screen, radar);
+	out = {screen.x, screen.y};
+	return true;
+}
+
+// The destination's icon is drawn on this map. The pause map draws them all;
+// out of the minimap's view the game's icons stay pinned to its edge, but not
+// the short-range ones (shops) or places.h's.
+bool DestinationShown(bool menuMap)
+{
+	const Blip *blip;
+	if (!poi::DestinationIcon(blip))
+		return false;
+	if (menuMap || (blip && !blip->shortRange))
+		return true;
+	return gProj.Inside(WorldToGround(api.targetMarkerPos->x, api.targetMarkerPos->y));
+}
+
 void Hook_DrawBlips()
 {
 	if (!gMapDrawn || MenuMapActive()) {
-		if (MenuMapActive())
+		const bool menuMap = MenuMapActive();
+		gDestinationShown = menuMap && DestinationShown(true);
+		if (menuMap)
 			DrawMenuRoute();
 		orig_DrawBlips();
-		if (MenuMapActive()) // the pause map: through its own transform, as CRadar::DrawCoordBlip does
-			places::Draw([](float x, float y, Vec2 &out) {
-				CVector2D radar, screen;
-				api.TransformRealWorldPointToRadarSpace(radar, {x, y});
-				orig_TransformRadarPointToScreenSpace(screen, radar);
-				out = {screen.x, screen.y};
-				return true;
-			}, true);
+		if (menuMap) {
+			places::Draw(MenuToScreen, true);
+			poi::Collect(MenuToScreen);
+		}
+		gDestinationShown = false;
 		return;
 	}
 	gMapDrawn = false;
 	const float range = *api.radarRange;
 	gBlipScale = gProj.MaxVisibleDistance() * 1.05f;
 	*api.radarRange = range * gBlipScale;
+	gDestinationShown = DestinationShown(false);
 	gInBlips = true;
 	orig_DrawBlips();
 	places::Draw([](float x, float y, Vec2 &out) { // only where the minimap shows the ground
@@ -492,16 +520,35 @@ void Hook_DrawBlips()
 		return gProj.Inside(g) && gProj.GroundToScreen(g, out);
 	}, false);
 	gInBlips = false;
+	gDestinationShown = false;
 	*api.radarRange = range;
 	SetHudRenderStates();
 	DrawNorthMarker(gCanvas, gProj, gScene);
 }
 
+void Hook_TransformRadarPointToScreenSpace(CVector2D &out, const CVector2D &in);
+
+// The destination's border, round its icon, where DrawCoordBlip is about to draw it.
+void DrawDestinationBorder(const Blip &blip)
+{
+	CVector2D radar, screen;
+	api.TransformRealWorldPointToRadarSpace(radar, {blip.pos2D.x, blip.pos2D.y});
+	Hook_TransformRadarPointToScreenSpace(screen, radar);
+	if (screen.x == kOffscreen)
+		return;
+	SetHudRenderStates();
+	gCanvas.SetTexture(nullptr);
+	poi::Border(gCanvas, {screen.x, screen.y}, false);
+	gCanvas.Flush();
+}
+
 void Hook_DrawCoordBlip(int blip)
 {
-	if (places::Replaces(api.blips[blip]))
+	if (places::Replaces(api.blips[blip]) || (gDestinationShown && blip == poi::WaypointBlip()))
 		return;
 	gCurBlip = blip;
+	if ((gInBlips || MenuMapActive()) && poi::IsDestination(api.blips[blip]))
+		DrawDestinationBorder(api.blips[blip]);
 	orig_DrawCoordBlip(blip);
 	gCurBlip = -1;
 }
@@ -544,6 +591,9 @@ void Hook_TransformRadarPointToScreenSpace(CVector2D &out, const CVector2D &in)
 
 void Hook_SpriteDraw(const CSprite2d *sprite, const CRect &rect, const CRGBA &col)
 {
+	sprite = hints::SpriteFor(sprite); // a D-pad, Start or Back icon in text
+	if (!sprite)
+		return;
 	if (gMapDrawn && sprite == RadarDiscSprite())
 		return; // the round ring around the vanilla radar
 	if (menu::SpriteDraw(sprite, rect, col, __builtin_return_address(0)))
@@ -585,6 +635,7 @@ __attribute__((constructor)) void Init()
 		Log("pause menu hooks missing; menu left as is (re-run install.sh)");
 	if (!controls::Install())
 		Log("controller hooks missing; controls left as is (re-run install.sh)");
+	hints::Install();
 	if (!aimcam::Install())
 		Log("camera hook missing; aiming camera left as is (re-run install.sh)");
 	if (!driveby::Install())

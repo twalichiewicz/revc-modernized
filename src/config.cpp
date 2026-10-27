@@ -1,4 +1,6 @@
 #include "config.h"
+#include "bindings.h"
+#include "inifile.h"
 #include "log.h"
 
 #include <cstdio>
@@ -21,6 +23,7 @@ const char kDefaultIni[] = "; VC Modern HUD for macVC. Delete this file to resto
                            "MoneyPill=1          ; show money next to the map in shops / at property for sale\n"
                            "PauseTabs=1          ; pause menu opens on the map; Q/E or LB/RB switch tabs\n"
                            "CompactLegend=1      ; small map legend in the corner of the pause map\n"
+                           "MapIcons=1           ; pause map: the cursor snaps to icons and names them; Cross/A or right click routes there\n"
                            "CircleBack=1         ; Circle (B) goes back in menus; 0 = Triangle (Y), as on the PS2\n"
                            "Wheels=1             ; hold LB: weapon wheel on foot; hold D-pad left/right: radio wheel\n"
                            "DpadActions=1        ; D-pad: left/right weapons or radio, down big map, up side missions\n"
@@ -61,10 +64,28 @@ const char kDefaultIni[] = "; VC Modern HUD for macVC. Delete this file to resto
                            "Tilt=50              ; degrees of 3D tilt, 0 = flat\n"
                            "Zoom=1.5             ; higher = closer\n"
                            "Size=1.25            ; height relative to the original radar\n"
-                           "Aspect=1.55          ; width / height\n";
+                           "Aspect=1.55          ; width / height\n"
+                           "[Keys]\n"
+                           "; The keyboard and mouse keys of the mod's own actions, as macVC.ini's [Bindings]\n"
+                           "; (kbd:KEY,2ndKbd:KEY or mouse:LEFT/MIDDLE/RIGHT/WHLUP/WHLDOWN). Left out, each gets\n"
+                           "; its default unless a game action already has that key.\n"
+                           "; MOD_WEAPON_WHEEL=kbd:Q      ; held, on foot; the mouse picks\n"
+                           "; MOD_RADIO_WHEEL=kbd:G       ; held, in a vehicle\n"
+                           "; MOD_RELOAD=kbd:R\n"
+                           "; MOD_GREET=kbd:Y\n"
+                           "; MOD_INSULT=kbd:N\n"
+                           "; MOD_BULLET_TIME=kbd:B       ; while aiming\n"
+                           "; MOD_DRIVEBY_AIM=kbd:X       ; held, the mouse aims; fire as the game's vehicle fire\n"
+                           "; MOD_CINEMATIC_CAMERA=kbd:C  ; held\n"
+                           "; MOD_EXPANDED_MAP=kbd:M\n";
 
 void Apply(const char *key, const char *value)
 {
+	bindings::Action action;
+	if (!strncmp(key, "MOD_", 4) && bindings::FromName(key, action) && action >= bindings::Action::kWeaponWheel) {
+		gConfig.modKeys[int(action) - int(bindings::Action::kWeaponWheel)] = value;
+		return;
+	}
 	const float f = static_cast<float>(atof(value));
 	const bool b = atoi(value) != 0;
 	if (!strcasecmp(key, "Enabled"))
@@ -87,6 +108,8 @@ void Apply(const char *key, const char *value)
 		gConfig.pauseTabs = b;
 	else if (!strcasecmp(key, "CompactLegend"))
 		gConfig.compactLegend = b;
+	else if (!strcasecmp(key, "MapIcons"))
+		gConfig.mapIcons = b;
 	else if (!strcasecmp(key, "CircleBack"))
 		gConfig.circleBack = b;
 	else if (!strcasecmp(key, "Wheels"))
@@ -189,6 +212,25 @@ std::string SupportDir()
 {
 	const char *home = getenv("HOME");
 	return std::string(home ? home : "") + "/Library/Application Support/macVC";
+}
+
+void SaveValue(const char *section, const char *key, const std::string &value)
+{
+	const std::string path = SupportDir() + "/vcmodernhud.ini";
+	std::string ini;
+	if (FILE *f = fopen(path.c_str(), "r")) {
+		char buf[4096];
+		for (size_t n; (n = fread(buf, 1, sizeof buf, f)) > 0;)
+			ini.append(buf, n);
+		fclose(f);
+	}
+	const std::string updated = inifile::WithValue(ini, section, key, value);
+	if (FILE *f = fopen(path.c_str(), "w")) {
+		fputs(updated.c_str(), f);
+		fclose(f);
+	} else {
+		Log("config: can't write %s", path.c_str());
+	}
 }
 
 void LoadConfig()
