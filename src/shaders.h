@@ -31,6 +31,8 @@ void SetMatrix(int uniform, const float *m);
 // The camera's projection * view, as the game's shaders have it (librw keeps
 // them as it sets them); false if this build keeps them elsewhere.
 bool ViewProjection(float out[16]);
+// The two of them (as GL has them: column by column).
+bool CameraMatrices(float proj[16], float view[16]);
 
 // GL objects of our own beside librw's, through its GL entry points (glad).
 // Our textures go on units librw never binds (4 and up), so its idea of

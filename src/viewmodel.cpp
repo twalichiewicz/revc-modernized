@@ -18,7 +18,6 @@ namespace {
 // Bone tags: right arm (upper, forearm, hand, fingers), left arm.
 constexpr int kRight[4] = {22, 23, 24, 25}, kLeft[4] = {32, 33, 34, 35};
 constexpr size_t kRwObject = 0x58, kWeaponModel = 0x290; // CEntity::m_rwObject, CPed::m_pWeaponModel
-constexpr int32_t kWeaponFiring = 1; // CWeapon state
 constexpr int32_t kStateFall = 0x2a, kStateGetUp = 0x2b, kStateDie = 0x36, kStateDead = 0x37;
 constexpr int32_t kMoveStill = 1, kMoveSprint = 5; // CPed::m_nMoveState
 

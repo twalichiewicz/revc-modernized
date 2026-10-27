@@ -1,12 +1,19 @@
 #include "controls.h"
 #include "actions.h"
+#include "aimslow.h"
 #include "alert.h"
+#include "gunbank.h"
 #include "aimcam.h"
+#include "camera.h"
 #include "climb.h"
 #include "config.h"
 #include "crouch.h"
 #include "shootdodge.h"
 #include "driveby.h"
+#include "fplook.h"
+#include "fpshoot.h"
+#include "fpwalk.h"
+#include "sniper.h"
 #include "interact.h"
 #include "layout.h"
 #include "game.h"
@@ -90,6 +97,7 @@ bool gKeyWheel;             // a wheel's key opened the wheel open now
 bool gKeyWheelPending;      // a wheel's key went down and hasn't been a hold yet
 Clock::time_point gKeyWheelAt;
 bool gLoggedGamepad;
+bool gTriggersRead;         // TriggersAimAndFire ran this frame (else the scope hears LT let go)
 bool gTestWheel; // VCHUD_TEST_WHEEL: open the wheel once, without LB, to look at it
 Vec2 gMouse;     // the mouse's pointer on an open wheel, within kMouseRange
 Clock::time_point gLastFrame;
@@ -263,9 +271,14 @@ void TriggersAimAndFire(uint8_t *pad, const Gamepad &now)
 		return;
 	const PadButton aim = kPadRB, fire = mode == 2 ? kPadCross : kPadCircle;
 	PadJoy(pad, kPadLT) = PadJoy(pad, kPadRT) = PadJoy(pad, aim) = PadJoy(pad, fire) = 0;
-	if (Down(now, layout::kAim))
+	// (A sniper rifle in first person: the game's scope once the gun's at the eye, sniper.cpp.)
+	gTriggersRead = true;
+	if (sniper::GameAims(Down(now, layout::kAim), Pressed(now, layout::kScopeZoom), Down(now, layout::kHoldBreath)))
 		PadJoy(pad, aim) = 255;
-	if (Down(now, layout::kFire))
+	if (sniper::KeepsL3())
+		PadJoy(pad, kPadL3) = 0; // his breath, not the game's duck (till it's let go)
+	const bool rt = Down(now, layout::kFire);
+	if (!fpshoot::FromPad(rt) && rt) // in first person with a gun, RT is the mod's (fpshoot.h)
 		PadJoy(pad, fire) = 255;
 }
 
@@ -292,7 +305,7 @@ void FaceButtonsOnFoot(uint8_t *pad, uint8_t *ped, const Gamepad &now)
 	const uint8_t *info = api.GetWeaponInfo(type);
 	int32_t &state = *reinterpret_cast<int32_t *>(weapon + 4), &clip = *reinterpret_cast<int32_t *>(weapon + 8);
 	const int32_t clipSize = *reinterpret_cast<const int32_t *>(info + 0x10);
-	if (!(Pressed(now, layout::kMeleeReload) || actions::KeyPressed(Action::kReload)) || type < kFirstGun || state != kWeaponReady || clip >= clipSize ||
+	if (!(Pressed(now, layout::kMeleeReload) || actions::KeyPressed(Action::kReload)) || type < kFirstGun || (state != kWeaponReady && state != kWeaponFiring) || clip >= clipSize ||
 	    WeaponAmmoTotal(weapon) <= clip)
 		return;
 	const uint32_t reload = *reinterpret_cast<const uint32_t *>(info + 0xc);
@@ -474,6 +487,30 @@ bool StickRates(const Gamepad &now, bool precise, float &yaw, float &pitch)
 	return true;
 }
 
+// In first person on foot, the right stick as modern console shooters turn
+// (fplook.cpp): its own dead zone, curve, top speeds and rim boost; aiming
+// slower by the zoom (and the aim sensitivity setting, from its default);
+// slowed a little over an enemy (aimslow.cpp).
+fplook::Stick gFirstPersonStick;
+fplook::Assist gAimSlowdown;
+
+bool FirstPersonRates(const Gamepad &now, bool aiming, float dt, float &yaw, float &pitch)
+{
+	constexpr float kDegrees = 3.14159265f / 180.0f;
+	fplook::Tuning tuning;
+	tuning.yawRate = gConfig.fpLookYaw * kDegrees;
+	tuning.pitchRate = gConfig.fpLookPitch * kDegrees;
+	const fplook::Rates r = gFirstPersonStick.Update(now.rx, *api.invertLookForPad ? now.ry : -now.ry, dt, tuning);
+	float scale = gConfig.lookSensitivity;
+	if (aiming)
+		scale *= fplook::AimScale(aimcam::kHipFov, aimcam::kAimFov, gConfig.aimSensitivity);
+	if (gConfig.aimSlowdown)
+		scale *= gAimSlowdown.Update(aimslow::Multiplier(aiming, Length(now.rx, now.ry)), dt);
+	yaw = r.yaw * scale;
+	pitch = r.pitch * scale;
+	return r.yaw != 0.0f || r.pitch != 0.0f;
+}
+
 // Camera look from the right stick, on foot. The scoped views look with the
 // left stick (CPad::SniperModeLookLeftRight); instead the stick drives the
 // cameras' mouse input, at StickRates and as much slower in a scope as it
@@ -491,10 +528,12 @@ void StickLook(uint8_t *pad, const Gamepad &now, bool aiming, float dt)
 	if (!follow && !runabout && !scoped)
 		return;
 	PadJoy(pad, kPadRightStickX) = PadJoy(pad, kPadRightStickY) = 0;
-	if (scoped)
+	if (scoped && !sniper::Active()) // (the mod's scope: he creeps by it; it's kept from the game's after the merge)
 		PadJoy(pad, kPadLeftStickX) = PadJoy(pad, kPadLeftStickY) = 0;
 	float yaw, pitch;
-	if (!StickRates(now, !follow || aiming, yaw, pitch) || *api.mouseAccelH <= 0.0f || *api.mouseAccelV <= 0.0f)
+	const bool firstPerson = follow && gConfig.firstPersonLook && camera::FirstPersonOnFoot();
+	const bool turning = firstPerson ? FirstPersonRates(now, aiming, dt, yaw, pitch) : StickRates(now, !follow || aiming, yaw, pitch);
+	if (!turning || *api.mouseAccelH <= 0.0f || *api.mouseAccelV <= 0.0f)
 		return;
 	const float fov = CamFov(cam);
 	const float zoom = follow ? 1.0f : fov / 70.0f;
@@ -512,6 +551,8 @@ void Hook_Update(uint8_t *pad, int16_t index)
 		hints::Frame();
 	if (pad == api.GetPad(0))
 		alert::Frame(); // (paused too: it goes quiet)
+	if (pad == api.GetPad(0))
+		gunbank::Frame(); // the gunshot samples, once the bank's loaded
 	if (pad != api.GetPad(0)) {
 		orig_Update(pad, index);
 		return;
@@ -738,6 +779,12 @@ void Hook_Update(uint8_t *pad, int16_t index)
 	const bool driving = vehicle && control && !IsAircraft(vehicle);
 	rumble::Drive(driving ? vehicle : nullptr, PadNew(pad, kPadCross) / 255.0f, PadNew(pad, kPadSquare) / 255.0f);
 	shootdodge::FromPad(pad); // aiming: bullet time and the dive
+	fpwalk::TakeStick(pad); // first person: the push, before crouch.cpp keeps it
+	if (sniper::Active()) // the mod's scope: he creeps by it, the game's sniper view doesn't turn by it
+		PadNew(pad, kPadLeftStickX) = PadNew(pad, kPadLeftStickY) = 0;
+	if (!gTriggersRead)
+		sniper::GameAims(false, false, false); // (not read: a script's, a vehicle's, another setup's)
+	gTriggersRead = false;
 	crouch::TakeStick(pad); // crouched, he walks by crouch.cpp, not the game
 	if (aimcam::Aiming()) // a walk (the game runs past about half a push)
 		for (PadButton axis : {kPadLeftStickX, kPadLeftStickY})
@@ -792,7 +839,7 @@ void Triggers(float &lt, float &rt)
 bool Install()
 {
 	if (!gConfig.wheels && !gConfig.dpadActions && !gConfig.modernTriggers && !gConfig.aimCamera &&
-	    !gConfig.driveByAim && !gConfig.phone)
+	    !gConfig.driveByAim && !gConfig.phone && !gConfig.firstPersonMovement)
 		return true;
 	if (!api.glfwGetGamepadState || !api.glfwJoystickIsGamepad || !api.glfwGetJoystickName) {
 		Log("controls: GLFW gamepad functions not found; controller changes off");

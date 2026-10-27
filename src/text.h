@@ -20,5 +20,9 @@ void LineExtent(const Style &style, float y, float &top, float &bottom);
 void Draw(float x, float y, const char *ascii, const Style &style);
 void Draw(float x, float y, const uint16_t *text, const Style &style);
 void Flush();
+// Drops a bad entry from the font's buffer, and what's after it, before it's
+// drawn (fontbuf.h has why); logged. Draw and Flush do it; so does the HUD
+// before the game draws what's queued after it.
+void Guard();
 
 } // namespace text

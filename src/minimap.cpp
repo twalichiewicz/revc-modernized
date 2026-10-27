@@ -19,11 +19,18 @@
 // The rest of the HUD is in hud.cpp, the pause menu in menu.cpp.
 #include "aimcam.h"
 #include "alert.h"
+#include "gunbank.h"
+#include "shotsound.h"
+#include "sniper.h"
 #include "anims.h"
 #include "camera.h"
 #include "carlights.h"
 #include "carradio.h"
 #include "combat.h"
+#include "aimslow.h"
+#include "fpgun.h"
+#include "fpshoot.h"
+#include "fpwalk.h"
 #include "shootdodge.h"
 #include "heli.h"
 #include "hunter.h"
@@ -52,6 +59,7 @@
 #include "sky.h"
 #include "climb.h"
 #include "swim.h"
+#include "text.h"
 #include "credit.h"
 #include "story.h"
 #include "projection.h"
@@ -414,6 +422,7 @@ void Hook_HudDraw()
 	hud::BeginFrame(shown);
 	menu::OnGameplayFrame();
 	orig_HudDraw();
+	text::Guard(); // the game's own text, checked before ours goes with it
 	hud::DrawWanted();
 	SetHudRenderStates();
 	wantedhud::DrawEyes(gCanvas);
@@ -426,6 +435,7 @@ void Hook_HudDraw()
 	climb::Draw();
 	carlights::DrawDash();
 	wheel::Draw();
+	text::Guard(); // before the game draws what's queued
 }
 
 // The GPS route on the pause map, under its icons, as wide on screen at any
@@ -611,6 +621,7 @@ __attribute__((constructor)) void Init()
 		Log("staying vanilla");
 		return;
 	}
+	shotsound::BeforeAudio(); // (still before the game opens its sound device)
 	const bool ok =
 	    hooks::Install("_ZN6CRadar12DrawRadarMapEv", Hook_DrawRadarMap, orig_DrawRadarMap) &&
 	    hooks::Install("_ZN6CRadar9DrawBlipsEv", Hook_DrawBlips, orig_DrawBlips) &&
@@ -677,6 +688,13 @@ __attribute__((constructor)) void Init()
 	police::Install();
 	wanted::Install();
 	alert::Install();
+	gunbank::Install();
+	shotsound::Install();
+	sniper::Install();
+	fpwalk::Install();
+	aimslow::Install();
+	fpgun::Install();
+	fpshoot::Install();
 	if (!shootdodge::Install())
 		Log("shootdodge: CPed::ClearDuck is missing; no bullet time or dive");
 	if (!steering::Install())

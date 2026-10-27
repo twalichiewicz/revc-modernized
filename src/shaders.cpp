@@ -179,7 +179,7 @@ void SetMatrix(int uniform, const float *m)
 		gSetUniform(uniform, const_cast<float *>(m));
 }
 
-bool ViewProjection(float out[16])
+bool CameraMatrices(float proj[16], float view[16])
 {
 	static int found = -1;
 	const auto *base = static_cast<const uint8_t *>(hooks::ImageBase());
@@ -193,9 +193,16 @@ bool ViewProjection(float out[16])
 	}
 	if (!found)
 		return false;
+	memcpy(proj, base + kProjection, 16 * sizeof(float));
+	memcpy(view, base + kView, 16 * sizeof(float));
+	return true;
+}
+
+bool ViewProjection(float out[16])
+{
 	float proj[16], view[16];
-	memcpy(proj, base + kProjection, sizeof proj);
-	memcpy(view, base + kView, sizeof view);
+	if (!CameraMatrices(proj, view))
+		return false;
 	for (int c = 0; c < 4; c++)
 		for (int r = 0; r < 4; r++) {
 			float sum = 0.0f;

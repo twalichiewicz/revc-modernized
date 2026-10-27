@@ -18,6 +18,8 @@ constexpr Pad kMeleeReload = Pad::kB;   // a punch or swing, a reload with a gun
 constexpr Pad kGreet = Pad::kX;         // while a prompt is up
 constexpr Pad kInsult = Pad::kB;
 constexpr Pad kBulletTime = Pad::kR3;   // clicked while aiming
+constexpr Pad kScopeZoom = Pad::kRB;    // a sniper rifle's scope: its zoom stops (sniper.cpp)
+constexpr Pad kHoldBreath = Pad::kL3;   // ... held, his breath
 
 // Any situation
 constexpr Pad kAnswerCall = Pad::kUp;   // while the phone rings

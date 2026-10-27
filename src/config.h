@@ -32,6 +32,14 @@ struct Config {
 	bool swim = true;           // Tommy swims instead of drowning
 	bool climb = true;          // the jump button vaults, climbs ledges and climbs out of the water
 	bool crouchWalk = true;     // crouched, he walks crouched instead of standing up
+	bool firstPersonMovement = true; // first person: the stick moves him at once, CS 1.6's acceleration and friction
+	float fpAccel = 5.0f, fpFriction = 4.0f; // ... how fast he gets up to speed and stops (CS's)
+	bool firstPersonLook = true; // first person: the right stick turns as modern console shooters do
+	float fpLookYaw = 240.0f, fpLookPitch = 145.0f; // ... its top speeds, degrees a second
+	bool aimSlowdown = true;     // first person: the right stick slows a little over an enemy (never pulls)
+	bool headBob = true;         // macVC.ini's HeadBob1stPerson: the eye's bob in first person
+	bool firstPersonGuns = true; // first person: his own arms holding new guns, drawn as a viewmodel
+	float viewmodelFov = 62.0f;  // ... seen through their own field of view, degrees top to bottom
 	bool smarterEnemies = true; // gunmen take cover, shoot over it and move between bursts
 	bool bulletTime = true;     // aiming: the right stick's click slows time, jump with the stick dives
 	bool heliDamage = true;     // the police helicopter takes hits where it is, smokes, and goes down sooner

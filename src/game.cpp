@@ -129,6 +129,8 @@ bool Resolve()
 	Bind(api.fontButtonsSlot, "_ZN5CFont11ButtonsSlotE");
 	Bind(api.fontPs2Symbol, "_ZN5CFont9PS2SymbolE");
 	Bind(api.fontButtonSprites, "_ZN5CFont12ButtonSpriteE");
+	Bind(api.fontBuffer, "FontRenderStateBuf", RTLD_MAIN_ONLY, false); // optional: the room check (text.cpp)
+	Bind(api.fontBufferEnd, "FontRenderStatePointer", RTLD_MAIN_ONLY, false);
 	Bind(api.GetIsKeyboardKeyDown, "_ZN24CControllerConfigManager20GetIsKeyboardKeyDownE10RsKeyCodes");
 	Bind(api.GetIsMouseButtonDown, "_ZN24CControllerConfigManager20GetIsMouseButtonDownE10RsKeyCodes");
 	Bind(api.mouseAccel, "_ZN7CCamera20m_fMouseAccelHorzntlE");

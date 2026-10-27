@@ -188,6 +188,8 @@ struct Api {
 	int32_t *fontButtonsSlot;                     // CFont::ButtonsSlot: the icons' TXD slot (-1: none)
 	int32_t *fontPs2Symbol;                       // CFont::PS2Symbol: the icon DrawButton draws next (-1: none)
 	uint8_t *fontButtonSprites;                   // CFont::ButtonSprite[18]: CSprite2d (an RwTexture*) each
+	uint8_t *fontBuffer;                          // FontRenderStateBuf: the 1 KB CFont queues text in
+	uint8_t **fontBufferEnd;                      // FontRenderStatePointer: where the next piece goes
 	bool (*GetIsKeyboardKeyDown)(uint8_t *controls, int key);  // RsKeyCodes
 	bool (*GetIsMouseButtonDown)(uint8_t *controls, int button); // 1..7: left, middle, right, wheel up / down, X1, X2
 	float *mouseAccel;                                           // CCamera::m_fMouseAccelHorzntl: the mouse's sensitivity
@@ -373,6 +375,7 @@ enum PadButton : int {
 	kPadTriangle = 0x1e,
 	kPadCross = 0x20,
 	kPadCircle = 0x22,
+	kPadL3 = 0x24,
 	kPadR3 = 0x26,
 };
 constexpr int kPadOldState = 0x2a, kPadJoyState = 0x96;
@@ -436,6 +439,8 @@ constexpr int32_t kPedAttack = 0x10, kPedFight = 0x11, kPedAimGun = 0x16, kPedSo
 constexpr int32_t kPedIdle = 1, kPedJump = 0x29, kPedFall = 0x2a, kPedGetUp = 0x2b, kPedDie = 0x36, kPedDead = 0x37;
 inline void SetPedState(uint8_t *ped, int32_t state) { *reinterpret_cast<int32_t *>(ped + 0x2fc) = state; }
 inline int32_t PedMoveState(const uint8_t *ped) { return *reinterpret_cast<const int32_t *>(ped + 0x304); } // 5: sprint
+// CPed::bIsDucking (bit 4 of the flag byte at +0x18c): crouched.
+inline bool PedDucking(const uint8_t *ped) { return (ped[0x18c] & 0x10) != 0; }
 // CPed flags at +0x188: standing (bit 0), was standing (1), in the air (11),
 // landing (12), being put ashore after falling in (60).
 inline uint64_t &PedFlags(uint8_t *ped) { return *reinterpret_cast<uint64_t *>(ped + 0x188); }
@@ -498,7 +503,7 @@ inline bool OnFire(const uint8_t *vehicle) { return !Wrecked(vehicle) && Vehicle
 // the current slot at +0x64c and the slot to switch to at +0x798.
 constexpr int kWeaponSlots = 10;
 constexpr int32_t kFirstThrownWeapon = 12, kFirstGun = 17;   // eWeaponType: fists and melee come first
-constexpr int32_t kWeaponReady = 0, kWeaponReloading = 2;    // CWeapon state at +4 (clip +8, timer +0x10)
+constexpr int32_t kWeaponReady = 0, kWeaponFiring = 1, kWeaponReloading = 2; // CWeapon state at +4 (clip +8, timer +0x10)
 inline uint8_t *PedWeapon(uint8_t *ped, int slot) { return ped + 0x550 + slot * 0x18; }
 inline int32_t WeaponType(const uint8_t *weapon) { return *reinterpret_cast<const int32_t *>(weapon); }
 inline int32_t WeaponAmmoTotal(const uint8_t *weapon) { return *reinterpret_cast<const int32_t *>(weapon + 0xc); }

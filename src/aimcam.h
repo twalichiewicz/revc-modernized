@@ -16,6 +16,8 @@ namespace aimcam {
 
 // How far the pad hook lets the left stick go while aiming (a walk, not a run).
 constexpr float kWalkStick = 0.45f;
+// The follow camera's field of view, and aiming's (degrees).
+constexpr float kHipFov = 70.0f, kAimFov = 52.0f;
 
 bool Install();
 // The player is aiming a gun with the third-person crosshair.

@@ -16,8 +16,10 @@ on disk (it is then re-signed ad hoc):
   * SLOT is an 8-byte pointer in the zero-filled slack at the end of __DATA.
     The plugin fills it from its constructor; until then (or if the plugin is
     missing, since it is a *weak* dylib) the game runs unmodified.
-  * A table (magic "VCMMHK01") next to the stubs tells the plugin where each
-    function, slot and "call original" entry point lives.
+  * A table (magic "VCMMHK01", version 2) next to the stubs tells the plugin
+    where each function, slot and "call original" entry point lives, each by
+    its name's 32-bit FNV-1a hash (version 1 kept the 96-byte names, which no
+    longer fit in the padding with all the hooks).
 
 Skip patches use the same stub shape on one instruction inside a function,
 but the fourth word is `b TARGET` instead of `br x16`: a non-zero slot then
@@ -37,13 +39,20 @@ LC_SYMTAB = 0x2
 LC_UUID = 0x1B
 LC_LOAD_WEAK_DYLIB = 0x80000018
 TABLE_MAGIC = b"VCMMHK01"
-TABLE_VERSION = 1
-NAME_LEN = 96
-ENTRY_FMT = "<%dsIIII" % NAME_LEN          # name, func_off, slot_off, orig_off, reserved
+TABLE_VERSION = 2
+ENTRY_FMT = "<IIIII"                       # name hash, func_off, slot_off, orig_off, kind
 ENTRY_SIZE = struct.calcsize(ENTRY_FMT)
 HEADER_FMT = "<8sII16s"                    # magic, version, count, uuid of patched image
 HEADER_SIZE = struct.calcsize(HEADER_FMT)
 STUB_SIZE = 24
+
+
+def name_hash(name):
+    """FNV-1a, 32 bits: how the table names a hook (src/hookname.h computes the same)."""
+    h = 0x811C9DC5
+    for c in name.encode():
+        h = ((h ^ c) * 0x01000193) & 0xFFFFFFFF
+    return h
 
 # Hooks used by the minimap plugin (mangled names, without the leading '_').
 DEFAULT_HOOKS = [
@@ -110,6 +119,7 @@ DEFAULT_HOOKS = [
     "_ZN11CAutomobile6RenderEv",
     "_ZN11CAutomobile9PreRenderEv",
     "_ZN10CSpecialFX6RenderEv",
+    "_ZN9CRenderer24RenderFirstPersonVehicleEv",
     "_ZN8CCoronas14RegisterCoronaEjhhhhRK7CVectorffhahhhfbf",
     # first person, camera shake, spawn distances; car variety
     "_ZN7CCamera7ProcessEv",
@@ -134,6 +144,11 @@ DEFAULT_HOOKS = [
     "_ZN9CMessages31InsertPlayerControlKeysInStringEPt",
     "_ZN5CFont10ParseTokenEPtR5CRGBARbS3_",
     "_ZN5CFont10ParseTokenEPt",
+    # gunshot sound: the M4's own pitch (gunbank.cpp)
+    "_ZN14cSampleManager17InitialiseChannelEjjh",
+    "_ZN14cSampleManager19SetChannelFrequencyEjj",
+    # the sniper scope: first person's eye, sway, the zoom stops (sniper.cpp)
+    "_ZN4CCam14Process_SniperERK7CVectorfff",
 ]
 
 # Flag-controlled skips inside CHud::Draw: (name, instruction address, expected
@@ -311,6 +326,9 @@ def patch(data, hooks, dylib_path, skips=()):
             raise PatchError("unexpected instruction at 0x%x for %s (0x%08x)" % (addr, name, word))
         sites.append((name, addr, KIND_SKIP, target))
     count = len(sites)
+    hashes = [name_hash(n) for n, _, _, _ in sites]
+    if len(set(hashes)) != count:
+        raise PatchError("two hook names share a hash")
 
     # Slots: zero-filled slack after the last __DATA section.
     seg_vm, seg_size = m.segments["__DATA"][:2]
@@ -351,7 +369,7 @@ def patch(data, hooks, dylib_path, skips=()):
         ]
         struct.pack_into("<6I", m.data, stub_file, *words)
         struct.pack_into("<I", m.data, addr_file, enc_b(addr, stub))
-        entries.append(struct.pack(ENTRY_FMT, name.encode(), addr - m.base, slot - m.base,
+        entries.append(struct.pack(ENTRY_FMT, name_hash(name), addr - m.base, slot - m.base,
                                    stub + 16 - m.base, kind))
     header = struct.pack(HEADER_FMT, TABLE_MAGIC, TABLE_VERSION, count, m.uuid or b"\0" * 16)
     blob = header + b"".join(entries)

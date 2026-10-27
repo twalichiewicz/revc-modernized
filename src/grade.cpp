@@ -5,6 +5,7 @@
 #include "hooks.h"
 #include "log.h"
 #include "shaders.h"
+#include "sniper.h"
 
 #include <algorithm>
 #include <cmath>
@@ -116,6 +117,9 @@ void main(void)
 )";
 
 void (*orig_RenderMotionBlur)(uint8_t *camera);
+bool gGradeReady; // ModernLighting on and all it needs found (the blur hook runs either way: the scope's swap)
+constexpr size_t kBlurType = 0xb8, kBlurAlpha = 0xc8; // CCamera::m_BlurType, m_motionBlur (CCamera::SetMotionBlur's stores)
+constexpr int32_t kBlurNone = 0, kBlurSniper = 1; // MOTION_BLUR_NONE, MOTION_BLUR_SNIPER (CCam::Process_Sniper's)
 const float *gSunX, *gSunY; // CCoronas::SunScreenX/Y: the game's screen
 const bool *gSunHidden;     // CCoronas::SunBlockedByClouds
 bool gTried, gReady;
@@ -181,8 +185,18 @@ float SunShows(const shaders::Sky &sky, float x, float y)
 
 void Hook_RenderMotionBlur(uint8_t *camera)
 {
+	// The mod's scope: no sniper blur (the last frame blended in green, smearing
+	// as he turns), its alpha out too (the Trails option would blend it anyway).
+	int32_t &blurType = *reinterpret_cast<int32_t *>(camera + kBlurType), &blurAlpha = *reinterpret_cast<int32_t *>(camera + kBlurAlpha);
+	const int32_t typeWas = blurType, alphaWas = blurAlpha;
+	if (sniper::Active() && blurType == kBlurSniper) {
+		blurType = kBlurNone;
+		blurAlpha = 0;
+	}
 	orig_RenderMotionBlur(camera);
-	if (!gConfig.modernLighting || !Prepare())
+	blurType = typeWas;
+	blurAlpha = alphaWas;
+	if (!gGradeReady || !Prepare())
 		return;
 	void *frame = shaders::GrabFrame();
 	if (!frame)
@@ -225,13 +239,15 @@ void SlowMotion(float amount) { gSlowMotion = amount; }
 
 bool Install()
 {
+	// The hook goes in either way: the sniper scope's blur is swapped out with or without the grade.
+	const bool hooked = hooks::Install("_ZN7CCamera16RenderMotionBlurEv", Hook_RenderMotionBlur, orig_RenderMotionBlur);
 	if (!gConfig.modernLighting)
-		return true;
+		return hooked;
 	gSunX = static_cast<const float *>(dlsym(RTLD_MAIN_ONLY, "_ZN8CCoronas10SunScreenXE"));
 	gSunY = static_cast<const float *>(dlsym(RTLD_MAIN_ONLY, "_ZN8CCoronas10SunScreenYE"));
 	gSunHidden = static_cast<const bool *>(dlsym(RTLD_MAIN_ONLY, "_ZN8CCoronas18SunBlockedByCloudsE"));
-	return shaders::Ready() && gSunX && gSunY && gSunHidden &&
-	       hooks::Install("_ZN7CCamera16RenderMotionBlurEv", Hook_RenderMotionBlur, orig_RenderMotionBlur);
+	gGradeReady = hooked && shaders::Ready() && gSunX && gSunY && gSunHidden; // (the hook's grade only then)
+	return gGradeReady;
 }
 
 } // namespace grade

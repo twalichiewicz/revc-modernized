@@ -17,8 +17,6 @@ namespace crouch {
 namespace {
 
 // CPed (macVC 1.0.5217).
-constexpr size_t kDuckFlags = 0x18c;  // bIsDucking: bit 4
-constexpr uint8_t kDucking = 0x10;
 constexpr size_t kDuckTimer = 0x6a8;  // m_duckTimer: he stands up at it (game time)
 constexpr uint32_t kDuckFor = 60000;
 // The stick: its dead zone (of its travel); his pace (m/s) at a full push.
@@ -39,7 +37,7 @@ float gCycle;         // two steps, 0..1
 CVector gWay{0, 1, 0}; // where he goes, in his own frame
 float gGround;        // his ankles standing, in his own frame (where the ground is)
 
-bool Ducking(const uint8_t *ped) { return (ped[kDuckFlags] & kDucking) != 0; }
+bool Ducking(const uint8_t *ped) { return PedDucking(ped); }
 // The gun raised (CPed::SetPointGunAt) or firing, crouched: the crouch's firing
 // pose, which turns his whole body about the root to hold the gun where he faces.
 bool AimingPose(const uint8_t *ped)

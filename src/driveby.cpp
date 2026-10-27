@@ -2,6 +2,7 @@
 #include "camera.h"
 #include "canvas.h"
 #include "config.h"
+#include "fpcross.h"
 #include "draw.h"
 #include "game.h"
 #include "hooks.h"
@@ -418,12 +419,14 @@ void Draw()
 	if (!gAiming || (gBlend < 0.5f && !camera::InSeat())) // its camera, or the first-person seat's
 		return;
 	const float cx = ScreenWidth() / 2.0f, cy = ScreenHeight() / 2.0f, h = float(ScreenHeight());
-	const float r = h * 0.016f, w = std::max(1.5f, h * 0.0016f), dot = std::max(1.5f, h * 0.0022f);
+	// As thick as first person's crosshair (fpcross.h), with its dark edge.
+	const float t = std::max(1.0f, std::round(fpcross::Thickness(h))), o = fpcross::Edge(h);
+	const float r = h * 0.016f, w = t / 2, dot = t;
 	SetHudRenderStates();
 	gCanvas.SetTexture(nullptr);
-	Ring(cx, cy, r - w - 1, r + w + 1, {0, 0, 0, 120});
+	Ring(cx, cy, r - w - o, r + w + o, {0, 0, 0, 150});
 	Ring(cx, cy, r - w, r + w, {255, 255, 255, 230});
-	gCanvas.Pill(cx - dot - 1, cy - dot - 1, 2 * dot + 2, 2 * dot + 2, {0, 0, 0, 140});
+	gCanvas.Pill(cx - dot - o, cy - dot - o, 2 * (dot + o), 2 * (dot + o), {0, 0, 0, 150});
 	gCanvas.Pill(cx - dot, cy - dot, 2 * dot, 2 * dot, {255, 255, 255, 230});
 	gCanvas.Flush();
 }

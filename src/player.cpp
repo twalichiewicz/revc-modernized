@@ -8,6 +8,8 @@
 #include "crouch.h"
 #include "shootdodge.h"
 #include "driveby.h"
+#include "fpshoot.h"
+#include "fpwalk.h"
 #include "game.h"
 #include "hooks.h"
 #include "log.h"
@@ -29,11 +31,13 @@ void Hook_ProcessControl(uint8_t *ped)
 {
 	climb::BeforeControl(ped);
 	const bool strafed = aimcam::BeforeControl();
+	const bool fpStrafed = fpwalk::BeforeControl();
 	orig_ProcessControl(ped);
 	aimcam::AfterControl(ped, strafed);
 	swim::AfterControl(ped);
 	climb::AfterControl(ped);
 	crouch::AfterControl(ped); // crouched, his walk is its
+	fpwalk::AfterControl(ped, fpStrafed); // first person: the stick's, CS-style
 	shootdodge::AfterControl(ped); // last: diving, his speed is its
 }
 
@@ -43,7 +47,10 @@ void Hook_ProcessPlayerWeapon(uint8_t *ped, uint8_t *pad)
 		aimcam::Lower(ped);
 		return;
 	}
+	const bool freeCam = fpwalk::BeforeWeapon();
 	orig_ProcessPlayerWeapon(ped, pad);
+	fpwalk::AfterWeapon(freeCam);
+	fpshoot::AfterWeapon(ped, pad);
 	aimcam::AfterPlayerWeapon(ped, pad);
 }
 

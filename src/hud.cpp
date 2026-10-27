@@ -1,4 +1,8 @@
 #include "hud.h"
+#include "shaders.h"
+#include "fpshoot.h"
+#include "sniper.h"
+#include "fpcross.h"
 #include "aimcam.h"
 #include "config.h"
 #include "credit.h"
@@ -37,7 +41,7 @@ constexpr CallSite kScaleSites[] = {{0x1f89dc, kAmmo}, {0x1fa4b8, kClock}};
 constexpr CallSite kDrawSites[] = {{0x1f8800, kWeapon}, {0x1f8968, kWeapon}};
 // The third-person (free-aim camera) crosshair: the M4, Ruger and M60's, and every other gun's.
 constexpr uint32_t kCrosshairSites[] = {0x1f7be8, 0x1fc714};
-constexpr float kCrosshairScale = 0.5f; // of the game's size, while aiming
+constexpr float kThirdPersonGap = 1.5f;  // third person's aiming crosshair: its lines this many times first person's least gap out
 
 constexpr float kWeaponScale = 0.5f;
 // Our stars, in the clock's font scale (CHud::Draw gives both 0.7 x 1.25 units).
@@ -246,11 +250,98 @@ __attribute__((noinline)) void Hook_SetScale(float sx, float sy)
 	orig_SetScale(sx, sy);
 }
 
+// The four-line crosshair (fpcross.h): square-ended, on whole pixels, in the
+// game's crosshair colour with a thin dark edge; first person's, opening with
+// the spread, and third person's aiming, at a set gap.
+void DrawLines(float cx, float cy, float gap, const CRGBA &ink)
+{
+	const float h = float(ScreenHeight());
+	fpcross::Rect lines[4];
+	fpcross::Lines(cx, cy, gap, h, lines);
+	const float o = fpcross::Edge(h);
+	const CRGBA edge{0, 0, 0, 150};
+	SetHudRenderStates();
+	gDotCanvas.SetTexture(nullptr);
+	for (int pass = 0; pass < 2; pass++) {
+		const float grow = pass == 0 ? o : 0.0f;
+		for (const fpcross::Rect &r : lines) {
+			const float x0 = r.x - grow, y0 = r.y - grow, x1 = r.x + r.w + grow, y1 = r.y + r.h + grow;
+			gDotCanvas.Quad({x0, y0}, {x1, y0}, {x1, y1}, {x0, y1}, pass == 0 ? edge : ink);
+		}
+	}
+	gDotCanvas.Flush();
+}
+
+// The mod's sniper scope (sniper.cpp): the game's own art (CHud::Sprites
+// 63 sitesniper, 65 sitelaser, drawn as four mirrored quarters) as a circle the
+// screen's height, faded in as the scope comes up, black beyond it, and a soft
+// dark edge inside the ring. After the fourth quarter, the black and the edge.
+constexpr size_t kSiteSniper = 63 * 8, kSiteLaser = 65 * 8; // CSprite2d is 8 bytes
+constexpr float kScopeEdgeFrom = 0.40f, kScopeEdgeAlpha = 170.0f; // of the screen's height; its darkest
+int gScopeQuarters;
+
+bool ScopeQuarter(const CSprite2d *sprite)
+{
+	const auto *s = reinterpret_cast<const uint8_t *>(sprite);
+	return api.hudSprites && (s == api.hudSprites + kSiteSniper || s == api.hudSprites + kSiteLaser);
+}
+
+void DrawScopeQuarter(const CSprite2d *sprite, const float *rect, const CRGBA *col, float u0, float v0, float u1,
+                      float v1, float u3, float v3, float u2, float v2)
+{
+	const float W = float(ScreenWidth()), H = float(ScreenHeight()), cx = W / 2, cy = H / 2;
+	// Each axis to half the screen's height (the game's quarter is square only with its proper scaling).
+	const float sideX = std::fabs(rect[2] - rect[0]), sideY = std::fabs(rect[3] - rect[1]), fade = sniper::Now().overlay;
+	const float kx = sideX > 0.0f ? (H / 2) / sideX : 1.0f, ky = sideY > 0.0f ? (H / 2) / sideY : 1.0f;
+	float scaled[4];
+	for (int i = 0; i < 4; i++)
+		scaled[i] = i % 2 == 0 ? cx + (rect[i] - cx) * kx : cy + (rect[i] - cy) * ky;
+	CRGBA c = *col;
+	c.a = uint8_t(c.a * fade);
+	orig_DrawUV(sprite, scaled, &c, u0, v0, u1, v1, u3, v3, u2, v2);
+	if (++gScopeQuarters < 4)
+		return;
+	gScopeQuarters = 0;
+	SetHudRenderStates();
+	gDotCanvas.SetTexture(nullptr);
+	const CRGBA black{0, 0, 0, uint8_t(255.0f * fade)}, clear{0, 0, 0, 0}, edge{0, 0, 0, uint8_t(kScopeEdgeAlpha * fade)};
+	const float left = cx - H / 2, right = cx + H / 2;
+	if (left > 0.0f)
+		gDotCanvas.Quad({0, 0}, {left + 1, 0}, {left + 1, H}, {0, H}, black);
+	if (right < W)
+		gDotCanvas.Quad({right - 1, 0}, {W, 0}, {W, H}, {right - 1, H}, black);
+	constexpr int kSegments = 72;
+	const float r0 = kScopeEdgeFrom * H, r1 = 0.5f * H;
+	for (int i = 0; i < kSegments; i++) {
+		const float a = 6.2831853f * float(i) / kSegments, b = 6.2831853f * float(i + 1) / kSegments;
+		const Vtx in0{cx + r0 * std::cos(a), cy + r0 * std::sin(a), 0, 0}, in1{cx + r0 * std::cos(b), cy + r0 * std::sin(b), 0, 0};
+		const Vtx out0{cx + r1 * std::cos(a), cy + r1 * std::sin(a), 0, 0}, out1{cx + r1 * std::cos(b), cy + r1 * std::sin(b), 0, 0};
+		gDotCanvas.Tri(in0, out0, out1, clear, edge, edge);
+		gDotCanvas.Tri(in0, out1, in1, clear, edge, clear);
+	}
+	gDotCanvas.Flush();
+}
+
 __attribute__((noinline)) void Hook_DrawUV(const CSprite2d *sprite, const float *rect, const CRGBA *col, float u0,
                                            float v0, float u1, float v1, float u3, float v3, float u2, float v2)
 {
+	if (ScopeQuarter(sprite) && sniper::Active()) {
+		DrawScopeQuarter(sprite, rect, col, u0, v0, u1, v1, u3, v3, u2, v2);
+		return;
+	}
 	// The full crosshair only while aiming; otherwise a small dot where it points.
 	const intptr_t site = static_cast<const uint8_t *>(__builtin_return_address(0)) - gText;
+	if (gCrosshairOnlyWhenAiming && (site == kCrosshairSites[0] || site == kCrosshairSites[1]) && fpshoot::Firing()) {
+		// First person: Counter-Strike's four lines, opening with the spread (fpcross.h).
+		const float cx = (rect[0] + rect[2]) / 2, cy = (rect[1] + rect[3]) / 2, h = ScreenHeight();
+		float proj[16], view[16];
+		const float tanHalf = shaders::CameraMatrices(proj, view) && proj[5] != 0.0f ? 1.0f / std::fabs(proj[5]) : 0.6f;
+		static float gap = 0.0f;
+		const float want = fpcross::Gap(fpshoot::SpreadShown(), tanHalf, h);
+		gap = gap <= 0.0f ? want : gap + (want - gap) * std::min(1.0f, 15.0f * *api.timeStep / 50.0f);
+		DrawLines(cx, cy, gap, *col);
+		return;
+	}
 	if (gCrosshairOnlyWhenAiming && (site == kCrosshairSites[0] || site == kCrosshairSites[1]) &&
 	    !aimcam::Aiming()) {
 		const float cx = (rect[0] + rect[2]) / 2, cy = (rect[1] + rect[3]) / 2;
@@ -263,12 +354,10 @@ __attribute__((noinline)) void Hook_DrawUV(const CSprite2d *sprite, const float 
 		return;
 	}
 	if (gCrosshairOnlyWhenAiming && (site == kCrosshairSites[0] || site == kCrosshairSites[1])) {
-		// Smaller than the game's: it read as a wide spread.
-		const float cx = *api.crosshairMultX * ScreenWidth(), cy = *api.crosshairMultY * ScreenHeight();
-		float scaled[4];
-		for (int i = 0; i < 4; i++)
-			scaled[i] = i % 2 == 0 ? cx + (rect[i] - cx) * kCrosshairScale : cy + (rect[i] - cy) * kCrosshairScale;
-		orig_DrawUV(sprite, scaled, col, u0, v0, u1, v1, u3, v3, u2, v2);
+		// Aiming in third person: first person's four lines, as thick (the game's
+		// sprite, shrunk so it didn't read as a wide spread, drew them thin).
+		const float h = float(ScreenHeight());
+		DrawLines(*api.crosshairMultX * ScreenWidth(), *api.crosshairMultY * h, fpcross::MinGap(h) * kThirdPersonGap, *col);
 		return;
 	}
 	if (gActive && Find(kDrawSites, __builtin_return_address(0)) == kWeapon) {
@@ -312,6 +401,7 @@ bool Install()
 
 void BeginFrame(bool minimapShown)
 {
+	gScopeQuarters = 0; // (the scope's four quarters counted afresh each frame)
 	gActive = orig_PrintString && gConfig.enabled && gConfig.hud;
 	gHideClock = gActive && minimapShown;
 	gWeaponAnchorThisFrame = gHudDrawn = false;

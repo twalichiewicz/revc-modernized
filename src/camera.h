@@ -24,6 +24,8 @@
 // as Process does.
 #include <cstdint>
 
+struct CVector;
+
 namespace camera {
 
 bool Install();
@@ -33,10 +35,18 @@ void AfterPreRender(uint8_t *ped);
 // For the gun in first person (viewmodel.cpp): on foot in first person this
 // frame; how far into aiming (0..1); his steps (phase 0..2 a stride, amount 0..1).
 bool FirstPersonOnFoot();
+// First person chosen on foot (the game's own scope can be up: sniper.cpp).
+bool FirstPersonChosen();
+// Where first person's eye is in his head (the scope's eye).
+CVector ScopeEye(uint8_t *ped);
+// The view's forward, as the camera's matrix has it now.
+CVector ViewForward();
 // In a vehicle's first-person seat view this frame.
 bool InSeat();
 float AimBlend();
 float StepPhase();
 float StepAmount();
+// His speed on the ground (m/s, eased; 0 in the air): first person's sway with his steps.
+float StepSpeed();
 
 } // namespace camera

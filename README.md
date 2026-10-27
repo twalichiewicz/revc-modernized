@@ -73,11 +73,47 @@ Vice City's story, missions and world stay as they are. Every feature can be swi
 
 ### First person
 
-- The camera button (Select/Back) goes near, mid, far, then into Tommy's eyes. The view is steadied the
-  way modern shooters do it, with a light step bob. His head is hidden so it never clips into the camera.
-- Guns are held as in Call of Duty or Counter-Strike: low on the right, raised to just under the
-  crosshair with LT. They kick when fired, dip when reloading and drop while sprinting. His left hand
-  holds the gun where his own aiming pose does. Shots go where the dot is, from the hip or aimed.
+- The camera button (Select/Back) goes near, mid, far, then into Tommy's eyes. The eye is fixed to his
+  body, with Counter-Strike's bob if `HeadBob1stPerson` is on in `macVC.ini`. His steps sway the view
+  gently, barely walking and most sprinting, and strafing tips it a little that way (it's the handheld
+  camera: `CameraShake` sets how much). His head and neck are hidden so they never clip into the
+  camera; looking down, the eye tips forward past his chest, so you see his body and legs. Aiming only
+  zooms: the view stays where it points.
+- The stick moves him the moment you push it, with Counter-Strike 1.6's acceleration and friction, instead
+  of his walk and run animations. He strafes and backpedals without turning, gets up to speed in about
+  0.4 s and stops in about 0.5 s, and keeps Vice City's own walking, running and sprinting speeds.
+- The right stick turns like a modern console shooter's: fine at the centre, fast at full push, and faster
+  still held at the rim. Aiming slows it as much as the view zooms in. Over an enemy it slows a little, so
+  you don't overshoot him, but it never pulls your aim.
+- Every gun is a proper viewmodel, as Counter-Strike 1.6 draws its guns: Tommy's own arms, from whichever
+  outfit he's wearing, their fingers cut apart and jointed so they grip it, holding a new low-poly,
+  photo-textured model of Vice City's gun (pistols and SMGs one-handed, the rest two-handed, as the game
+  holds them). It's drawn after the world, so it never goes into a wall, through its own field of view,
+  and lit as he is. It comes up when you switch to it and kicks as it fires, its slide or bolt cycling, a
+  pump racked, the Python's cylinder turning and the minigun's barrels spinning, with a flash at the
+  muzzle; a pistol's slide locks back when it's empty. Reloading lifts the gun and turns it in, and his
+  left hand pulls the magazine out, takes it away and brings the new one up and in (on a two-handed gun it
+  leaves the handguard for it). The gun bobs with his steps, more as he runs, and not at all aimed;
+  sprinting, he carries it as a runner does: a pistol or SMG up by his ear, muzzle up; a long gun up across his
+  chest; a heavy one at his hip, all moving in step with his legs. Every barrel points where you aim.
+- The sniper rifles have a modern scope: LT raises the rifle to your eye, then you're looking through the
+  game's own scope art, sharp, filling the screen. RB steps between 3× and 8×. It sways gently; L3 holds
+  your breath to steady it for a few seconds, then he gasps. A shot drops the scope while the bolt cycles,
+  then it comes back. You can creep while scoped, less accurately. The rocket launcher fires from the
+  game's own sight.
+- With the new viewmodel, guns fire as Counter-Strike 1.6's do: the shot leaves the frame you pull RT (no
+  waiting for Tommy's attack animation), at the gun's own rate (pistols and shotguns once a pull). Each shot
+  kicks the view up, automatics more with each shot of a burst and a little sideways, settling back to
+  where you aimed; the gun itself barely moves, the view takes a short jolt (his body takes the recoil). The first shot standing or walking goes exactly where the crosshair is; holding the
+  trigger, running or jumping spreads them, crouching and aiming tighten them. The crosshair is
+  Counter-Strike's four lines, crisp on whole pixels, opening and closing with the spread, through a
+  Max Payne dive too. Aiming in third person shows the same lines, and a drive-by's ring is as thick.
+- Gunshots hit harder: the game's own gunshot sounds are cleaned up and given low end (every shooter's),
+  and your own gun has a close, centred body under its shot, with a tail that sounds like a room indoors
+  and the city outside. The M4 no longer plays the Ruger's shot sped up. The game's sound is plain stereo
+  (no headphone 3D processing, which coloured close shots).
+- Fists, melee weapons and things you throw are held as before: his own arms, low on the right, with the
+  game's models.
 - Look far enough round and he turns to face that way.
 - In a vehicle you sit in the driver's seat, looking out through the car with his hands on the wheel:
   - The right stick looks around the cabin, and the view recentres when you let go. R3 looks back.
@@ -364,11 +400,14 @@ updated after that. To pick up settings added by a newer version, delete it and 
 | `AimCamera`, `DriveByAim` | Over-the-shoulder aiming; free-aim drive-bys |
 | `LookSensitivity`, `AimSensitivity` | Right stick speed, and while aiming |
 | `FirstPerson`, `SteeringWheel` | First person in the camera cycle; round, turning steering wheels |
+| `FirstPersonLook`, `FirstPersonLookYaw`, `FirstPersonLookPitch`, `AimSlowdown` | First person: the right stick's handling and its top speeds (degrees a second); aim slowdown over enemies |
 | `CameraShake` | 0 is none, 1 is the default, 2 is double |
 | `Rumble` | Controller vibration |
 | `MOD_WEAPON_WHEEL` … in `[Keys]` | The keyboard keys of the mod's own actions, written as macVC.ini's `[Bindings]` (`kbd:Q,2ndKbd:F1`, `mouse:MIDDLE`) |
 | **On foot and gunfights** | |
 | `Swimming`, `Climbing`, `CrouchWalk` | Swimming, climbing and walking crouched |
+| `FirstPersonMovement`, `FirstPersonAccel`, `FirstPersonFriction` | First person: the stick moves him at once; how fast he gets up to speed and stops (Counter-Strike's 5 and 4) |
+| `FirstPersonGuns`, `ViewmodelFov` | First person: his own arms holding the new guns, drawn as a viewmodel; its field of view (degrees, top to bottom) |
 | `Interactions` | Greeting and insulting people, hookers |
 | `SmarterEnemies` | Gunmen fighting from cover |
 | `BulletTime` | Bullet time and the shootdodge |
@@ -412,6 +451,11 @@ repository.
 - `make` builds the plugin.
 - `make test` runs the unit tests (the minimap's projection, GPS turns, and the police's knowledge).
 - `make preview` builds an offline renderer for the minimap and phone.
+- `make viewmodel` cuts Tommy's arms from every outfit in your game files, as the mod does, fits his hand
+  to each gun, reports how much of each finger ends up inside it, and writes OBJs to render with
+  `blender -b -P tools/viewmodel/render.py -- build/vm fp player`.
+- `make guns` rebuilds the viewmodel guns in Blender (`tools/guns/`; the built `assets/guns/*.vmg` are
+  committed, so players never need Blender).
 
 Each feature is its own module in `src/`, for example `camera.cpp` (first person), `swim.cpp`,
 `clouds.cpp`, `police.cpp` and `wanted.cpp`. Each module's header says what it does and which game
@@ -420,8 +464,10 @@ and build plan are in `docs/superpowers/`.
 
 ## Known limits
 
-- First person uses the game's own models. The guns are too low-detail for real iron sights, so LT
-  brings them up under the crosshair instead. Tommy turns on the spot without a stepping animation.
+- In first person, things you throw (grenades, molotovs) still use the game's own models and throw, and the
+  keyboard and mouse fire through the game's attack, not the instant firing. A two-handed gun's reload
+  doesn't take the left hand to the magazine yet. Some outfits (the ones with open, straight fingers) grip
+  the guns less neatly than his usual clothes do. Tommy turns on the spot without a stepping animation.
 - The shadows are the port's own ray-traced ones (`MetalRayTracing=1` in the port's `macVC.ini`). They
   can cost 5–28 ms a frame, and the mod's log shows their timings.
 - Cops hear gunfire, so missions with street shootouts can draw a police search where the game never did.

@@ -25,7 +25,6 @@ constexpr float kHeadHeight = 0.55f; // above the ped's position
 constexpr float kDistance = 2.0f;    // behind the head
 constexpr float kShoulder = 0.6f;    // to the right
 constexpr float kRise = 0.18f;
-constexpr float kAimFov = 52.0f;     // the follow camera's is 70
 constexpr float kEaseIn = 0.15f, kEaseOut = 0.2f; // seconds
 constexpr float kWalkFrom = 0.2f;                  // of a full (walking) push: he's walking, not standing
 

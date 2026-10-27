@@ -3,3 +3,5 @@ __pycache__/
 *.pyc
 .DS_Store
 .superpowers/
+# A render over a game screenshot (the game's art): kept locally, never committed
+docs/research/viewmodel-spike/first-person-colt45.png

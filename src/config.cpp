@@ -42,6 +42,9 @@ const char kDefaultIni[] = "; VC Modern HUD for macVC. Delete this file to resto
                            "Swimming=1           ; Tommy swims instead of drowning\n"
                            "Climbing=1           ; jump vaults low walls, climbs ledges and climbs out of the water\n"
                            "CrouchWalk=1         ; crouched, Tommy walks crouched instead of standing up\n"
+                           "FirstPersonMovement=1 ; first person: the stick moves him at once, CS 1.6's acceleration and friction\n"
+                           "FirstPersonAccel=5   ; ... how fast he gets up to speed (CS: 5; higher is snappier)\n"
+                           "FirstPersonFriction=4 ; ... how fast he stops (CS: 4)\n"
                            "SmarterEnemies=1     ; gunmen take cover, shoot over it and move about between bursts\n"
                            "BulletTime=1         ; aiming: R3 slows time (uses stamina); jump with the stick dives\n"
                            "HeliDamage=1         ; the police helicopter takes hits where it is, smokes, and goes down sooner\n"
@@ -58,6 +61,12 @@ const char kDefaultIni[] = "; VC Modern HUD for macVC. Delete this file to resto
                            "CameraShake=1        ; handheld camera on foot, sway and jolts in vehicles (0 = none, 2 = double)\n"
                            "SpawnDistance=2      ; cars and people appear this much further out, past where you notice (1 = as the game)\n"
                            "CarVariety=1         ; more car models about, and fewer of the same one at once\n"
+                           "FirstPersonLook=1    ; first person: the right stick turns like a modern console shooter's\n"
+                           "FirstPersonLookYaw=240 ; ... its top turning speed, degrees a second (50% more held at the rim)\n"
+                           "FirstPersonLookPitch=145 ; ... up and down\n"
+                           "AimSlowdown=1        ; first person: the right stick slows a little over an enemy (never pulls)\n"
+                           "FirstPersonGuns=1    ; first person: Tommy's own arms holding new guns (the Colt so far), drawn as a viewmodel\n"
+                           "ViewmodelFov=62      ; ... seen through their own field of view, degrees top to bottom\n"
                            "LookSensitivity=1    ; right stick camera speed\n"
                            "AimSensitivity=0.45  ; right stick speed while aiming or scoped (1 = as when not aiming)\n"
                            "Margin=0.025         ; distance from the screen corner\n"
@@ -146,6 +155,24 @@ void Apply(const char *key, const char *value)
 		gConfig.climb = b;
 	else if (!strcasecmp(key, "CrouchWalk"))
 		gConfig.crouchWalk = b;
+	else if (!strcasecmp(key, "FirstPersonLook"))
+		gConfig.firstPersonLook = b;
+	else if (!strcasecmp(key, "FirstPersonLookYaw") && f >= 30.0f && f <= 1000.0f)
+		gConfig.fpLookYaw = f;
+	else if (!strcasecmp(key, "FirstPersonLookPitch") && f >= 30.0f && f <= 1000.0f)
+		gConfig.fpLookPitch = f;
+	else if (!strcasecmp(key, "AimSlowdown"))
+		gConfig.aimSlowdown = b;
+	else if (!strcasecmp(key, "FirstPersonGuns"))
+		gConfig.firstPersonGuns = b;
+	else if (!strcasecmp(key, "ViewmodelFov") && f >= 30.0f && f <= 110.0f)
+		gConfig.viewmodelFov = f;
+	else if (!strcasecmp(key, "FirstPersonMovement"))
+		gConfig.firstPersonMovement = b;
+	else if (!strcasecmp(key, "FirstPersonAccel") && f > 0.5f && f <= 50.0f)
+		gConfig.fpAccel = f;
+	else if (!strcasecmp(key, "FirstPersonFriction") && f > 0.5f && f <= 50.0f)
+		gConfig.fpFriction = f;
 	else if (!strcasecmp(key, "SmarterEnemies"))
 		gConfig.smarterEnemies = b;
 	else if (!strcasecmp(key, "BulletTime"))
@@ -233,8 +260,30 @@ void SaveValue(const char *section, const char *key, const std::string &value)
 	}
 }
 
+// macVC.ini's HeadBob1stPerson (the game's own setting): first person's bob.
+void ReadHeadBob()
+{
+	FILE *f = fopen((SupportDir() + "/macVC.ini").c_str(), "r");
+	if (!f)
+		return;
+	char line[256];
+	while (fgets(line, sizeof line, f)) {
+		if (char *comment = strpbrk(line, ";#"))
+			*comment = '\0';
+		char *eq = strchr(line, '=');
+		if (!eq)
+			continue;
+		*eq = '\0';
+		if (!strcasecmp(Trim(line), "HeadBob1stPerson"))
+			gConfig.headBob = atoi(Trim(eq + 1)) != 0;
+	}
+	fclose(f);
+	Log("config: first-person bob %s (macVC.ini HeadBob1stPerson)", gConfig.headBob ? "on" : "off");
+}
+
 void LoadConfig()
 {
+	ReadHeadBob();
 	const std::string path = SupportDir() + "/vcmodernhud.ini";
 	FILE *f = fopen(path.c_str(), "r");
 	if (!f) {

@@ -51,9 +51,10 @@ void Expand(uint16_t *text, const Resolver &resolve)
 	if (tildes % 2)
 		n = last;
 	out.resize(n);
-	while (!out.empty() && out.back() == u'~') { // ends in a token: a space after it, or it goes if it's full
-		if (out.size() < kCapacity - 1) {
-			out += u' ';
+	// Ends in a token: two spaces after it (CFont::PrintString drops one), or it goes if it's full.
+	while (!out.empty() && out.back() == u'~') {
+		if (out.size() + 2 < kCapacity) {
+			out += u"  ";
 			break;
 		}
 		out.resize(out.rfind(u'~', out.size() - 2)); // from the token's opening '~'
@@ -66,8 +67,11 @@ void Expand(uint16_t *text, const Resolver &resolve)
 
 std::u16string Printable(std::u16string text)
 {
-	if (!text.empty() && text.back() == u'~')
-		text += u' ';
+	size_t end = text.size();
+	while (end > 0 && text[end - 1] == u' ')
+		end--;
+	if (end > 0 && text[end - 1] == u'~')
+		text = text.substr(0, end) + u"  ";
 	return text;
 }
 

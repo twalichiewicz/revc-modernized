@@ -32,7 +32,10 @@ static void TestLegendOnFoot()
 	CHECK(Row(rows, Pad::kRT) && Row(rows, Pad::kRT)->label == "FIRE");
 	CHECK(Row(rows, Pad::kLeftRight) && Row(rows, Pad::kLeftRight)->label == "PREVIOUS / NEXT WEAPON");
 	CHECK(Row(rows, Pad::kRightStick) && Row(rows, Pad::kRightStick)->more == "CLICK WHILE AIMING: BULLET TIME");
-	CHECK(rows.size() == 13);
+	// The sniper scope's (sniper.cpp: layout::kScopeZoom, kHoldBreath).
+	CHECK(Row(rows, Pad::kRB) && Row(rows, Pad::kRB)->label == "SNIPER SCOPE ZOOM");
+	CHECK(Row(rows, Pad::kLeftStick) && Row(rows, Pad::kLeftStick)->more == "CLICK IN A SNIPER SCOPE: HOLD BREATH");
+	CHECK(rows.size() == 14);
 }
 
 static void TestLegendFollowsSwitches()

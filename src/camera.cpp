@@ -1,16 +1,21 @@
 #include "camera.h"
 #include "aimcam.h"
 #include "climb.h"
+#include "fpgun.h"
+#include "fpshoot.h"
 #include "combat.h"
 #include "config.h"
 #include "controls.h"
 #include "driveby.h"
+#include "fpbob.h"
 #include "game.h"
 #include "heli.h"
 #include "hooks.h"
 #include "log.h"
 #include "phone.h"
 #include "police.h"
+#include "shotsound.h"
+#include "sniper.h"
 #include "swim.h"
 #include "traffic.h"
 #include "viewmodel.h"
@@ -48,6 +53,7 @@ constexpr size_t kAimedSource = 0x8ac, kAimedFront = 0x8b8, kAimedUp = 0x8c4, kP
 constexpr uint8_t kGunPointed = 1;
 // CCam: front, source, up (as driveby.cpp has them).
 constexpr size_t kCamFront = 0x168, kCamSource = 0x174, kCamUp = 0x18c;
+constexpr size_t kCamAlpha = 0xac, kCamBeta = 0xbc; // CCam::Alpha, Beta: its pitch and heading
 
 // First person.
 constexpr float kNearClipFoot = 0.15f, kNearClipVehicle = 0.08f; // m (the game's: 0.9)
@@ -75,6 +81,7 @@ constexpr float kSettleOnBike = 0.08f, kLeanTip = 0.15f; // s, rad
 constexpr int32_t kStateOpenDoor = 0x35, kStateCarJack = 0x38, kStateEnterCar = 0x3a, kStateExitCar = 0x3c;
 constexpr float kTurnRate = 3.0f;               // per second
 constexpr float kAimRate = 6.0f;                // per second, easing in and out of aiming
+constexpr float kBoltAim = 0.4f;                // a sniper rifle's aim while its bolt cycles (out of the scope)
 // Looking far enough round while he stands, he turns to face that way
 // (walking, he already goes where you look; aiming, the game turns him);
 // sooner with something in his hand, his arms holding it to the view.
@@ -84,10 +91,12 @@ constexpr float kBodyTurnAt = 1.1f, kBodyTurnAtArmed = 0.5f, kBodyFaced = 0.05f;
 constexpr float kBodyTurnSettle = 0.12f, kBodyTurnMost = 7.0f;                    // s; rad per second
 // Steadied as first-person games are: the eye follows his body, and his
 // head about it only slowly (the animations' bob and lean go, crouching or
-// climbing stays); his height eases over steps; a gentle bob of its own.
-constexpr float kSettle = 0.28f, kSettleInVehicle = 0.2f, kStepSettle = 0.06f; // s
-constexpr float kBobHeight = 0.018f, kBobSide = 0.012f; // m, at a run
-constexpr float kStepsPerSecond = 1.4f, kStepsPerSpeed = 0.45f; // per m/s
+// climbing stays); his height eases over steps; Counter-Strike's bob (fpbob.cpp).
+constexpr float kSettle = 0.28f, kSettleInVehicle = 0.2f; // s (his height over steps: fpbob::Steps)
+constexpr float kStepsPerSecond = 1.2f, kStepsPerSpeed = 0.3f; // per m/s (when his legs' animation isn't found)
+// CAnimBlendAssociation's blend, its clip (the hierarchy), its time; the clip's length (CAnimBlendAssociation::UpdateTime)
+constexpr size_t kAssocBlend = 0x28, kAssocClip = 0x20, kAssocTime = 0x30, kClipLength = 0x24;
+constexpr float kStepSpeedSettle = 0.15f, kSwayAimed = 0.4f; // s; the sway left while aiming
 
 // Shake, in degrees and hertz.
 constexpr float kFootDrift = 0.12f, kFootDriftPerSpeed = 0.05f; // per m/s
@@ -125,8 +134,12 @@ bool gHaveVelocity;
 // First person, steadied.
 CVector gHeadLocal;         // his head about his body or vehicle
 const uint8_t *gHeadAbout;  // which
-bool gHeadReady, gHeightReady;
-float gHeight, gBobPhase, gBobAmount;
+bool gHeadReady;
+float gBobPhase, gBobAmount;
+float gStepSpeed; // m/s on the ground, eased: the view's and the gun's sway
+float gStepSide;  // m/s to his right, eased: the strafe roll (no jitter off a wall)
+fpbob::State gBob;          // CS's bob
+fpbob::Steps gSteps;        // his height over steps
 bool gHideHead;             // this frame (after CPed::PreRender)
 bool gOnFoot;               // first person on foot, this frame
 float gLookYaw, gLookPitch; // the right stick's look in the seat, eased
@@ -304,27 +317,64 @@ void NearClip(float near)
 
 void OnFoot(uint8_t *ped, float dt)
 {
-	// Level the view, less as he aims (then it's the line exactly).
-	TurnCamera(0.0f, kLevel * (1.0f - gAim), 0.0f);
+	// Just out of the sniper scope: on where it looked (the follow camera's own
+	// pitch, raised below, would point elsewhere), this frame and after.
+	CVector scoped;
+	if (sniper::TakeLeftView(scoped)) {
+		const scope::Angles a = scope::FollowAngles({scoped.x, scoped.y, scoped.z}, kLevel);
+		uint8_t *cam = ActiveCam();
+		*reinterpret_cast<float *>(cam + kCamAlpha) = a.alpha;
+		*reinterpret_cast<float *>(cam + kCamBeta) = a.beta;
+		const CVector front{std::cos(a.alpha) * -std::cos(a.beta), std::cos(a.alpha) * -std::sin(a.beta), std::sin(a.alpha)};
+		const CVector up = Normal(Sub(CVector{0.0f, 0.0f, 1.0f}, Mul(front, front.z)));
+		Row(0x10) = front;
+		Row(0x20) = up;
+		Row(0x00) = Cross(up, front);
+	}
+	// Level the view, the same aiming or not: aiming only zooms. (Shots and the
+	// crosshair follow the view itself, so it needn't be the game's aim line.)
+	TurnCamera(0.0f, kLevel, 0.0f);
 	const CVector front = Row(0x10);
-	const CVector flat = Normal(CVector{front.x, front.y, 0.0f}), side = Normal(Cross(flat, CVector{0.0f, 0.0f, 1.0f}));
+	const CVector flat = Normal(CVector{front.x, front.y, 0.0f});
 	TurnBody(ped, flat, dt); // before his head is found: it turns with him
 	CVector body = EntityPos(ped);
-	gHeight = gHeightReady ? gHeight + (body.z - gHeight) * Ease(dt, kStepSettle) : body.z;
-	gHeightReady = true;
-	body.z = gHeight;
-	// A step's bob, for how fast he's going.
+	body.z = gSteps.Height(body.z, dt, (PedFlags(ped) & kPedStanding) != 0);
+	// His steps (the gun's bob in viewmodel.cpp reads them), and the eye's bob:
+	// Counter-Strike's, if macVC.ini's HeadBob1stPerson is on.
 	const CVector v = EntitySpeed(ped);
 	const float speed = std::sqrt(v.x * v.x + v.y * v.y) * 50.0f; // m/s
 	gBobAmount += (std::min(speed / 6.0f, 1.0f) - gBobAmount) * Ease(dt, 0.25f);
-	gBobPhase = std::fmod(gBobPhase + (kStepsPerSecond + kStepsPerSpeed * speed) * dt, 2.0f);
-	const float pi = 3.14159265f;
-	const float bob = kBobHeight * gBobAmount * std::sin(gBobPhase * 2.0f * pi);
-	const float sway = kBobSide * gBobAmount * std::sin(gBobPhase * pi);
+	// His steps' phase: his legs' walk, run or sprint animation's (fpbob::StridePhase), else from his speed.
+	fpbob::Stride strides[3] = {};
+	if (uint8_t *clump = EntityClump(ped))
+		for (uint32_t id = 0; id < 3; id++) // ANIM_STD_WALK, RUN, RUNFAST
+			if (const uint8_t *assoc = api.GetAssociation(clump, id)) {
+				const uint8_t *clip = *reinterpret_cast<const uint8_t *const *>(assoc + kAssocClip);
+				strides[id] = {*reinterpret_cast<const float *>(assoc + kAssocBlend), *reinterpret_cast<const float *>(assoc + kAssocTime),
+				               clip ? *reinterpret_cast<const float *>(clip + kClipLength) : 0.0f};
+			}
+	float legs;
+	gBobPhase = fpbob::StridePhase(strides, 3, legs) ? legs
+	                                                 : std::fmod(gBobPhase + (kStepsPerSecond + kStepsPerSpeed * speed) * dt, 2.0f);
+	const bool onGround = (PedFlags(ped) & kPedStanding) != 0;
+	const float bob = gConfig.headBob ? fpbob::Bob(gBob, speed, dt, onGround) : 0.0f;
+	// The eye is in his head, its sway about his body eased out (SteadyHead):
+	// fixed to his body it would sit behind his head, in his neck.
 	CVector eye = Add(body, ToWorld(ped, SteadyHead(ped, ped, dt, kSettle)));
-	eye = Add(eye, Add(CVector{0.0f, 0.0f, kEyeUp + bob}, Add(Mul(flat, kEyeAhead), Mul(side, sway))));
+	// Looking down, the eye tips forward past his chest (fpbob::LookDown).
+	const fpbob::Push push = fpbob::LookDown(front.z);
+	eye = Add(eye, Add(CVector{0.0f, 0.0f, kEyeUp + bob - push.down}, Mul(flat, kEyeAhead + push.ahead)));
 	Row(0x30) = eye;
 	NearClip(kNearClipFoot);
+	// His steps sway the view (the handheld camera, CameraShake), more as he
+	// runs, less aimed; strafing rolls it. Shots go along it, as the crosshair.
+	gStepSpeed += ((onGround ? speed : 0.0f) - gStepSpeed) * Ease(dt, kStepSpeedSettle);
+	const float shake = std::clamp(gConfig.cameraShake, 0.0f, 3.0f) * (1.0f - (1.0f - kSwayAimed) * gAim);
+	const CVector right = Normal(Cross(Row(0x10), Row(0x20)));
+	gStepSide += (Dot(Mul(v, 50.0f), right) - gStepSide) * Ease(dt, kStepSpeedSettle);
+	const fpbob::Turn sway = fpbob::Sway(gBobPhase, gStepSpeed, gStepSide);
+	const float d = shake * 3.14159265f / 180.0f;
+	TurnCamera(sway.yaw * d, sway.pitch * d, sway.roll * d);
 }
 
 // The bumper view's direction (it looks left, right and behind with the
@@ -409,6 +459,18 @@ void InTheDoor(uint8_t *ped, uint8_t *vehicle, bool gettingIn, float dt)
 // the gun (CPedIK flag 1), else straight out of his hand as the animation
 // holds it. For first person's shots the copy is the view, the gun counts as
 // pointed and the free camera is on.
+// A shot's direction spread into a cone of `angle` (radians) about `front`,
+// evenly over its area (fpshoot's spread; 0: exact).
+CVector Spread(const CVector &front, const CVector &up, float angle)
+{
+	if (angle <= 0.0f)
+		return front;
+	const float r = angle * std::sqrt(float(rand()) / float(RAND_MAX)), a = 6.2831853f * float(rand()) / float(RAND_MAX);
+	const CVector side = Normal(Cross(front, up)), lift = Normal(Cross(side, front));
+	const float s = std::tan(r) * std::cos(a), l = std::tan(r) * std::sin(a);
+	return Normal({front.x + side.x * s + lift.x * l, front.y + side.y * s + lift.y * l, front.z + side.z * s + lift.z * l});
+}
+
 bool Hook_Fire(uint8_t *weapon, uint8_t *shooter, CVector *source)
 {
 	if (shooter && shooter != api.FindPlayerPed() && !combat::MayFire(weapon, shooter, source))
@@ -417,10 +479,19 @@ bool Hook_Fire(uint8_t *weapon, uint8_t *shooter, CVector *source)
 		combat::PlayerShot(Row(0x30), Row(0x10)); // gunmen near the shot take cover
 		police::PlayerFired(WeaponType(weapon));  // and cops draw their guns
 	}
-	if (!gOnFoot || !shooter || shooter != api.FindPlayerPed())
-		return orig_Fire(weapon, shooter, source);
+	if (!gOnFoot || !shooter || shooter != api.FindPlayerPed()) {
+		const bool player = shooter && shooter == api.FindPlayerPed(), scoped = player && sniper::Active();
+		if (scoped)
+			sniper::BeforeShot(); // spread as he creeps
+		const bool fired = orig_Fire(weapon, shooter, source);
+		if (scoped)
+			sniper::AfterShot(fired); // and the bolt
+		if (fired && player)
+			shotsound::Shot(WeaponType(weapon)); // his own gun's body under the game's shot
+		return fired;
+	}
 	*reinterpret_cast<CVector *>(shooter + kAimedSource) = Row(0x30);
-	*reinterpret_cast<CVector *>(shooter + kAimedFront) = Row(0x10);
+	*reinterpret_cast<CVector *>(shooter + kAimedFront) = Spread(Row(0x10), Row(0x20), fpshoot::SpreadNow());
 	*reinterpret_cast<CVector *>(shooter + kAimedUp) = Row(0x20);
 	uint8_t &ik = shooter[kPedIKFlags];
 	const uint8_t ikWas = ik, freeWas = gFreeCam ? *gFreeCam : 0;
@@ -431,6 +502,8 @@ bool Hook_Fire(uint8_t *weapon, uint8_t *shooter, CVector *source)
 	ik = (ik & ~kGunPointed) | (ikWas & kGunPointed);
 	if (gFreeCam)
 		*gFreeCam = freeWas;
+	if (fired)
+		shotsound::Shot(WeaponType(weapon));
 	return fired;
 }
 
@@ -513,6 +586,43 @@ bool Shake(uint8_t *ped, float dt, bool firstPerson)
 	return true;
 }
 
+// Where the view points as aiming starts in first person on foot, and 0.3 s
+// on, with the camera's mode and field of view: aiming should only zoom
+// (logged the first three times; a sample with his heading turned, the
+// stick moving, is dropped).
+void AimWatch(float dt, bool onFoot)
+{
+	static int watching = 0, told = 0; // 0: not aiming; 1: timing; 2: told, till he stops aiming
+	static float since, pitchThen, headingThen, fovThen;
+	static uint16_t modeThen;
+	const CVector front = Row(0x10);
+	const float pitch = std::asin(std::clamp(front.z, -1.0f, 1.0f)) * 57.2958f, heading = std::atan2(front.y, front.x) * 57.2958f;
+	const uint8_t *cam = ActiveCam();
+	const uint16_t mode = *reinterpret_cast<const uint16_t *>(cam + 0xc);
+	const float fov = *reinterpret_cast<const float *>(cam + 0xb4);
+	if (!onFoot) { // (left first person: a sample started there is no good)
+		watching = 0;
+		return;
+	}
+	if (watching == 0 && gAim > 0.0f && told < 3) {
+		watching = 1;
+		since = 0.0f;
+		pitchThen = pitch;
+		headingThen = heading;
+		fovThen = fov;
+		modeThen = mode;
+	} else if (watching == 1 && (since += dt) > 0.3f) {
+		if (std::fabs(std::remainder(heading - headingThen, 360.0f)) < 1.0f) {
+			Log("camera: aiming in first person: the view %.1f° up as it started (mode %u, fov %.0f), %.1f° 0.3 s on (mode %u, fov %.0f)",
+			    pitchThen, modeThen, fovThen, pitch, mode, fov);
+			told++;
+		}
+		watching = 2;
+	}
+	if (watching != 1 && gAim <= 0.0f)
+		watching = 0;
+}
+
 void Hook_Process(uint8_t *cam)
 {
 	orig_Process(cam);
@@ -525,7 +635,9 @@ void Hook_Process(uint8_t *cam)
 	uint8_t *ped = api.FindPlayerPed();
 	const float dt = *api.timeStep / 50.0f; // s
 	Cycle(ped);
-	const float aimTo = aimcam::Aiming() ? 1.0f : 0.0f;
+	// (A sniper rifle: raised to the eye, then the game's scope; partway down while its bolt cycles.)
+	const float aimTo = aimcam::Aiming() ? 1.0f : sniper::Wanted() ? (sniper::Now().bolting ? kBoltAim : 1.0f) : 0.0f;
+	sniper::Frame(dt);
 	gAim += std::clamp(aimTo - gAim, -kAimRate * dt, kAimRate * dt);
 	const uint8_t *cam8 = api.theCamera;
 	const bool scripted = cam8[kWideScreen] || !cam8[kLookingAtPlayer];
@@ -551,16 +663,35 @@ void Hook_Process(uint8_t *cam)
 			firstPerson = gOnFoot = true;
 		}
 	}
-	if (firstPerson)
+	AimWatch(dt, firstPerson && gOnFoot);
+	if (firstPerson) {
 		gViewForward = Row(0x10);
-	else
-		gHeadReady = gHeightReady = false;
+	} else {
+		gHeadReady = false;
+		gSteps = {};
+	}
 	if (!gCockpit)
 		gLookYaw = gLookPitch = 0.0f;
 	gHideHead = firstPerson;
 	bool moved = firstPerson;
 	if (OurCamera() || (ped && PedInVehicle(ped) && !api.theCamera[kWideScreen]))
 		moved |= Shake(ped, dt, firstPerson);
+	fpshoot::Tick(dt); // the punch settles and the spread recovers every frame (jumping, climbing too)
+	if (gOnFoot) { // a shot's punch, as Counter-Strike's: the view kicks, and shots go along it
+		float up, right;
+		fpshoot::Punch(up, right);
+		if (up != 0.0f || right != 0.0f) {
+			TurnCamera(-right * (3.14159265f / 180.0f), up * (3.14159265f / 180.0f), 0.0f);
+			moved = true;
+		}
+		float joltLeft, joltUp, joltRoll;
+		fpshoot::Jolt(joltLeft, joltUp, joltRoll);
+		if (joltLeft != 0.0f || joltUp != 0.0f || joltRoll != 0.0f) {
+			const float d = 3.14159265f / 180.0f;
+			TurnCamera(joltLeft * d, joltUp * d, joltRoll * d);
+			moved = true;
+		}
+	}
 	if (moved)
 		ToRenderWare();
 }
@@ -603,17 +734,33 @@ bool Install()
 }
 
 bool FirstPersonOnFoot() { return gOnFoot; }
+
+bool FirstPersonChosen()
+{
+	uint8_t *ped = api.FindPlayerPed();
+	return gConfig.firstPerson && gFirstPerson && ped && !PedInVehicle(ped);
+}
+
+CVector ViewForward() { return Row(0x10); }
+
+CVector ScopeEye(uint8_t *ped)
+{
+	const CVector front = Row(0x10);
+	const CVector flat = Normal(CVector{front.x, front.y, 0.0f});
+	return Add(Head(ped), Add(CVector{0.0f, 0.0f, kEyeUp}, Mul(flat, kEyeAhead)));
+}
 bool InSeat() { return gCockpit != nullptr; }
 float AimBlend() { return gAim; }
 float StepPhase() { return gBobPhase; }
 float StepAmount() { return gBobAmount; }
+float StepSpeed() { return gStepSpeed; }
 
 void AfterPreRender(uint8_t *ped)
 {
 	if (!gHideHead || !gHierarchy || ped != api.FindPlayerPed())
 		return;
-	if (gOnFoot)
-		viewmodel::Apply(ped);
+	if (gOnFoot && !fpgun::Prepare(ped))
+		viewmodel::Apply(ped); // a gun without a new viewmodel yet, or fists: his real arms posed
 	else if (gCockpit && driveby::Aiming())
 		viewmodel::Apply(ped, true); // the gun held as on foot, pointing where it shoots
 	void *clump = *reinterpret_cast<void *const *>(ped + kRwObject);
@@ -642,18 +789,18 @@ void AfterPreRender(uint8_t *ped)
 		}
 	};
 	float *head = bone(kBoneHead), *neck = bone(kBoneNeck);
-	if (!gCockpit) {
-		shrink(head, head);
-		return;
-	}
-	// In the seat his neck too, both to the base of his neck. Shrunk each to
-	// its own joint, the skin hung on both (the back of his head and neck)
+	// His head and neck, both to the base of his neck (looking down on foot,
+	// his neck was right under the eye, seen from inside). Shrunk each to its
+	// own joint, the skin hung on both (the back of his head and neck)
 	// stretched into a pole between them, in front of the eye on a bike (it
-	// sits behind his head). And his shoulders steadied: on a bike (or with
-	// the top down) CPed::PreRender flaps his collar in the wind, scaling
-	// them at random every frame, right under the eye.
+	// sits behind his head).
 	shrink(head, neck);
 	shrink(neck, neck);
+	if (!gCockpit)
+		return;
+	// In the seat his shoulders steadied: on a bike (or with the top down)
+	// CPed::PreRender flaps his collar in the wind, scaling them at random
+	// every frame, right under the eye.
 	for (int tag : kBoneClavicles)
 		unscale(bone(tag));
 }

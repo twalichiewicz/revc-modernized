@@ -49,7 +49,7 @@ static void TestExpandDropsUnknownAndKeepsTwo()
 	uint16_t t[hinttext::kCapacity];
 	Wide(t, "~k~~PED_FIREWEAPON~ or ~k~~NOPE~ then ~k~~PED_FIREWEAPON~");
 	hinttext::Expand(t, Fire);
-	CHECK(Ascii(t) == "~V~ or  then ~V~ "); // a space after the last: TestNoTextEndsWithAToken
+	CHECK(Ascii(t) == "~V~ or  then ~V~  "); // two spaces after the last: TestNoTextEndsWithAToken
 }
 
 // The token fits, but what it expands to doesn't: cut at the buffer's end, never past it.
@@ -88,18 +88,21 @@ static void TestPastToken()
 }
 
 // CFont::RenderFontBuffer draws whatever follows a token without checking for
-// the end, so a text ending in one steps past its terminator: never hand it one.
+// the end, so a text ending in one steps past its terminator: never hand it
+// one. And CFont::PrintString drops a single space at the end (writing its
+// terminator over it), so it takes two: one stays.
 static void TestNoTextEndsWithAToken()
 {
-	CHECK(hinttext::Printable(u"~O~") == u"~O~ ");
-	CHECK(hinttext::Printable(u"Press ~V~") == u"Press ~V~ ");
+	CHECK(hinttext::Printable(u"~O~") == u"~O~  ");
+	CHECK(hinttext::Printable(u"Press ~V~") == u"Press ~V~  ");
+	CHECK(hinttext::Printable(u"Press ~V~ ") == u"Press ~V~  ");
 	CHECK(hinttext::Printable(u"Q") == u"Q");
 	CHECK(hinttext::Printable(u"") == u"");
 	uint16_t t[hinttext::kCapacity];
 	Wide(t, "Press the ~h~~k~~PED_FIREWEAPON~");
 	hinttext::Expand(t, Fire);
-	CHECK(Ascii(t) == "Press the ~h~~V~ ");
-	// Full to the last unit with a token at its end: no room for the space, so the token goes.
+	CHECK(Ascii(t) == "Press the ~h~~V~  ");
+	// Full to the last unit with a token at its end: no room for the spaces, so the token goes.
 	std::string full(252, 'a');
 	full += "~k~~PED_FIREWEAPON~";
 	Wide(t, full.c_str());

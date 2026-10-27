@@ -21,7 +21,9 @@ using Resolver = std::function<std::u16string(std::string_view name)>;
 void Expand(uint16_t *text, const Resolver &resolve);
 // `text` as the font can draw it: CFont::RenderFontBuffer draws the character
 // after a token without checking for the end, so a text ending in a token
-// gets a space after it (it would step past its terminator into the next).
+// gets two spaces after it (it would step past its terminator into the next
+// entry's header, read as text: the interaction prompts' crash; and
+// CFont::PrintString writes its terminator over a single space at the end).
 std::u16string Printable(std::u16string text);
 // Past the token at `s` (its opening '~'): after its closing '~'; null if it has none.
 const uint16_t *PastToken(const uint16_t *s);
