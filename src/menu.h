@@ -2,8 +2,9 @@
 // GTA IV-style pause menu: it opens straight on the map, and the other pages
 // sit in tabs across the top (Q/E, LB/RB or a click); Back on a tab resumes
 // the game. Circle (B) is the back button instead of Triangle (Y). On the map,
-// LT zooms in instead of RB, and Cross/A only places the waypoint. The map
-// legend is drawn at a fraction of its size in a corner.
+// LT zooms in instead of RB, and Cross/A only places the waypoint, or on an
+// icon picks it as the destination (poi.h). The map legend is drawn at a
+// fraction of its size in a corner, and calls the waypoint "Destination".
 //
 // Like the HUD, the frontend is changed through the primitives it calls: the
 // legend's drawing calls are recognised by return address or by running

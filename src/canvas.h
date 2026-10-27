@@ -30,4 +30,6 @@ public:
 	void Pill(float x, float y, float w, float h, CRGBA col);
 	// Rectangle with corners rounded by `r`.
 	void RoundRect(float x, float y, float w, float h, float r, CRGBA col);
+	// RoundRect's outline, `t` thick, outside it.
+	void RoundRectOutline(float x, float y, float w, float h, float r, float t, CRGBA col);
 };

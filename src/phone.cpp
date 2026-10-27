@@ -581,7 +581,7 @@ void Draw()
 	DrawBrickPhone(gCanvas, phone);
 	gCanvas.Flush();
 	if (gRinging)
-		prompt::Draw(gCanvas, phone.x - 0.2f * phone.unit, BrickPhoneLcdCentre(phone), H, prompt::Button::kUp, "ANSWER");
+		prompt::Draw(gCanvas, phone.x - 0.2f * phone.unit, BrickPhoneLcdCentre(phone), H, bindings::Action::kAnswerCall, "ANSWER");
 	if (gShowingText)
 		DrawCard(phone.x - 0.2f * phone.unit, H - m, H, ease);
 	text::Flush();

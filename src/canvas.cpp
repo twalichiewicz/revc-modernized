@@ -33,19 +33,44 @@ void Canvas::Pill(float x, float y, float w, float h, CRGBA col)
 	Fan(v, n, col); // convex, so a fan from any vertex works
 }
 
-void Canvas::RoundRect(float x, float y, float w, float h, float r, CRGBA col)
+namespace {
+
+constexpr int kCornerSeg = 6;
+constexpr int kRoundRectVerts = 4 * (kCornerSeg + 1);
+
+// RoundRect's edge, grown by `grow` about the same corner centres, clockwise
+// from the top-right corner.
+void RoundRectEdge(float x, float y, float w, float h, float r, float grow, Vtx *v)
 {
-	constexpr int kSeg = 6; // per corner
 	r = std::min(r, std::min(w, h) * 0.5f);
 	const Vec2 centres[4] = {{x + w - r, y + r}, {x + w - r, y + h - r}, {x + r, y + h - r}, {x + r, y + r}};
-	Vtx v[4 * (kSeg + 1)];
 	int n = 0;
-	for (int c = 0; c < 4; c++) // clockwise from the top-right corner
-		for (int i = 0; i <= kSeg; i++) {
-			const float a = float(M_PI) * 0.5f * (float(c) - 1.0f + float(i) / kSeg);
-			v[n++] = {centres[c].x + r * cosf(a), centres[c].y + r * sinf(a), 0, 0};
+	for (int c = 0; c < 4; c++)
+		for (int i = 0; i <= kCornerSeg; i++) {
+			const float a = float(M_PI) * 0.5f * (float(c) - 1.0f + float(i) / kCornerSeg);
+			v[n++] = {centres[c].x + (r + grow) * cosf(a), centres[c].y + (r + grow) * sinf(a), 0, 0};
 		}
-	Fan(v, n, col);
+}
+
+} // namespace
+
+void Canvas::RoundRect(float x, float y, float w, float h, float r, CRGBA col)
+{
+	Vtx v[kRoundRectVerts];
+	RoundRectEdge(x, y, w, h, r, 0.0f, v);
+	Fan(v, kRoundRectVerts, col);
+}
+
+void Canvas::RoundRectOutline(float x, float y, float w, float h, float r, float t, CRGBA col)
+{
+	Vtx in[kRoundRectVerts], out[kRoundRectVerts];
+	RoundRectEdge(x, y, w, h, r, 0.0f, in);
+	RoundRectEdge(x, y, w, h, r, t, out);
+	for (int i = 0; i < kRoundRectVerts; i++) {
+		const int j = (i + 1) % kRoundRectVerts;
+		Tri(in[i], out[i], out[j], col);
+		Tri(in[i], out[j], in[j], col);
+	}
 }
 
 void Canvas::VerticalGradient(float x, float y, float w, float h, CRGBA top, CRGBA bottom)

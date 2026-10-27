@@ -130,6 +130,10 @@ DEFAULT_HOOKS = [
     "_Z9re3_debugPKcz",
     "_ZN7CClouds6RenderEv",
     "_ZN7CCamera16RenderMotionBlurEv",
+    # controls: hints name the mod's buttons
+    "_ZN9CMessages31InsertPlayerControlKeysInStringEPt",
+    "_ZN5CFont10ParseTokenEPtR5CRGBARbS3_",
+    "_ZN5CFont10ParseTokenEPt",
 ]
 
 # Flag-controlled skips inside CHud::Draw: (name, instruction address, expected

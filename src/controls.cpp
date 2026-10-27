@@ -1,4 +1,5 @@
 #include "controls.h"
+#include "actions.h"
 #include "alert.h"
 #include "aimcam.h"
 #include "climb.h"
@@ -7,7 +8,9 @@
 #include "shootdodge.h"
 #include "driveby.h"
 #include "interact.h"
+#include "layout.h"
 #include "game.h"
+#include "hints.h"
 #include "hooks.h"
 #include "log.h"
 #include "minimap.h"
@@ -28,6 +31,8 @@ using namespace game;
 
 namespace controls {
 namespace {
+
+using bindings::Action;
 
 using Clock = std::chrono::steady_clock;
 
@@ -54,6 +59,7 @@ constexpr float kStickDeadZone = 0.12f;  // round, on the right stick
 // rarely reaches 1 on the diagonals).
 constexpr float kMoveDeadZone = 0.12f, kMoveFull = 0.95f;
 constexpr float kLookYaw = 3.5f, kLookPitch = 2.2f; // radians per second at full deflection
+constexpr float kMouseAimSensitivity = 0.0025f;     // radians a pixel, aiming a drive-by by key (the game's default)
 
 struct Gamepad {
 	bool buttons[kButtons] = {};
@@ -61,10 +67,28 @@ struct Gamepad {
 	bool live = false; // read from a gamepad this frame
 };
 
+Gamepad FromState(const GlfwGamepadState &s)
+{
+	Gamepad g;
+	for (int b = 0; b < kButtons; b++)
+		g.buttons[b] = s.buttons[b];
+	g.lx = s.axes[kLX];
+	g.ly = s.axes[kLY];
+	g.rx = s.axes[kRX];
+	g.ry = s.axes[kRY];
+	g.lt = s.axes[kLT];
+	g.rt = s.axes[kRT];
+	g.live = true;
+	return g;
+}
+
 void (*orig_Update)(uint8_t *pad, int16_t index);
 Gamepad gPrev;
 bool gLBPending;            // LB went down and hasn't been a hold yet
 Clock::time_point gLBDownAt;
+bool gKeyWheel;             // a wheel's key opened the wheel open now
+bool gKeyWheelPending;      // a wheel's key went down and hasn't been a hold yet
+Clock::time_point gKeyWheelAt;
 bool gLoggedGamepad;
 bool gTestWheel; // VCHUD_TEST_WHEEL: open the wheel once, without LB, to look at it
 Vec2 gMouse;     // the mouse's pointer on an open wheel, within kMouseRange
@@ -75,7 +99,7 @@ Clock::time_point gDpadDownAt;
 bool gDpadWheel;                     // the radio wheel is open on a D-pad hold
 int32_t gCarZoomBeforeB = -1;        // B is held for the cinematic camera: the car camera to go back to
 GamepadButton gAnswering = kButtons; // a face button that answered a prompt, until it's let go
-bool gPlayStation;                   // a PlayStation pad is connected
+bindings::PadFamily gFamily;         // the pads connected: PlayStation if any is, then Nintendo, else Xbox
 int gPadScanIn;                      // frames until the pads' names are looked at again
 bool gJumpHeld;                      // the jump that started a climb, until it's let go
 
@@ -117,13 +141,6 @@ void FixControllerMappings()
 // The joystick the game reads for pad 0 (CapturePad: RsGlobal.ps->joy1id), -1 for none.
 int GameJoystick() { return *(*reinterpret_cast<int8_t *const *>(api.rsGlobal + 0x20) + 0x21); }
 
-bool SonyPad(const char *name)
-{
-	for (const char *s : {"DualSense", "DualShock", "DUALSHOCK", "PlayStation", "PS3", "PS4", "PS5"})
-		if (name && strstr(name, s))
-			return true;
-	return false;
-}
 
 // Only the game's own joystick: with Steam Input there are two gamepads (the
 // physical one and Steam's virtual one), which must not be mixed.
@@ -132,9 +149,20 @@ Gamepad Poll()
 	Gamepad g;
 	if (--gPadScanIn <= 0) { // the game's may be Steam's virtual pad: any Sony pad connected counts
 		gPadScanIn = 120;
-		gPlayStation = false;
-		for (int j = 0; j < kMaxJoysticks; j++)
-			gPlayStation = gPlayStation || (api.glfwJoystickIsGamepad(j) && SonyPad(api.glfwGetJoystickName(j)));
+		bool any = false;
+		bindings::PadFamily family = bindings::PadFamily::kXbox;
+		for (int j = 0; j < kMaxJoysticks; j++) {
+			if (!api.glfwJoystickIsGamepad(j))
+				continue;
+			const char *name = api.glfwGetJoystickName(j);
+			const bindings::PadFamily f = bindings::FamilyForName(name ? name : "");
+			if (!any || f == bindings::PadFamily::kPlayStation ||
+			    (f == bindings::PadFamily::kNintendo && family == bindings::PadFamily::kXbox))
+				family = f;
+			any = true;
+		}
+		if (any) // none: the last pad's
+			gFamily = family;
 	}
 	const int jid = GameJoystick();
 	GlfwGamepadState s;
@@ -148,19 +176,51 @@ Gamepad Poll()
 				Log("controls: gamepad %d (%s)%s", j, name ? name : "?", j == jid ? ", the game's" : "");
 			}
 	}
-	for (int b = 0; b < kButtons; b++)
-		g.buttons[b] = s.buttons[b];
-	g.lx = s.axes[kLX];
-	g.ly = s.axes[kLY];
-	g.rx = s.axes[kRX];
-	g.ry = s.axes[kRY];
-	g.live = true;
-	g.lt = s.axes[kLT];
-	g.rt = s.axes[kRT];
-	return g;
+	return FromState(s);
 }
 
 bool Pressed(const Gamepad &now, GamepadButton b) { return now.buttons[b] && !gPrev.buttons[b]; }
+
+// layout.h's buttons on the GLFW pad: the remaps below read them through
+// these, so moving one there moves it here and in the hints.
+GamepadButton Button(bindings::Pad b)
+{
+	switch (b) {
+	case bindings::Pad::kA: return kA;
+	case bindings::Pad::kB: return kB;
+	case bindings::Pad::kX: return kX;
+	case bindings::Pad::kY: return kY;
+	case bindings::Pad::kLB: return kLB;
+	case bindings::Pad::kRB: return kRB;
+	case bindings::Pad::kBack: return kBack;
+	case bindings::Pad::kStart: return kStart;
+	case bindings::Pad::kL3: return kLThumb;
+	case bindings::Pad::kR3: return kRThumb;
+	case bindings::Pad::kUp: return kUp;
+	case bindings::Pad::kDown: return kDown;
+	case bindings::Pad::kLeft: return kLeft;
+	case bindings::Pad::kRight: return kRight;
+	default: return kButtons; // the triggers, the sticks, the D-pad's left / right pair
+	}
+}
+
+// How far a trigger is pulled (GLFW: -1 at rest, 1 fully in).
+float Axis(const Gamepad &pad, bindings::Pad b) { return b == bindings::Pad::kLT ? pad.lt : b == bindings::Pad::kRT ? pad.rt : -1.0f; }
+
+bool Down(const Gamepad &pad, bindings::Pad b)
+{
+	if (b == bindings::Pad::kLT || b == bindings::Pad::kRT)
+		return Axis(pad, b) > kTriggerPressed;
+	if (b == bindings::Pad::kLeftRight)
+		return pad.buttons[kLeft] || pad.buttons[kRight];
+	const GamepadButton g = Button(b);
+	return g != kButtons && pad.buttons[g];
+}
+
+bool Pressed(const Gamepad &now, bindings::Pad b) { return Down(now, b) && !Down(gPrev, b); }
+
+// The game's own field for a face button pressed on the GLFW pad.
+PadButton GameFace(GamepadButton b) { return b == kA ? kPadCross : b == kB ? kPadCircle : b == kX ? kPadSquare : kPadTriangle; }
 
 float Length(float x, float y) { return std::sqrt(x * x + y * y); }
 
@@ -203,18 +263,17 @@ void TriggersAimAndFire(uint8_t *pad, const Gamepad &now)
 		return;
 	const PadButton aim = kPadRB, fire = mode == 2 ? kPadCross : kPadCircle;
 	PadJoy(pad, kPadLT) = PadJoy(pad, kPadRT) = PadJoy(pad, aim) = PadJoy(pad, fire) = 0;
-	if (now.lt > kTriggerPressed)
+	if (Down(now, layout::kAim))
 		PadJoy(pad, aim) = 255;
-	if (now.rt > kTriggerPressed)
+	if (Down(now, layout::kFire))
 		PadJoy(pad, fire) = 255;
 }
 
 // Vehicles whose gun the game fires on Circle (CPad::GetCarGunFired): the
-// Rhino's cannon, the fire truck's hose, the RC Bandit's charge.
+// Rhino's cannon, the fire truck's hose, the RC Bandit's charge, the Predator's cannons.
 bool ArmedVehicle(const uint8_t *vehicle)
 {
-	const int16_t model = EntityModel(vehicle);
-	return model == 162 || model == 137 || model == 171;
+	return bindings::ForVehicle(EntityModel(vehicle), false) == bindings::Situation::kArmedVehicle;
 }
 
 // GTA V's B on foot: a punch or swing with fists or a melee weapon, a reload
@@ -225,7 +284,7 @@ void FaceButtonsOnFoot(uint8_t *pad, uint8_t *ped, const Gamepad &now)
 	const int32_t type = WeaponType(weapon);
 	if (type < kFirstThrownWeapon) {
 		const int mode = *api.padAffectedByController ? *reinterpret_cast<const uint16_t *>(pad + 0xec) : 0;
-		if (now.buttons[kB])
+		if (Down(now, layout::kMeleeReload))
 			PadJoy(pad, mode == 2 ? kPadCross : kPadCircle) = 255; // as RT fires
 		return;
 	}
@@ -233,7 +292,7 @@ void FaceButtonsOnFoot(uint8_t *pad, uint8_t *ped, const Gamepad &now)
 	const uint8_t *info = api.GetWeaponInfo(type);
 	int32_t &state = *reinterpret_cast<int32_t *>(weapon + 4), &clip = *reinterpret_cast<int32_t *>(weapon + 8);
 	const int32_t clipSize = *reinterpret_cast<const int32_t *>(info + 0x10);
-	if (!Pressed(now, kB) || type < kFirstGun || state != kWeaponReady || clip >= clipSize ||
+	if (!(Pressed(now, layout::kMeleeReload) || actions::KeyPressed(Action::kReload)) || type < kFirstGun || state != kWeaponReady || clip >= clipSize ||
 	    WeaponAmmoTotal(weapon) <= clip)
 		return;
 	const uint32_t reload = *reinterpret_cast<const uint32_t *>(info + 0xc);
@@ -241,21 +300,27 @@ void FaceButtonsOnFoot(uint8_t *pad, uint8_t *ped, const Gamepad &now)
 	*reinterpret_cast<uint32_t *>(weapon + 0x10) = *api.timeMs + (FastReload(PlayerInfo()) ? reload / 4 : reload);
 }
 
+// The cinematic camera is held: B, or its key.
+bool Cinematic(const Gamepad &now) { return Down(now, layout::kCinematic) || actions::KeyHeld(Action::kCinematicCamera); }
+
 // GTA V's face buttons in a vehicle: A and X no longer drive (the triggers
 // do), B held is the cinematic camera, and on an armed vehicle RB fires its
-// gun instead of the handbrake.
+// gun instead of the handbrake, which goes to A. On any other A is the
+// game's car gun (B): arming a car bomb, a bike's guns.
 void FaceButtonsInVehicle(uint8_t *pad, const uint8_t *vehicle, const Gamepad &now)
 {
-	PadJoy(pad, kPadCross) = PadJoy(pad, kPadSquare) = PadJoy(pad, kPadCircle) = 0;
+	PadJoy(pad, kPadCross) = PadJoy(pad, kPadSquare) = 0;
 	if (ArmedVehicle(vehicle)) {
-		PadJoy(pad, kPadCircle) = now.buttons[kRB] ? 255 : 0;
-		PadJoy(pad, kPadRB) = 0;
+		PadJoy(pad, kPadCircle) = Down(now, layout::kVehicleGun) ? 255 : 0;
+		PadJoy(pad, kPadRB) = Down(now, layout::kArmedHandbrake) ? 255 : 0;
+	} else {
+		PadJoy(pad, kPadCircle) = Down(now, layout::kCarGun) ? 255 : 0;
 	}
 	int32_t &zoom = *reinterpret_cast<int32_t *>(api.theCamera + 0xe4); // CCamera::m_nCarZoom
-	if (now.buttons[kB] && gCarZoomBeforeB < 0) {
+	if (Cinematic(now) && gCarZoomBeforeB < 0) {
 		gCarZoomBeforeB = zoom;
 		zoom = kCinematicZoom;
-	} else if (!now.buttons[kB] && gCarZoomBeforeB >= 0) {
+	} else if (!Cinematic(now) && gCarZoomBeforeB >= 0) {
 		zoom = gCarZoomBeforeB;
 		gCarZoomBeforeB = -1;
 	}
@@ -286,59 +351,52 @@ Pedals TriggersDrive(uint8_t *pad, const Gamepad &now)
 	// as in GTA V, whose own job (side missions) is on D-pad up.
 	if (gConfig.dpadActions) {
 		PadJoy(pad, kPadR3) = 0;
-		if (now.buttons[kRThumb])
+		if (Down(now, layout::kLookBehind))
 			PadJoy(pad, kPadLT) = PadJoy(pad, kPadRT) = 255;
 	}
-	return {Pedal(now.rt), Pedal(now.lt)};
+	return {Pedal(Axis(now, layout::kGas)), Pedal(Axis(now, layout::kBrake))};
 }
 
 // Flying, as GTA V: RT climbs (a plane's throttle) and LT descends, as far as
 // they're pulled (CVehicle::FlyingControl's thrust is accelerate less brake);
-// a helicopter's LB and RB turn its tail (its yaw is the look left / right
-// buttons, the triggers on a pad), as they roll the RC Baron; the left stick
-// pitches and rolls, as it did. The guns go to the face buttons: A the gun
-// (the Hunter's cannon and the Sea Sparrow's on the handbrake, the RC Baron's
-// on Circle), X the Hunter's rockets (Circle).
-bool Helicopter(const uint8_t *vehicle)
-{
-	switch (EntityModel(vehicle)) {
-	case 155: case 177: case 195: case 199: case 217: case 218: case 227: case 231:
-		return true;
-	default:
-		return false;
-	}
-}
+// LB and RB turn the tail (the look left / right buttons, the triggers on a
+// pad: a helicopter's yaw, a plane's rudder, the RC Baron's roll); the left
+// stick pitches and rolls, as it did. The guns go to the face buttons: A the
+// gun (the Hunter's cannon and the Sea Sparrow's on the handbrake, the RC
+// Baron's on Circle, the RC helicopters' bombs on both), X the Hunter's
+// rockets (Circle).
 constexpr int16_t kHunter = 155, kSeaSparrow = 177, kRcBaron = 194;
 
-Pedals TriggersFly(uint8_t *pad, const uint8_t *vehicle, const Gamepad &now)
+Pedals TriggersFly(uint8_t *pad, const Gamepad &now)
 {
 	if (*api.padAffectedByController && *reinterpret_cast<const uint16_t *>(pad + 0xec) == 3)
 		return {};
 	PadJoy(pad, kPadLT) = PadJoy(pad, kPadRT) = PadJoy(pad, kPadLB) = PadJoy(pad, kPadRB) = 0;
 	if (gConfig.dpadActions) // (a car's look behind, both look buttons: here both ways at once)
 		PadJoy(pad, kPadR3) = 0;
-	if (Helicopter(vehicle) || EntityModel(vehicle) == kRcBaron) {
-		PadJoy(pad, kPadLT) = now.buttons[kLB] ? 255 : 0;
-		PadJoy(pad, kPadRT) = now.buttons[kRB] ? 255 : 0;
-	}
-	return {Pedal(now.rt), Pedal(now.lt)};
+	PadJoy(pad, kPadLT) = Down(now, layout::kYawLeft) ? 255 : 0;
+	PadJoy(pad, kPadRT) = Down(now, layout::kYawRight) ? 255 : 0;
+	return {Pedal(Axis(now, layout::kClimb)), Pedal(Axis(now, layout::kDescend))};
 }
 
 void FaceButtonsInAircraft(uint8_t *pad, const uint8_t *vehicle, const Gamepad &now)
 {
 	PadJoy(pad, kPadCross) = PadJoy(pad, kPadSquare) = PadJoy(pad, kPadCircle) = 0;
 	const int16_t model = EntityModel(vehicle);
+	const int16_t gun = Down(now, layout::kAircraftGun) ? 255 : 0;
 	if (model == kHunter || model == kSeaSparrow)
-		PadJoy(pad, kPadRB) = now.buttons[kA] ? 255 : 0;
-	if (model == kRcBaron)
-		PadJoy(pad, kPadCircle) = now.buttons[kA] ? 255 : 0;
+		PadJoy(pad, kPadRB) = gun;
+	else if (model == kRcBaron)
+		PadJoy(pad, kPadCircle) = gun;
+	else // the RC helicopters' bombs and detonation (fire or handbrake), whatever a plane fires
+		PadJoy(pad, kPadCircle) = PadJoy(pad, kPadRB) = gun;
 	if (model == kHunter)
-		PadJoy(pad, kPadCircle) = now.buttons[kX] ? 255 : 0;
+		PadJoy(pad, kPadCircle) = Down(now, layout::kHunterRockets) ? 255 : 0;
 	int32_t &zoom = *reinterpret_cast<int32_t *>(api.theCamera + 0xe4); // B held: the cinematic camera, as in a car
-	if (now.buttons[kB] && gCarZoomBeforeB < 0) {
+	if (Cinematic(now) && gCarZoomBeforeB < 0) {
 		gCarZoomBeforeB = zoom;
 		zoom = kCinematicZoom;
-	} else if (!now.buttons[kB] && gCarZoomBeforeB >= 0) {
+	} else if (!Cinematic(now) && gCarZoomBeforeB >= 0) {
 		zoom = gCarZoomBeforeB;
 		gCarZoomBeforeB = -1;
 	}
@@ -348,7 +406,8 @@ void FaceButtonsInAircraft(uint8_t *pad, const uint8_t *vehicle, const Gamepad &
 // station, a hold opens the radio wheel, which letting go applies.
 void RadioDpad(const Gamepad &now, uint8_t *vehicle) // vehicle: null when not in one, or no control
 {
-	if (gDpadWheel && (!wheel::IsOpen() || (!now.buttons[kLeft] && !now.buttons[kRight]))) {
+	static_assert(layout::kRadio == bindings::Pad::kLeftRight, "a tap of the pair's left / right steps back / on");
+	if (gDpadWheel && (!wheel::IsOpen() || !Down(now, layout::kRadio))) {
 		wheel::Close(true);
 		gDpadWheel = false;
 	}
@@ -450,6 +509,8 @@ void Hook_Update(uint8_t *pad, int16_t index)
 {
 	watch::Beat(); // the game's loop came round (in its menus too)
 	if (pad == api.GetPad(0))
+		hints::Frame();
+	if (pad == api.GetPad(0))
 		alert::Frame(); // (paused too: it goes quiet)
 	if (pad != api.GetPad(0)) {
 		orig_Update(pad, index);
@@ -463,7 +524,7 @@ void Hook_Update(uint8_t *pad, int16_t index)
 	const Gamepad now = Poll();
 	if (MenuActive(api.frontEndMenuManager)) { // the frontend keeps the D-pad and LB
 		wheel::Close(false);
-		gLBPending = gDpadWheel = false;
+		gLBPending = gDpadWheel = gKeyWheel = gKeyWheelPending = false;
 		gDpadHeld = kButtons;
 		driveby::SetInput(false, false, 0, 0);
 		rumble::Drive(nullptr, 0, 0);
@@ -471,6 +532,7 @@ void Hook_Update(uint8_t *pad, int16_t index)
 		orig_Update(pad, index);
 		return;
 	}
+	actions::Update(); // the keys of the mod's own actions
 	LeftStick(pad, now);
 	uint8_t *ped = api.FindPlayerPed();
 	const bool control = ped && !PadControlsDisabled(pad);
@@ -491,16 +553,19 @@ void Hook_Update(uint8_t *pad, int16_t index)
 	// prompt's until it's let go, so it doesn't also jump, punch or hold the
 	// cinematic camera.
 	interact::Update();
-	if (control && interact::Prompting() && (Pressed(now, kX) || Pressed(now, kB))) {
-		interact::Respond(Pressed(now, kX));
-		gAnswering = Pressed(now, kX) ? kX : kB;
+	if (control && interact::Prompting() && (Pressed(now, layout::kGreet) || Pressed(now, layout::kInsult))) {
+		interact::Respond(Pressed(now, layout::kGreet));
+		gAnswering = Button(Pressed(now, layout::kGreet) ? layout::kGreet : layout::kInsult);
 	}
+	if (control && interact::Prompting() &&
+	    (actions::KeyPressed(Action::kGreet) || actions::KeyPressed(Action::kInsult)))
+		interact::Respond(actions::KeyPressed(Action::kGreet));
 	if (gAnswering != kButtons && !now.buttons[gAnswering])
 		gAnswering = kButtons;
 	Gamepad face = now; // the buttons the layout below sees
 	if (gAnswering != kButtons) {
 		face.buttons[gAnswering] = false;
-		PadJoy(pad, gAnswering == kX ? kPadSquare : kPadCircle) = 0;
+		PadJoy(pad, GameFace(gAnswering)) = 0;
 	}
 
 	bool tapLB = false;
@@ -515,7 +580,7 @@ void Hook_Update(uint8_t *pad, int16_t index)
 			if (gConfig.modernButtons)
 				FaceButtonsInVehicle(pad, vehicle, face);
 		} else {
-			pedals = TriggersFly(pad, vehicle, now);
+			pedals = TriggersFly(pad, now);
 			if (gConfig.modernButtons)
 				FaceButtonsInAircraft(pad, vehicle, face);
 		}
@@ -536,7 +601,19 @@ void Hook_Update(uint8_t *pad, int16_t index)
 		aimYaw *= dt;
 		aimPitch *= dt;
 	}
-	driveby::SetInput(lbAims && control && now.buttons[kLB] && !wheel::IsOpen(), now.buttons[kRB], aimYaw, aimPitch);
+	// Or its key held: the mouse turns the aim, and the game's vehicle fire shoots.
+	const bool keyAim = lbAims && control && actions::KeyHeld(Action::kDriveByAim) && !wheel::IsOpen();
+	if (keyAim) {
+		auto &mx = *reinterpret_cast<float *>(api.newMouseState + 8);
+		auto &my = *reinterpret_cast<float *>(api.newMouseState + 12);
+		const float sensitivity = api.mouseAccel ? *api.mouseAccel : kMouseAimSensitivity;
+		aimYaw += mx * sensitivity;
+		aimPitch -= my * sensitivity;
+		mx = my = 0.0f; // the camera doesn't follow the mouse meanwhile
+	}
+	driveby::SetInput((lbAims && control && Down(now, layout::kDriveByAim) && !wheel::IsOpen()) || keyAim,
+	                  Down(now, layout::kDriveByFire) || (keyAim && actions::KeyHeld(Action::kDriveByFire)), aimYaw,
+	                  aimPitch);
 	if (lbAims)
 		PadJoy(pad, kPadLB) = 0;
 	if (driveby::Aiming())
@@ -551,21 +628,41 @@ void Hook_Update(uint8_t *pad, int16_t index)
 			PadJoy(pad, kPadLB) = 0; // LB reaches the game only as a tap, below
 		if (lbAims || lbFlies)
 			gLBPending = false;
-		else if (Pressed(now, kLB)) {
+		else if (Pressed(now, layout::kWeaponWheel)) {
 			gLBPending = true;
 			gLBDownAt = Clock::now();
 		}
-		if (now.buttons[kLB] && gLBPending && Clock::now() - gLBDownAt >= kHoldToOpen) {
+		if (Down(now, layout::kWeaponWheel) && gLBPending && Clock::now() - gLBDownAt >= kHoldToOpen) {
 			gLBPending = false;
 			if (control)
 				OpenWheel();
 		}
-		if (!now.buttons[kLB] && gPrev.buttons[kLB] && !lbAims && !lbFlies) {
+		if (!Down(now, layout::kWeaponWheel) && Down(gPrev, layout::kWeaponWheel) && !lbAims && !lbFlies) {
 			if (wheel::IsOpen() && !gDpadWheel)
 				wheel::Close(true);
 			else if (gLBPending)
 				tapLB = true;
 			gLBPending = false;
+		}
+		// Its key held opens the wheel too (the weapons' on foot, the radio's in a
+		// vehicle) and letting go applies it; a tap does nothing.
+		const Action wheelKey = vehicle ? Action::kRadioWheel : Action::kWeaponWheel;
+		if (actions::KeyPressed(wheelKey)) {
+			gKeyWheelPending = true;
+			gKeyWheelAt = Clock::now();
+		}
+		if (actions::KeyHeld(wheelKey) && gKeyWheelPending && Clock::now() - gKeyWheelAt >= kHoldToOpen) {
+			gKeyWheelPending = false;
+			if (control && !wheel::IsOpen()) {
+				OpenWheel();
+				gKeyWheel = wheel::IsOpen();
+			}
+		}
+		if (!actions::KeyHeld(wheelKey)) {
+			gKeyWheelPending = false;
+			if (gKeyWheel && wheel::IsOpen())
+				wheel::Close(true);
+			gKeyWheel = false;
 		}
 		if (wheel::IsOpen()) {
 			if (!control)
@@ -576,29 +673,33 @@ void Hook_Update(uint8_t *pad, int16_t index)
 	}
 
 	if (gConfig.aimCamera && control && !wheel::IsOpen() && !vehicle)
-		StickLook(pad, now, now.lt > kTriggerPressed, dt);
+		StickLook(pad, now, Down(now, layout::kAim), dt);
 
 	// D-pad up answers the phone while it rings.
-	const bool answer = control && Pressed(now, kUp) && phone::Ringing();
+	const bool answer = control && phone::Ringing() &&
+	                    (Pressed(now, layout::kAnswerCall) || actions::KeyPressed(Action::kAnswerCall));
 	if (answer)
 		phone::Answer();
 
 	// D-pad down: the expanded minimap; up, in a vehicle: its side mission (taxi,
 	// vigilante, paramedic, firefighter), which the scripts start on R3.
 	if (gConfig.dpadActions && control && !wheel::IsOpen()) {
-		if (Pressed(now, kDown))
+		if (Pressed(now, layout::kExpandedMap))
 			minimap::ToggleExpanded();
-		if (Pressed(now, kUp) && PedInVehicle(ped) && !answer)
+		if (Pressed(now, layout::kSideMission) && PedInVehicle(ped) && !answer)
 			gSubMissionUntil = Clock::now() + kSubMissionHold;
 	}
+
+	if (control && actions::KeyPressed(Action::kExpandedMap)) // its key, whatever DpadActions says
+		minimap::ToggleExpanded();
 
 	// D-pad left / right on foot: the next / previous weapon (the game's own
 	// cycling, on LT/RT).
 	bool cycle = false;
 	PadButton cycleButton = kPadRT;
-	if (gConfig.dpadActions && control && !vehicle && !wheel::IsOpen() && (Pressed(now, kLeft) || Pressed(now, kRight))) {
+	if (gConfig.dpadActions && control && !vehicle && !wheel::IsOpen() && (Pressed(now, layout::kPrevWeapon) || Pressed(now, layout::kNextWeapon))) {
 		cycle = true;
-		cycleButton = Pressed(now, kRight) ? kPadRT : kPadLT;
+		cycleButton = Pressed(now, layout::kNextWeapon) ? kPadRT : kPadLT;
 	}
 	if (gConfig.dpadActions)
 		RadioDpad(now, control ? vehicle : nullptr);
@@ -627,6 +728,10 @@ void Hook_Update(uint8_t *pad, int16_t index)
 	if (Clock::now() < gSubMissionUntil)
 		PadNew(pad, kPadR3) = 255;
 	phone::HoldAnswer(pad);
+	if (gConfig.bulletTime && control && aimcam::Aiming() && actions::KeyPressed(Action::kBulletTime))
+		PadNew(pad, kPadR3) = 255; // as the right stick's click (shootdodge.cpp)
+	if (keyAim) // the drive-by's fire key is the game's vehicle fire: the aim shoots, not the game
+		PadNew(pad, kPadCircle) = 0;
 	// A held A button or key still floors it.
 	PadNew(pad, kPadCross) = std::max(PadNew(pad, kPadCross), int16_t(pedals.gas * 255.0f));
 	PadNew(pad, kPadSquare) = std::max(PadNew(pad, kPadSquare), int16_t(pedals.brake * 255.0f));
@@ -648,7 +753,35 @@ bool LookTurn(float &yaw, float &pitch)
 	return gLookTurn;
 }
 
-bool PlayStationPad() { return gPlayStation; }
+bindings::PadFamily Family() { return gFamily; }
+
+std::vector<controlsmodel::Joystick> Pads()
+{
+	std::vector<controlsmodel::Joystick> pads;
+	if (!api.glfwJoystickPresent)
+		return pads;
+	for (int j = 0; j < kMaxJoysticks; j++)
+		if (api.glfwJoystickPresent(j)) {
+			const char *name = api.glfwGetJoystickName(j);
+			pads.push_back({j, name ? name : "", api.glfwJoystickIsGamepad(j) != 0});
+		}
+	return pads;
+}
+
+int GameJoystickId() { return GameJoystick(); }
+
+void UseJoystick(int id) { *(*reinterpret_cast<int8_t *const *>(api.rsGlobal + 0x20) + 0x21) = int8_t(id); }
+
+bool Down(bindings::Pad pad) { return Down(gPrev, pad); }
+
+bool Down(int joystick, bindings::Pad pad)
+{
+	GlfwGamepadState s;
+	if (joystick < 0 || !api.glfwJoystickIsGamepad || !api.glfwJoystickIsGamepad(joystick) ||
+	    !api.glfwGetGamepadState(joystick, &s))
+		return false;
+	return Down(FromState(s), pad);
+}
 
 void Triggers(float &lt, float &rt)
 {

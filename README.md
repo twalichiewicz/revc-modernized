@@ -34,6 +34,10 @@ Vice City's story, missions and world stay as they are. Every feature can be swi
 - A GTA IV-style pause menu opens on the map, with the other pages in tabs. The map has a compact legend,
   marks hospitals, police stations and businesses you can buy, with their prices, and shows the GPS route
   as soon as you set a waypoint.
+- On the pause map, a tooltip names the icon under the cursor, and the controller's cursor snaps onto icons
+  as it nears them. A/Cross, or a right click, makes that place your destination: the GPS routes there and
+  its icon gets a purple border, on both maps, instead of the waypoint's square. The legend calls the
+  waypoint "Destination".
 - HUD shapes (the stars, the wanted icons, the eyes) have smooth edges, though the game draws its 2D
   without anti-aliasing.
 
@@ -45,7 +49,14 @@ Vice City's story, missions and world stay as they are. Every feature can be swi
 </p>
 
 - A GTA V controller layout ([below](#controls)). It's read straight from the controller, so it works
-  whatever the game's own button mapping is. PlayStation controllers show their own button symbols.
+  whatever the game's own button mapping is.
+- The game's hints and the mod's prompts name the button that does it now ("Press RT to fire", "D-pad up
+  to answer"), not the PS2 layout's. They follow the controller you have (PlayStation, Xbox or Switch
+  icons) and switch to your keys as soon as you touch the keyboard, a hint already on screen too. A few
+  hints whose controls changed, like the drive-by tutorial, are reworded.
+- The mod's own controls have keyboard keys too ([below](#keyboard-and-mouse)), and a few actions the new
+  layout had left without a button got one: the RC helicopters' bombs, the Predator's cannons, arming a
+  car bomb, an armed vehicle's handbrake and a plane's rudder.
 - Smooth sticks. The game read each stick only past a third of the way out, then jumped, and each axis on
   its own, so walking snapped to straight lines. Now both sticks have one small round dead zone and
   answer in any direction: a gentle push on the left stick walks, and the right stick turns the camera
@@ -260,6 +271,7 @@ know you by your description, and getting away leaves you under an APB until you
 | D-pad down            | Zoom the map out, show your money                           | Zoom the map out, show your money              |
 | D-pad up              | Answer the phone                                            | Answer the phone, start the side mission       |
 | B / Circle            | Melee, reload                                               | Hold for the cinematic camera                  |
+| A / Cross             | Sprint                                                      | The vehicle's gun (a car bomb, a bike's guns); an armed vehicle's handbrake, its RB fires |
 | X, B / Square, Circle | Answer a prompt (greet, insult; pick up, wave off)          |                                                |
 | Jump                  | Jump, vault, climb; dive in the water. Aiming, with the stick pushed: shootdodge |           |
 | L3                    | Crouch (push the stick to walk crouched)                    | Horn                                           |
@@ -267,12 +279,49 @@ know you by your description, and getting away leaves you under an APB until you
 | Select / Back         | Camera distance, then first person                          | Camera distance, including the driver's seat   |
 
 Flying a helicopter or plane: RT climbs (or opens the throttle) and LT descends, as far as they're pulled.
-LB and RB turn a helicopter's tail, and the left stick pitches and rolls. A fires the Hunter's cannon and
-the Sea Sparrow's gun, X fires the Hunter's rockets, and B holds the cinematic camera.
+LB and RB turn the tail (a helicopter's, a plane's rudder), and the left stick pitches and rolls. A fires
+the gun and drops the bombs (the Hunter's cannon, the Sea Sparrow's gun, the RC aircraft's bombs and
+detonation), X fires the Hunter's rockets, and B holds the cinematic camera.
 
 In the pause menu, LB/RB (or Q/E) switch tabs and B/Circle goes back. On the map, the left stick moves
 the cursor (gently for small pushes; the D-pad nudges it), the right stick moves the map, LT/RT zoom in and
-out about the cursor, and A/Cross sets or clears a waypoint.
+out about the cursor, and A/Cross sets or clears a waypoint, or on an icon makes it the destination.
+
+### The Controls page
+
+Options > Controls replaces the game's Controller Setup pages with one page and two tabs:
+
+- **Controller:** a dot by the pad's name says how it stands: green when the game reads it, amber when
+  something needs fixing (the reason is beside it, and when the game reads another pad, Y / USE THIS ONE
+  switches to this one), and an empty ring when there's none. Below it, a picture of your pad (PlayStation,
+  Xbox or Nintendo) with what each button does on foot, driving, flying or on the pause map; press a button
+  and its line lights up. Vibration, inverted look and look sensitivity sit under it.
+- **Keyboard & Mouse:** every action's keys, the game's and the mod's, on foot and driving. Pick a key, press
+  the new one (Esc cancels); a key another action had is taken from it. The mouse's sensitivity, inverted
+  look and mouse steering are at the end.
+
+Everything saves as you change it (`macVC.ini`, and the settings file for the mod's keys and look
+sensitivity), and the hints on screen name the new keys at once. Head bob in first person isn't a control:
+it stays in `macVC.ini` (`HeadBob1stPerson`) until the game's own features get an Options section.
+
+### Keyboard and mouse
+
+The game's own keys are as you set them on the Controls page. The mod's own actions get these, unless a game action
+already has the key (then that one has none until you set it on the Controls page, or in the settings file's `[Keys]`):
+
+| Key | Does |
+| --- | --- |
+| Q (hold) | On foot, the weapon wheel; the mouse picks |
+| G (hold) | In a vehicle, the radio wheel |
+| R | Reload |
+| Y / N | Answer a prompt: greet or insult, pick up or wave off |
+| B | Aiming: bullet time |
+| X (hold) | In a vehicle, aim a drive-by with the mouse; the vehicle fire key shoots |
+| C (hold) | In a vehicle, the cinematic camera |
+| M | The expanded minimap |
+
+The phone is answered with the game's own action key (Tab). Reload and the cinematic camera come with the
+GTA V layout (`ModernTriggers` and `ModernButtons` on), as B does on the controller.
 
 ## Install
 
@@ -307,6 +356,7 @@ updated after that. To pick up settings added by a newer version, delete it and 
 | `Buildings`, `BuildingHeight` | 3D buildings on the minimap, and how tall (1 is their true height) |
 | `Bars`, `Hud`, `MoneyPill` | The bars under the map; the clock on it and the smaller weapon and stars; money where you can spend it |
 | `PauseTabs`, `CompactLegend`, `CircleBack` | The pause menu's tabs and legend; B/Circle goes back (0: Y/Triangle, as on the PS2) |
+| `MapIcons` | On the pause map: tooltips, the cursor snapping to icons, and picking one as the destination |
 | `Places`, `RadioLogo` | Map icons for hospitals, police stations and businesses; the station logo |
 | `Tilt`, `Zoom`, `Size`, `Aspect`, `Margin` | The minimap's shape and place |
 | **Controls and camera** | |
@@ -316,6 +366,7 @@ updated after that. To pick up settings added by a newer version, delete it and 
 | `FirstPerson`, `SteeringWheel` | First person in the camera cycle; round, turning steering wheels |
 | `CameraShake` | 0 is none, 1 is the default, 2 is double |
 | `Rumble` | Controller vibration |
+| `MOD_WEAPON_WHEEL` … in `[Keys]` | The keyboard keys of the mod's own actions, written as macVC.ini's `[Bindings]` (`kbd:Q,2ndKbd:F1`, `mouse:MIDDLE`) |
 | **On foot and gunfights** | |
 | `Swimming`, `Climbing`, `CrouchWalk` | Swimming, climbing and walking crouched |
 | `Interactions` | Greeting and insulting people, hookers |

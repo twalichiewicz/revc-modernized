@@ -11,10 +11,11 @@
 namespace story {
 
 struct Business {
-	const char *name;
-	float x, y;      // its for-sale sign
-	uint16_t sprite; // its own radar icon
-	int doneVar;     // the script global its storyline sets once it's finished
+	const char *name;  // in a sentence: "the boatyard"
+	const char *title; // on its own: "Boatyard"
+	float x, y;        // its for-sale sign
+	uint16_t sprite;   // its own radar icon
+	int doneVar;       // the script global its storyline sets once it's finished
 };
 extern const Business kBusinesses[8];
 

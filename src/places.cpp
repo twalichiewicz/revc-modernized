@@ -4,6 +4,7 @@
 #include "game.h"
 #include "hud.h"
 #include "log.h"
+#include "poi.h"
 #include "story.h"
 #include "text.h"
 
@@ -44,7 +45,7 @@ void Rect(float x0, float y0, float x1, float y1, CRGBA col) { gCanvas.Quad({x0,
 // A white badge with a red cross (no rim: the game's icons have none).
 void Hospital(Vec2 c, float r)
 {
-	Disc(c, r * 0.9f, {245, 245, 245, 255});
+	Disc(c, r * kBadgeRadius, {245, 245, 245, 255});
 	const float a = r * 0.5f, b = r * 0.17f;
 	const CRGBA red{214, 40, 40, 255};
 	Rect(c.x - a, c.y - b, c.x + a, c.y + b, red);
@@ -54,7 +55,7 @@ void Hospital(Vec2 c, float r)
 // A blue badge with a white star.
 void Police(Vec2 c, float r)
 {
-	Disc(c, r * 0.9f, {36, 84, 196, 255});
+	Disc(c, r * kBadgeRadius, {36, 84, 196, 255});
 	const float outer = r * 0.6f, inner = outer * 0.42f;
 	Vtx v[11];
 	v[0] = {c.x, c.y, 0, 0};
@@ -128,6 +129,12 @@ void Draw(const std::function<bool(float x, float y, Vec2 &out)> &toScreen, bool
 	for (const story::Business &b : story::kBusinesses) {
 		if (story::OwnedBlip(b) || !toScreen(b.x, b.y, p))
 			continue;
+		if (poi::IsDestination(b.x, b.y)) {
+			SetHudRenderStates();
+			gCanvas.SetTexture(nullptr);
+			poi::Border(gCanvas, p, false);
+			gCanvas.Flush();
+		}
 		const uint8_t *sign = story::SaleSign(b);
 		api.DrawRadarSprite(b.sprite, p.x, p.y, sign ? 255 : kNotYetAlpha);
 		if (sign && prices)
@@ -142,12 +149,34 @@ void Draw(const std::function<bool(float x, float y, Vec2 &out)> &toScreen, bool
 			Ring(p, r, kNeededRing);
 	}
 	for (int i = 0; i < std::min<int>(*gNumHospitals, kMaxRestarts); i++)
-		if (toScreen(gHospitals[i].x, gHospitals[i].y, p))
+		if (toScreen(gHospitals[i].x, gHospitals[i].y, p)) {
+			if (poi::IsDestination(gHospitals[i].x, gHospitals[i].y))
+				poi::Border(gCanvas, p, true);
 			Hospital(p, r);
+		}
 	for (int i = 0; i < std::min<int>(*gNumPolice, kMaxRestarts); i++)
-		if (toScreen(gPolice[i].x, gPolice[i].y, p))
+		if (toScreen(gPolice[i].x, gPolice[i].y, p)) {
+			if (poi::IsDestination(gPolice[i].x, gPolice[i].y))
+				poi::Border(gCanvas, p, true);
 			Police(p, r);
+		}
 	gCanvas.Flush();
+}
+
+void List(std::vector<Spot> &out)
+{
+	out.clear();
+	if (!gInstalled)
+		return;
+	for (const story::Business &b : story::kBusinesses)
+		if (!story::OwnedBlip(b)) {
+			const uint8_t *sign = story::SaleSign(b);
+			out.push_back({b.x, b.y, b.title, sign ? story::Price(sign) : 0});
+		}
+	for (int i = 0; i < std::min<int>(*gNumHospitals, kMaxRestarts); i++)
+		out.push_back({gHospitals[i].x, gHospitals[i].y, "Hospital", 0});
+	for (int i = 0; i < std::min<int>(*gNumPolice, kMaxRestarts); i++)
+		out.push_back({gPolice[i].x, gPolice[i].y, "Police Station", 0});
 }
 
 } // namespace places

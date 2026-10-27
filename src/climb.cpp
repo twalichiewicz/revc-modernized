@@ -516,7 +516,7 @@ void Draw()
 	const float H = float(ScreenHeight()), h = prompt::Height(H), bottom = H - gConfig.margin * H;
 	SetHudRenderStates();
 	gCanvas.SetTexture(nullptr);
-	prompt::Draw(gCanvas, phone::LeftEdge(), bottom - h * 0.5f, H, prompt::Button::kFaceWest, "CLIMB", gPromptAlpha);
+	prompt::Draw(gCanvas, phone::LeftEdge(), bottom - h * 0.5f, H, bindings::Action::kPedJumping, "CLIMB", gPromptAlpha);
 	text::Flush();
 }
 

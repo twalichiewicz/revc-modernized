@@ -179,6 +179,31 @@ struct Api {
 	uint8_t *newMouseState, *oldMouseState; // CMouseControllerState: LMB at +0, movement x/y (floats) at +8/+0xc
 	uint8_t *padAffectedByController;       // pads use their controller mode (+0xec) when set
 	uint8_t *invertLookForPad;              // CPad::bInvertLook4Pad
+	// ControlsManager (CControllerConfigManager): m_aSettings at +0xec0, 32 bytes an action:
+	// KEYBOARD +0, OPTIONAL_EXTRA +8, MOUSE +0x10, JOYSTICK +0x18 (each int32 key, int32 order)
+	uint8_t *controlsManager;
+	// What a hint names for an action: the pad's button token for its setup, or the keys
+	void (*GetWideStringOfCommandKeys)(uint8_t *controls, uint16_t action, uint16_t *out, uint16_t length);
+	void (*FontLoadButtons)(const char *txdPath); // the button icons hints draw (reloads into the same slot)
+	int32_t *fontButtonsSlot;                     // CFont::ButtonsSlot: the icons' TXD slot (-1: none)
+	int32_t *fontPs2Symbol;                       // CFont::PS2Symbol: the icon DrawButton draws next (-1: none)
+	uint8_t *fontButtonSprites;                   // CFont::ButtonSprite[18]: CSprite2d (an RwTexture*) each
+	bool (*GetIsKeyboardKeyDown)(uint8_t *controls, int key);  // RsKeyCodes
+	bool (*GetIsMouseButtonDown)(uint8_t *controls, int button); // 1..7: left, middle, right, wheel up / down, X1, X2
+	float *mouseAccel;                                           // CCamera::m_fMouseAccelHorzntl: the mouse's sensitivity
+	// CHud's help box: its text, the text it last started showing, and the text it draws (256 units each)
+	uint16_t *helpMessage, *lastHelpMessage, *helpMessageToPrint;
+	// The Controls page's settings and saving
+	uint8_t *mousePointerStateHelper; // MousePointerStateHelper: invert the mouse vertically at +1
+	bool *disableMouseSteering;       // CVehicle::m_bDisableMouseSteering
+	void (*SaveINISettings)();          // macVC.ini: vibration, the mouse...
+	void (*SaveINIControllerSettings)(); // macVC.ini: [Controller], [Bindings]
+	// CControllerConfigManager (this: controlsManager); types 0 keyboard, 1 the second key, 2 mouse
+	void (*ClearSettingsAssociatedWithAction)(uint8_t *controls, int action, int type);
+	void (*SetControllerKeyAssociatedWithAction)(uint8_t *controls, int action, int key, int type);
+	void (*SetMouseButtonAssociatedWithAction)(uint8_t *controls, int action, int button);
+	void (*ResetSettingOrder)(uint8_t *controls, int action);
+	bool (*GetIsKeyboardKeyJustDown)(uint8_t *controls, int key); // RsKeyCodes
 
 	// player
 	uint8_t *(*FindPlayerPed)();
@@ -272,6 +297,7 @@ struct Api {
 
 	// GLFW, which the game reads its gamepad through
 	int (*glfwJoystickIsGamepad)(int jid);
+	int (*glfwJoystickPresent)(int jid);
 	int (*glfwGetGamepadState)(int jid, void *state); // GLFWgamepadstate: uint8 buttons[15], float axes[6]
 	const char *(*glfwGetJoystickName)(int jid);
 	int (*glfwUpdateGamepadMappings)(const char *mappings);
