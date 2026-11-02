@@ -42,6 +42,8 @@ namespace hooks {
 void *Install(const char *, void *) { return reinterpret_cast<void *>(Native); }
 }
 namespace sniper { bool Active() { return gScoped; } }
+static int gFrames, gDropDraws;
+namespace raindrops { void Draw() { ++gDropDraws; } }
 void SetHudRenderStates() {}
 void Im2DCanvas::SetTexture(void *) {}
 void Im2DCanvas::SetDepthMode(DepthMode) {}
@@ -93,7 +95,11 @@ static bool Start(bool enabled = true)
 	grade::SlowMotion(0);
 	return grade::Install();
 }
-static void Frame() { grade::Hook_RenderMotionBlur(gCamera); }
+static void Frame()
+{
+	++gFrames;
+	grade::Hook_RenderMotionBlur(gCamera);
+}
 
 int main()
 {
@@ -153,6 +159,8 @@ int main()
 	Frame();
 	CHECK(gNativeType == 0 && gNativeAlpha == 0);
 	CHECK(*reinterpret_cast<int32_t *>(gCamera + 0xb8) == 1 && *reinterpret_cast<int32_t *>(gCamera + 0xc8) == 100);
+	// The rain's drops go on after it every frame: graded, the grade off, its shader or frame missing.
+	CHECK(gFrames == 9 && gDropDraws == gFrames);
 	if (gFailures) return 1;
 	std::puts("all estate lighting hook tests passed");
 }
