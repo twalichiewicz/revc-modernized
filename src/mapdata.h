@@ -43,10 +43,11 @@ struct Road {
 	float joinA, joinB; // the round joint at each end: as wide as the narrowest road meeting there
 };
 
-// The rain (#32, map.bin 6), by 64 m tile of the world (column, row from kWorldMin).
+// The rain (#32, map.bin 6: wet ground; 7: cover at 1 m), by 64 m tile of the
+// world (column, row from kWorldMin).
 constexpr float kRainTile = 64.0f;
 constexpr int kRainTiles = int(kWorldSize / kRainTile) + 1;
-constexpr int kCoverRes = 32;            // cover heights per tile side: every 2 m
+constexpr int kCoverRes = 64;            // cover heights per tile side: every metre
 constexpr int16_t kOpenSky = -32768;      // nothing solid there at all
 constexpr float kCoverMargin = 0.25f;     // m: a point this close under the top is on it, not under it
 // The paved ground that gets wet: triangles (three points each), world space.
@@ -54,8 +55,9 @@ struct WetCell {
 	int16_t cx = 0, cy = 0;
 	std::vector<Vec3> tris;
 };
-// The top of everything solid over each 2 m of a tile (a roof, an awning, a
-// bridge deck, or the ground itself), in decimetres; kOpenSky for none.
+// The top of everything solid over each metre of a tile (a roof, an awning, a
+// bridge deck, or the ground itself), in decimetres; kOpenSky for none. A
+// metre counts as under a roof only if all of it is (rain reaches the wall).
 struct CoverTile {
 	int16_t cx = 0, cy = 0;
 	int16_t top[kCoverRes * kCoverRes];
@@ -73,7 +75,7 @@ struct Map {
 	std::vector<std::string> streets;
 	std::vector<uint16_t> roadStreet;
 	std::vector<float> roadZ;
-	// The rain (#32, map.bin 6). Older files load with neither.
+	// The rain (#32, map.bin 6 and 7). Older files load with neither; a 6 without the cover.
 	std::vector<WetCell> wet;
 	std::vector<CoverTile> covers;
 	std::vector<int32_t> coverIndex; // kRainTiles^2, -1 for no tile; IndexCovers() builds it (Load does)

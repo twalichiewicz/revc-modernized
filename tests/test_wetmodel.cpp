@@ -174,7 +174,7 @@ static void TestPuddlesGrowWithLevel()
 	CHECK(half.size() == full.size() && !full.empty());
 	bool grew = true;
 	for (size_t i = 0; i < half.size() && i < full.size(); i++)
-		grew &= half[i].centre.x == full[i].centre.x && std::fabs(full[i].radius - 2 * half[i].radius) < 1e-4f;
+		grew &= half[i].centre.x == full[i].centre.x && std::fabs(full[i].radius - std::sqrt(2.0f) * half[i].radius) < 1e-4f; // twice the water, twice the area
 	CHECK(grew);
 }
 

@@ -82,7 +82,7 @@ uniform sampler2D tex0;
 uniform sampler2D u_dropMask;
 uniform vec4 u_dropFrame; // frame width, height (px); the mask on; frame px per screen px
 FSIN vec2 v_tex0;
-FSIN vec4 v_color;
+FSIN vec4 v_color;        // its radius (screen px / 255), a trail or not, its shape's seed, its strength
 vec3 Frame(vec2 px)
 {
 	vec2 size = vec2(textureSize(tex0, 0));
@@ -96,20 +96,31 @@ void main(void)
 	vec2 local = v_tex0;
 	vec2 up = vec2(local.x, -local.y); // the screen's y runs down, gl_FragCoord's up
 	if (v_color.g > 0.5) {
+		// The wet line a running drop leaves: a faint smear.
 		float across = 1.0 - local.x * local.x;
-		vec3 c = Frame(gl_FragCoord.xy + vec2(local.x * radius * 0.6, 0.0));
-		FRAGCOLOR(vec4(c * 0.95, across * (1.0 - local.y) * 0.45 * mask * v_color.a));
+		vec3 c = Frame(gl_FragCoord.xy + vec2(local.x * radius * 0.5, 0.0));
+		FRAGCOLOR(vec4(c, across * (1.0 - local.y) * 0.35 * mask * v_color.a));
 		return;
 	}
-	float r2 = dot(local, local);
+	// Not quite round...
+	float seed = v_color.b * 6.2831853;
+	float turn = atan(local.y, local.x + 0.00001);
+	float wobble = 1.0 + 0.07 * sin(turn * 3.0 + seed) + 0.04 * sin(turn * 5.0 - seed * 2.0);
+	float r2 = dot(local, local) / (wobble * wobble);
 	if (r2 >= 1.0)
 		discard;
-	vec2 middle = gl_FragCoord.xy - up * radius;
-	vec3 c = Frame(middle - up * radius * 1.8);
-	c *= mix(1.0, 0.55, smoothstep(0.55, 1.0, r2));
-	float glint = pow(max(0.0, 1.0 - length(local - vec2(-0.35, -0.4)) * 3.2), 3.0);
-	c += vec3(glint * 0.7);
-	FRAGCOLOR(vec4(c, (1.0 - smoothstep(0.82, 1.0, r2)) * mask * v_color.a));
+	// ...and the world through it upside down, smaller and soft (a drop is a strong lens).
+	vec2 at = gl_FragCoord.xy - up * radius - up * radius * 2.2;
+	vec3 c = vec3(0.0);
+	for (int i = 0; i < 5; i++) {
+		vec2 o = vec2(float(i) - 2.0, float((i * 3) % 5) - 2.0) * radius * 0.12;
+		c += Frame(at + o);
+	}
+	c *= 0.2;
+	c *= mix(1.0, 0.7, smoothstep(0.6, 1.0, r2)); // its rim a little darker
+	vec2 g = local - vec2(-0.35, -0.45);
+	c += vec3(exp(-dot(g, g) * 30.0) * 0.45); // a glint up on its left
+	FRAGCOLOR(vec4(c, (1.0 - smoothstep(0.75, 1.0, r2)) * mask * v_color.a));
 }
 )";
 
@@ -269,7 +280,7 @@ void Draw()
 			gCanvas.Tri({x - half, y, -1, 0}, {x + half, y, 1, 0}, {x + half, top, 1, 1}, c);
 			gCanvas.Tri({x - half, y, -1, 0}, {x + half, top, 1, 1}, {x - half, top, -1, 1}, c);
 		}
-		const CRGBA c{rpx, 0, 0, strength};
+		const CRGBA c{rpx, 0, uint8_t(d.seed * 255), strength};
 		gCanvas.Tri({x - r, y - r, -1, -1}, {x + r, y - r, 1, -1}, {x + r, y + r, 1, 1}, c);
 		gCanvas.Tri({x - r, y - r, -1, -1}, {x + r, y + r, 1, 1}, {x - r, y + r, -1, 1}, c);
 	}

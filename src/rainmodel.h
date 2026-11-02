@@ -12,7 +12,8 @@ namespace rainmodel {
 
 constexpr int kMaxStreaks = 6000;
 constexpr float kWetEase = 1.0f;       // s: the ground's wetness follows the game's this smoothly
-constexpr float kPuddleFill = 180.0f;  // s of steady heavy rain to fill the puddles
+constexpr float kPuddleFill = 120.0f;  // s of steady rain to fill the puddles...
+constexpr float kFullRain = 0.5f;      // ...this heavy or more (the game's rainy weather); lighter fills them partway
 constexpr float kPuddleDrain = 300.0f; // s dry to drain them
 constexpr float kRaining = 0.05f;      // less is no rain
 

@@ -21,6 +21,7 @@ DropMode ModeFor(bool firstPersonOnFoot, bool seatView, int vehicleType, bool to
 struct Drop {
 	Vec2 pos;
 	float radius, trail; // the trail: how far up the screen the wet line it ran down reaches
+	float seed;          // 0..1: its own uneven outline (a merged drop keeps the bigger one's)
 };
 
 class Drops {

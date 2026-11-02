@@ -29,10 +29,8 @@ const int32_t *gArea;
 const uint8_t *gCameraZone, *gPlayerZone;
 bool gTried, gReady;
 void *gShader;
-int uEye;
 
 const char *const kVertex = R"(
-uniform vec4 u_rainEye;
 VSIN(ATTRIB_POS) vec3 in_pos;
 VSOUT vec4 v_colour;
 VSOUT vec2 v_uv;
@@ -67,7 +65,6 @@ bool Prepare()
 	gTried = true;
 	if (!shaders::Ready())
 		return false;
-	uEye = shaders::Uniform("u_rainEye");
 	gShader = shaders::Create("rain streaks", kVertex, kFragment);
 	gReady = gShader != nullptr;
 	return gReady;
@@ -152,7 +149,6 @@ void Draw()
 	const Vec3 skyLight{(sky.top.x + sky.bottom.x) * 0.4f, (sky.top.y + sky.bottom.y) * 0.4f, (sky.top.z + sky.bottom.z) * 0.4f};
 	const float strength = 0.25f + 0.35f * w.rain;
 
-	shaders::Set(uEye, eye.x, eye.y, eye.z);
 	const shaders::SavedStates saved;
 	api.RwRenderStateSet(kStateTextureRaster, nullptr);
 	api.RwRenderStateSet(kStateZTest, reinterpret_cast<void *>(1));

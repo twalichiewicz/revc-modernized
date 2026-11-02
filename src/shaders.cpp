@@ -173,6 +173,14 @@ void OverrideIm2D(void *shader) { *gIm2DOverride = shader; }
 
 int UniformMatrix(const char *name) { return gReady ? gRegister(name, kUniformMat4, 1) : -1; }
 
+int UniformArray(const char *name, int count) { return gReady ? gRegister(name, kUniformVec4, count) : -1; }
+
+void SetArray(int uniform, const float *values)
+{
+	if (uniform >= 0)
+		gSetUniform(uniform, const_cast<float *>(values));
+}
+
 void SetMatrix(int uniform, const float *m)
 {
 	if (uniform >= 0)

@@ -23,7 +23,7 @@ uint32_t Hash(uint32_t x)
 float Unit(uint32_t h) { return float(h & 0xffffff) / float(0x1000000); }
 
 constexpr float kPuddleLevel = 0.05f; // less is a damp road, no standing water
-constexpr int kPuddlesPerCell = 4;
+constexpr int kPuddlesPerCell = 8;
 constexpr float kFlat = 0.998f;       // the normal's z: water stands only on the flattest ground
 constexpr float kSplashLife = 0.3f;   // s
 constexpr int kSplashes = 260, kPerRoof = 7; // in a downpour
@@ -174,6 +174,8 @@ std::vector<Reflection> Reflections(const std::vector<Light> &lights, Vec3 camer
 	return out;
 }
 
+float PuddleScale(float level) { return std::sqrt(std::clamp(level, 0.0f, 1.0f)); }
+
 bool Shows(float wetness, float puddles) { return wetness >= 0.02f || puddles > kPuddleLevel; }
 
 std::vector<Puddle> Puddles(const mapdata::WetCell &cell, float level)
@@ -192,7 +194,7 @@ std::vector<Puddle> Puddles(const mapdata::WetCell &cell, float level)
 		const float nx = uy * vz - uz * vy, ny = uz * vx - ux * vz, nz = ux * vy - uy * vx;
 		const float len = std::sqrt(nx * nx + ny * ny + nz * nz);
 		const float z = len > 0 ? std::fabs(nz) / len : 0;
-		if (z >= kFlat && len / 2 > 6.0f) // and big enough to hold one
+		if (z >= kFlat && len / 2 > 3.0f) // and big enough to hold one
 			flat.push_back({t, z});
 	}
 	std::stable_sort(flat.begin(), flat.end(), [](const Candidate &l, const Candidate &r) { return l.flat > r.flat; });
@@ -214,7 +216,7 @@ std::vector<Puddle> Puddles(const mapdata::WetCell &cell, float level)
 		const float fits = EdgeDistance(a, b, c, p.x, p.y) * 0.9f;
 		const float want = 0.8f + 1.7f * Unit(Hash(h + 1));
 		if (fits > 0.3f)
-			out.push_back({p, std::min(want, fits) * std::min(level, 1.0f)});
+			out.push_back({p, std::min(want, fits) * PuddleScale(level)});
 	}
 	return out;
 }

@@ -35,7 +35,7 @@ constexpr int kDiscSides = 14;
 constexpr int kRoofs = 8; // the nearest cars the rain splashes on
 std::unordered_map<int, std::vector<wetmodel::Puddle>> gPuddles; // by cell: where they stand when full
 std::unordered_map<int, float> gRoofs;                           // by model: the roof over its middle, NAN for none
-int uEye, uState, uSkyTop, uSkyLow, uSun, uSunColour;
+int uEye, uState, uSkyTop, uSkyLow, uSun, uSunColour, uLights;
 
 // Shared by both: placed on the world just over the ground (the collision the
 // ground comes from and the road's model differ by centimetres).
@@ -61,16 +61,41 @@ void main(void)
 // Blended ONE, INVSRCALPHA: the ground darkened by the alpha, the sky's
 // reflection (Fresnel: strong only at grazing angles) and the sun's glint added.
 const char *const kWetFragment = R"(
-uniform vec4 u_wetEye;     // the camera, the drawn radius
-uniform vec4 u_wetState;   // wetness, darkening, puddles, seconds
-uniform vec4 u_wetSkyTop;  // the sky overhead, daylight
-uniform vec4 u_wetSkyLow;  // the sky at the horizon
-uniform vec4 u_wetSun;     // towards the sun, its strength
+uniform vec4 u_wetEye;      // the camera, the drawn radius
+uniform vec4 u_wetState;    // wetness, darkening, puddles, seconds
+uniform vec4 u_wetSkyTop;   // the sky overhead, daylight
+uniform vec4 u_wetSkyLow;   // the sky at the horizon
+uniform vec4 u_wetSun;      // towards the sun, its strength
 uniform vec4 u_wetSunColour;
+uniform vec4 u_wetLights[8]; // the four nearest lights: where (and their reach), then their colour
 FSIN vec3 v_world;
 FSIN vec4 v_colour;
 FSIN vec2 v_uv;
 FSIN float v_fog;
+float Hash(vec2 p) { return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453); }
+float Noise(vec2 p)
+{
+	vec2 i = floor(p), f = fract(p);
+	f = f * f * (3.0 - 2.0 * f);
+	return mix(mix(Hash(i), Hash(i + vec2(1.0, 0.0)), f.x), mix(Hash(i + vec2(0.0, 1.0)), Hash(i + vec2(1.0, 1.0)), f.x), f.y);
+}
+// The rain landing in a puddle: rings spreading from each drop (two offset
+// grids of 40 cm, each cell its own drop), as the tilt they give the water.
+vec2 Ripples(vec2 p, float t)
+{
+	vec2 tilt = vec2(0.0);
+	for (int k = 0; k < 2; k++) {
+		vec2 q = p / 0.4 + vec2(float(k) * 0.5);
+		vec2 cell = floor(q);
+		float h = Hash(cell + vec2(float(k) * 7.0));
+		vec2 d = q - (cell + 0.25 + 0.5 * vec2(h, Hash(cell + vec2(3.1))));
+		float r = length(d);
+		float life = fract(t * 1.3 + h);
+		float ring = r - life * 0.6;
+		tilt += d / max(r, 0.001) * sin(ring * 40.0) * exp(-ring * ring * 60.0) * (1.0 - life);
+	}
+	return tilt * 0.12;
+}
 void main(void)
 {
 	vec3 toEye = u_wetEye.xyz - v_world;
@@ -84,12 +109,24 @@ void main(void)
 	float wet = u_wetState.x;
 	float fade = v_fog * (1.0 - smoothstep(u_wetEye.w * 0.7, u_wetEye.w, dist));
 	if (v_colour.g < 0.5) {
-		// A puddle (over the wet ground already drawn): a mirror, soft at its edge, rippled by the rain.
-		float edge = 1.0 - smoothstep(0.65, 1.0, v_uv.x);
-		float ripple = 1.0 + 0.1 * sin(v_uv.x * 47.0 - u_wetState.w * 9.0);
-		float mirror = fresnel * 0.9 * edge * max(wet, u_wetState.z); // they outlast the wet road
-		vec3 seen = (sky * ripple + u_wetSunColour.rgb * pow(max(dot(R, u_wetSun.xyz), 0.0), 600.0) * u_wetSun.w * 2.0);
-		FRAGCOLOR(vec4(seen * mirror, mirror) * fade);
+		// A puddle (over the wet ground already drawn): standing water, its edge
+		// uneven, darker than the road, a mirror of the sky and the lamps that
+		// the rain keeps breaking up.
+		float level = max(wet, u_wetState.z);
+		float edge = 1.0 - smoothstep(0.55, 0.95, v_uv.x + 0.35 * (Noise(v_world.xy * 0.9) - 0.5));
+		vec3 N = normalize(vec3(Ripples(v_world.xy, u_wetState.w), 1.0));
+		vec3 M = reflect(-V, N);
+		float f = 0.02 + 0.98 * pow(1.0 - clamp(dot(V, N), 0.0, 1.0), 5.0);
+		vec3 seen = mix(u_wetSkyLow.rgb, u_wetSkyTop.rgb, clamp(M.z * 1.5, 0.0, 1.0)) * f;
+		for (int i = 0; i < 4; i++) {
+			vec4 at = u_wetLights[2 * i];
+			vec3 toLight = at.xyz - v_world;
+			float far = length(toLight);
+			seen += u_wetLights[2 * i + 1].rgb * pow(max(dot(M, toLight / max(far, 0.001)), 0.0), 900.0) * 6.0 * at.w / (at.w + far * 0.15);
+		}
+		seen += u_wetSunColour.rgb * pow(max(dot(M, u_wetSun.xyz), 0.0), 600.0) * u_wetSun.w * 2.0;
+		float cover = edge * level;
+		FRAGCOLOR(vec4(seen * cover, cover * (0.3 + 0.7 * f)) * fade);
 		return;
 	}
 	float gloss = wet * fresnel * 0.55;
@@ -111,7 +148,7 @@ void main(void)
 {
 	float across = 1.0 - abs(v_uv.x);
 	across *= across;
-	float along = smoothstep(0.0, 0.12, v_uv.y) * pow(max(1.0 - v_uv.y, 0.0), 1.5); // (never NaN: the frame is FP16)
+	float along = smoothstep(0.0, 0.08, v_uv.y) * (1.0 - smoothstep(0.45, 1.0, v_uv.y));
 	float ripple = 0.75 + 0.25 * sin(v_uv.y * 37.0 + u_wetState.w * 5.0 + v_uv.x * 2.0);
 	FRAGCOLOR(vec4(v_colour.rgb * (across * along * ripple * u_wetState.x * v_fog), 1.0));
 }
@@ -127,11 +164,21 @@ FSIN float v_fog;
 void main(void)
 {
 	float age = v_colour.a;
-	vec2 p = vec2(v_uv.x, v_uv.y * 1.6);
-	float d = length(p) - (0.25 + 0.7 * age);
-	float crown = exp(-d * d * 90.0) * (1.0 - smoothstep(0.5, 1.0, v_uv.y));
-	float k = crown * (1.0 - age) * (1.0 - age) * v_fog;
-	FRAGCOLOR(vec4(v_colour.rgb * k, 1.0));
+	float spread = 0.35 + 0.65 * age;
+	// The crown's drops, thrown up and falling back...
+	float k = 0.0;
+	for (int i = 0; i < 5; i++) {
+		float fi = float(i);
+		float x = (fi / 2.0 - 1.0) * 0.55 * spread;
+		float up = (0.35 + 0.5 * fract(sin(fi * 12.9898) * 43758.5)) * 4.0 * age * (1.0 - age);
+		vec2 d = vec2(v_uv.x - x, (v_uv.y - up) * 1.4);
+		k += exp(-dot(d, d) * 260.0);
+	}
+	// ...and the ring it leaves, flat on the ground.
+	float out_ = abs(v_uv.x) - spread * 0.8;
+	k += exp(-out_ * out_ * 90.0) * exp(-v_uv.y * v_uv.y * 300.0) * 0.6;
+	float left = 1.0 - age;
+	FRAGCOLOR(vec4(v_colour.rgb * k * left * sqrt(left) * v_fog, 1.0));
 }
 )";
 
@@ -148,6 +195,7 @@ bool Prepare()
 	uSkyLow = shaders::Uniform("u_wetSkyLow");
 	uSun = shaders::Uniform("u_wetSun");
 	uSunColour = shaders::Uniform("u_wetSunColour");
+	uLights = shaders::UniformArray("u_wetLights", 8);
 	gWet = shaders::Create("wet ground", kVertex, kWetFragment);
 	gStreak = shaders::Create("wet ground (light streaks)", kVertex, kStreakFragment);
 	gSplash = shaders::Create("rain splashes", kVertex, kSplashFragment);
@@ -260,6 +308,21 @@ void Draw()
 	shaders::Set(uSun, sky.sun.x, sky.sun.y, sky.sun.z, sky.daylight * (1.0f - 0.7f * sky.cloudCover));
 	shaders::Set(uSunColour, sky.sunColour.x, sky.sunColour.y, sky.sunColour.z);
 
+	// The four nearest lights, for the puddles' mirrors.
+	std::vector<worlddraw::Light> pointLights = worlddraw::PointLights();
+	{
+		std::vector<worlddraw::Light> near = pointLights;
+		std::sort(near.begin(), near.end(), [&](const worlddraw::Light &a, const worlddraw::Light &b) {
+			return std::hypot(a.pos.x - eye.x, a.pos.y - eye.y) < std::hypot(b.pos.x - eye.x, b.pos.y - eye.y);
+		});
+		float lights[32] = {};
+		for (size_t i = 0; i < near.size() && i < 4; i++) {
+			const worlddraw::Light &l = near[i];
+			const float v[8] = {l.pos.x, l.pos.y, l.pos.z, std::max(l.radius, 1.0f), l.colour.x, l.colour.y, l.colour.z, 0};
+			std::copy(v, v + 8, lights + i * 8);
+		}
+		shaders::SetArray(uLights, lights);
+	}
 	const shaders::SavedStates saved;
 	api.RwRenderStateSet(kStateTextureRaster, nullptr);
 	api.RwRenderStateSet(kStateZTest, reinterpret_cast<void *>(1));
@@ -286,7 +349,7 @@ void Draw()
 				if (it == gPuddles.end())
 					it = gPuddles.emplace(c, wetmodel::Puddles(map->wet[size_t(c)], 1)).first;
 				for (const wetmodel::Puddle &p : it->second) {
-					const float r = p.radius * std::min(w.puddles, 1.0f);
+					const float r = p.radius * wetmodel::PuddleScale(w.puddles);
 					for (int k = 0; k < kDiscSides; k++) {
 						const float a0 = 6.2831853f * k / kDiscSides, a1 = 6.2831853f * (k + 1) / kDiscSides;
 						ground.Put(p.centre, 255, 0, 255, 0, 0);
@@ -298,7 +361,6 @@ void Draw()
 	}
 
 	const wetmodel::GroundAt ground = [&](Vec3 p, float &z) { return wetmodel::WetGroundAt(*map, p, z); };
-	const std::vector<worlddraw::Light> pointLights = worlddraw::PointLights();
 	std::vector<wetmodel::Light> lights;
 	for (const worlddraw::Light &l : pointLights)
 		lights.push_back({l.pos, l.colour, l.radius});

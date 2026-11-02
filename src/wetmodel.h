@@ -51,6 +51,8 @@ struct Puddle {
 	float radius;
 };
 std::vector<Puddle> Puddles(const mapdata::WetCell &cell, float level);
+// How big a puddle is at this level, of its full size: its area follows the water.
+float PuddleScale(float level);
 // Whether there's anything wet to draw: the ground, or puddles still draining after it's dried.
 bool Shows(float wetness, float puddles);
 

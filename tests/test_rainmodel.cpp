@@ -47,14 +47,16 @@ static void TestDriesSmoothly()
 
 static void TestPuddlesBuildAndDrain()
 {
-	Model m;
-	CHECK(Run(m, 1, 1, 60).puddles > 0.2f && Run(m, 1, 1, 0).puddles < 0.5f); // a minute: building
-	CHECK(Run(m, 1, 1, 130).puddles > 0.99f);                                // three minutes: full
-	const float full = Run(m, 0, 0, 120).puddles;                            // two minutes dry
-	CHECK(full > 0.5f && full < 0.75f);
-	CHECK(Run(m, 0, 0, 200).puddles < 0.01f);                                // five minutes dry: gone
+	Model m; // the game's rain (CATSANDDOGS gives 0.5)
+	const float minute = Run(m, 0.5f, 1, 60).puddles;
+	CHECK(minute > 0.4f && minute < 0.6f);            // a minute: half full
+	CHECK(Run(m, 0.5f, 1, 65).puddles > 0.99f);       // two minutes: full
+	const float drying = Run(m, 0, 0, 120).puddles;   // two minutes dry
+	CHECK(drying > 0.5f && drying < 0.75f);
+	CHECK(Run(m, 0, 0, 200).puddles < 0.01f);         // five minutes dry: gone
 	Model light;
-	CHECK(Run(light, 0.3f, 0.3f, 180).puddles < 0.4f); // light rain fills them less
+	const float drizzle = Run(light, 0.2f, 0.3f, 300).puddles;
+	CHECK(drizzle > 0.3f && drizzle < 0.41f);         // a drizzle fills them only so far
 }
 
 static const Vec3 kCamera{1000, -500, 30};

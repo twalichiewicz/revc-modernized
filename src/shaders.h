@@ -25,6 +25,10 @@ extern const char *const kScreenVertex;
 
 // RwIm2D draws use `shader` (null: the game's own again).
 void OverrideIm2D(void *shader);
+// A vec4 array uniform of ours: `count` of them in one of librw's uniform slots
+// (there are 63 in all, the game's and ours); set with all of them at once.
+int UniformArray(const char *name, int count);
+void SetArray(int uniform, const float *values); // count * 4 floats
 // A mat4 uniform of ours (16 floats, as GL has them: column by column).
 int UniformMatrix(const char *name);
 void SetMatrix(int uniform, const float *m);

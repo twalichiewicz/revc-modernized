@@ -6,9 +6,9 @@
 namespace dropmodel {
 namespace {
 
-constexpr float kLandRate = 30.0f;        // drops a second on a lens in a downpour
-constexpr float kSmallest = 0.005f, kBiggest = 0.014f; // as they land (5 to 15 pixels at 1080)
-constexpr float kHeavy = 0.017f;          // from here they run down
+constexpr float kLandRate = 22.0f;        // drops a second on a lens in a downpour
+constexpr float kSmallest = 0.010f, kBiggest = 0.026f; // as they land (11 to 28 pixels at 1080)
+constexpr float kHeavy = 0.032f;          // from here they run down
 constexpr float kRun = 0.08f;             // screens a second a heavy drop runs
 constexpr float kDryOut = 0.0012f;        // radius a second lost under cover
 constexpr float kDryIn = 0.0002f;         // ...and out in the rain
@@ -53,7 +53,7 @@ float Drops::Random()
 
 void Drops::Land(Vec2 pos, float radius)
 {
-	Drop drop{pos, radius, 0};
+	Drop drop{pos, radius, 0, Random()};
 	// Take in every drop it touches (and what those touch, as it grows).
 	for (bool merged = true; merged;) {
 		merged = false;
@@ -63,6 +63,7 @@ void Drops::Land(Vec2 pos, float radius)
 				continue;
 			const float a = drop.radius * drop.radius * drop.radius, b = o.radius * o.radius * o.radius;
 			drop.pos = {(drop.pos.x * a + o.pos.x * b) / (a + b), (drop.pos.y * a + o.pos.y * b) / (a + b)};
+			drop.seed = b > a ? o.seed : drop.seed;
 			drop.radius = std::cbrt(a + b);
 			drop.trail = std::max(drop.trail, o.trail);
 			drops_.erase(drops_.begin() + long(i));

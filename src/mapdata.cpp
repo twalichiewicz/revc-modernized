@@ -8,7 +8,7 @@
 namespace mapdata {
 namespace {
 
-constexpr char kMagic[8] = {'V', 'C', 'M', 'M', 'M', 'A', 'P', '6'};
+constexpr char kMagic[8] = {'V', 'C', 'M', 'M', 'M', 'A', 'P', '7'};
 
 template <typename T>
 bool Read(FILE *f, T &v) { return fread(&v, sizeof v, 1, f) == 1; }
@@ -65,10 +65,11 @@ bool Map::Load(const std::string &path)
 		return false;
 	char magic[8];
 	uint32_t mapSize = 0, count = 0;
-	bool ok = Read(f, magic) && memcmp(magic, kMagic, 7) == 0 && magic[7] >= '3' && magic[7] <= '6' &&
+	bool ok = Read(f, magic) && memcmp(magic, kMagic, 7) == 0 && magic[7] >= '3' && magic[7] <= '7' &&
 	          Read(f, mapSize) && mapSize > 0 && mapSize <= 8192 &&
 	          ReadVec(f, classes, size_t(mapSize) * mapSize) && Read(f, count) && count <= 100000;
-	const bool visual = ok && magic[7] >= '4', named = ok && magic[7] >= '5', rainy = ok && magic[7] >= '6';
+	const bool visual = ok && magic[7] >= '4', named = ok && magic[7] >= '5', rainy = ok && magic[7] >= '6',
+	           sheltered = ok && magic[7] >= '7'; // 6's cover was at 2 m: left for the rebake
 	size = int(mapSize);
 	for (uint32_t i = 0; ok && i < count; i++) {
 		Building b;
@@ -124,7 +125,8 @@ bool Map::Load(const std::string &path)
 				ok = ok && std::isfinite(v.x) && std::isfinite(v.y) && std::isfinite(v.z);
 			wet.push_back(std::move(cell));
 		}
-		ok = ok && Read(f, tiles) && tiles <= uint32_t(kRainTiles * kRainTiles) && ReadVec(f, covers, tiles);
+		if (sheltered)
+			ok = ok && Read(f, tiles) && tiles <= uint32_t(kRainTiles * kRainTiles) && ReadVec(f, covers, tiles);
 	}
 	fclose(f);
 	if (!ok) {

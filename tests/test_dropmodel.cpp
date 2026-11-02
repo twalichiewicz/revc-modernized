@@ -41,10 +41,13 @@ static void TestDropsLandWithRain()
 	Run(wet, 1, true, 0, DropMode::Lens, 2);
 	Run(dry, 0, true, 0, DropMode::Lens, 2);
 	CHECK(wet.All().size() > 20 && dry.All().empty());
-	bool onScreen = true;
-	for (const Drop &d : wet.All())
+	bool onScreen = true, big = true, shapes = false;
+	for (const Drop &d : wet.All()) {
 		onScreen &= d.pos.x >= 0 && d.pos.x <= 1 && d.pos.y >= 0 && d.pos.y <= 1 && d.radius > 0;
-	CHECK(onScreen);
+		big &= d.radius >= 0.009f; // drops on a lens, not specks: 9 px and up at 1080
+		shapes |= d.seed != wet.All()[0].seed;
+	}
+	CHECK(onScreen && big && shapes);
 	Drops light;
 	Run(light, 0.3f, true, 0, DropMode::Lens, 2);
 	CHECK(light.All().size() < wet.All().size());
@@ -65,17 +68,17 @@ static void TestMergeAndTrickle()
 {
 	Drops d;
 	d.Update(0, true, 0, DropMode::Lens, 0);
-	d.Land({0.5f, 0.5f}, 0.014f);
-	d.Land({0.51f, 0.5f}, 0.014f); // touching: one, as much water as both
+	d.Land({0.5f, 0.5f}, 0.026f);
+	d.Land({0.52f, 0.5f}, 0.026f); // touching: one, as much water as both, the bigger one's shape
 	CHECK(d.All().size() == 1);
 	if (d.All().size() != 1)
 		return;
-	CHECK(std::fabs(d.All()[0].radius - 0.014f * std::cbrt(2.0f)) < 1e-4f);
+	CHECK(std::fabs(d.All()[0].radius - 0.026f * std::cbrt(2.0f)) < 1e-4f);
 	Run(d, 0, true, 0, DropMode::Lens, 1); // heavy enough to run down, leaving a trail
 	CHECK(d.All().size() == 1 && d.All()[0].pos.y > 0.52f && d.All()[0].trail > 0.01f);
 	Drops small;
 	small.Update(0, true, 0, DropMode::Lens, 0);
-	small.Land({0.5f, 0.5f}, 0.005f); // a small one stays where it is
+	small.Land({0.5f, 0.5f}, 0.012f); // a small one stays where it is
 	Run(small, 0, true, 0, DropMode::Lens, 1);
 	CHECK(small.All().size() == 1 && small.All()[0].pos.y == 0.5f);
 }
@@ -84,12 +87,12 @@ static void TestSpeedPushesUp()
 {
 	Drops d;
 	d.Update(0, true, 30, DropMode::Windscreen, 0);
-	d.Land({0.3f, 0.5f}, 0.006f);
+	d.Land({0.3f, 0.5f}, 0.012f);
 	Run(d, 0, true, 30, DropMode::Windscreen, 0.5f);
 	CHECK(d.All().size() == 1 && d.All()[0].pos.y < 0.47f && d.All()[0].pos.x < 0.3f); // up, and aside
 	Drops parked;
 	parked.Update(0, true, 0, DropMode::Windscreen, 0);
-	parked.Land({0.3f, 0.5f}, 0.006f);
+	parked.Land({0.3f, 0.5f}, 0.012f);
 	Run(parked, 0, true, 0, DropMode::Windscreen, 0.5f);
 	CHECK(parked.All().size() == 1 && parked.All()[0].pos.y == 0.5f);
 }

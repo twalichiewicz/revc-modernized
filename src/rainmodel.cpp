@@ -9,7 +9,13 @@ Weather Model::Update(float gameRain, float gameWetRoads, float dt)
 	w_.rain = std::clamp(gameRain, 0.0f, 1.0f);
 	const float target = std::clamp(gameWetRoads, 0.0f, 1.0f);
 	w_.wetness += (target - w_.wetness) * (1 - std::exp(-std::max(dt, 0.0f) / kWetEase));
-	w_.puddles += w_.rain > kRaining ? w_.rain * dt / kPuddleFill : -dt / kPuddleDrain;
+	const float step = std::max(dt, 0.0f), most = std::min(1.0f, w_.rain / kFullRain);
+	if (w_.rain <= kRaining)
+		w_.puddles -= step / kPuddleDrain;
+	else if (w_.puddles < most)
+		w_.puddles = std::min(most, w_.puddles + step / kPuddleFill);
+	else
+		w_.puddles = std::max(most, w_.puddles - step / kPuddleDrain); // the rain eased: down to what it keeps up
 	w_.puddles = std::clamp(w_.puddles, 0.0f, 1.0f);
 	return w_;
 }

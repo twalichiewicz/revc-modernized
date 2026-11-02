@@ -502,6 +502,52 @@ std::vector<Building> VisualBuildings(const std::vector<Instance> &insts,
 	return result;
 }
 
+// What buildings show over the street that their collision leaves out (porches,
+// eaves, balconies): their visible triangles, for the rain's cover. Buildings
+// are the models with solid collision; not the far versions, nor trees and
+// bushes (rain falls through their leaves).
+std::vector<wetground::Face> BuildingVisuals(const std::vector<Instance> &insts, const std::map<std::string, ColModel> &cols,
+                                             ImgArchive &img)
+{
+	std::vector<wetground::Face> out;
+	std::map<std::string, visualmodel::Mesh> cache;
+	std::set<std::string> skip;
+	auto leafy = [](const std::string &n) {
+		return n.find("lod") != std::string::npos || n.find("veg") != std::string::npos || n.find("palm") != std::string::npos ||
+		       n.find("tree") != std::string::npos || n.find("bush") != std::string::npos;
+	};
+	size_t models = 0;
+	for (const Instance &in : insts) {
+		if ((in.interior != 0 && in.interior != 13) || skip.count(in.model) || leafy(in.model) || !visualmodel::ActiveAt(in, 12))
+			continue;
+		auto col = cols.find(in.model);
+		if (col == cols.end() || std::none_of(col->second.faces.begin(), col->second.faces.end(),
+		                                       [](const ColFace &f) { return Kind(f.surface) == kSolid; })) {
+			skip.insert(in.model);
+			continue;
+		}
+		auto it = cache.find(in.model);
+		if (it == cache.end()) {
+			std::vector<uint8_t> bytes;
+			visualmodel::Mesh mesh;
+			std::string why;
+			if (!img.Read(in.model + ".dff", bytes) || !visualmodel::Read(bytes, mesh, why)) {
+				skip.insert(in.model);
+				continue;
+			}
+			it = cache.emplace(in.model, std::move(mesh)).first;
+			++models;
+		}
+		for (const visualmodel::Face &f : it->second.faces) {
+			const Vec3f a = visualmodel::Place(it->second.vertices[f.a], in), b = visualmodel::Place(it->second.vertices[f.b], in),
+			            c = visualmodel::Place(it->second.vertices[f.c], in);
+			out.push_back({{a.x, a.y, a.z}, {b.x, b.y, b.z}, {c.x, c.y, c.z}, 0});
+		}
+	}
+	printf("rain: %zu building models' visible triangles in the cover (%zu)\n", models, out.size());
+	return out;
+}
+
 float SeaLevel(const std::string &gameData)
 {
 	std::ifstream file(gameData+"/data/water.dat");std::string row;
@@ -821,7 +867,10 @@ int main(int argc, char **argv)
 		ForEachFace<true>(insts, cols, [&](size_t, Vec3f a, Vec3f b, Vec3f c, uint8_t s) {
 			faces.push_back({{a.x, a.y, a.z}, {b.x, b.y, b.z}, {c.x, c.y, c.z}, s});
 		});
-		map.covers = wetground::CoverTiles(faces);
+		std::vector<wetground::Face> over = faces;
+		const std::vector<wetground::Face> shown = BuildingVisuals(insts, cols, img);
+		over.insert(over.end(), shown.begin(), shown.end());
+		map.covers = wetground::CoverTiles(over);
 		map.IndexCovers();
 		map.wet = wetground::WetGround(faces, map);
 		size_t tris = 0;

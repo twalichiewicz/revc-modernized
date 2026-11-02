@@ -112,6 +112,23 @@ static void TestCoverBelowRoof()
 	CHECK(!CoveredAt(mapdata::Map{}, {15, 15, 1})); // an old map: never covered
 }
 
+// Rain falls right up to a wall with nothing over it: the cover follows the
+// roof's edge to under a metre, and leans to the open side (rain a little
+// under the edge, never stopping short of it), and a thin arm covers nothing.
+static void TestRainUpToTheWall()
+{
+	std::vector<Face> faces;
+	Square(faces, 0, 0, 60, 40, 0, kTarmac);
+	Square(faces, 10.6f, 10, 30, 30, 12, kWall);    // a roof whose edge isn't on a cell's
+	Square(faces, 40, 20, 50, 20.3f, 5, kWall);     // a sign's arm over the street, 30 cm wide
+	const mapdata::Map m = Covered(faces);
+	CHECK(!CoveredAt(m, {10.3f, 20, 1}));  // 30 cm outside the wall: rain
+	CHECK(!CoveredAt(m, {9.5f, 20, 1}));
+	CHECK(CoveredAt(m, {11.8f, 20, 1}));   // a metre and a bit under it: none
+	CHECK(CoveredAt(m, {29.0f, 29.0f, 1}));
+	CHECK(!CoveredAt(m, {45, 20.1f, 1}));  // under the arm: rain
+}
+
 static std::string Dir()
 {
 	const char *tmp = std::getenv("TMPDIR");
@@ -167,6 +184,7 @@ int main()
 	TestUnderRoofDropped();
 	TestCellsBounded();
 	TestCoverBelowRoof();
+	TestRainUpToTheWall();
 	TestRoundTrip();
 	TestLoadsVersion5();
 	if (failures)

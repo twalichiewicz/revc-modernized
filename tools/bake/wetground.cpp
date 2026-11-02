@@ -8,7 +8,8 @@
 namespace wetground {
 namespace {
 
-constexpr float kCell = mapdata::kRainTile / mapdata::kCoverRes; // 2 m
+constexpr float kCell = mapdata::kRainTile / mapdata::kCoverRes; // 1 m
+constexpr int kSub = 2;                                          // samples a side in each: all must be covered
 constexpr float kUpright = 0.7f;                                  // |normal z|: ground, not a wall
 
 float Area2(const Face &f, float &nz)
@@ -28,13 +29,16 @@ bool Covers(uint8_t surface) { return surface != 12 && surface != 13 && surface 
 
 std::vector<mapdata::CoverTile> CoverTiles(const std::vector<Face> &faces)
 {
-	std::map<std::pair<int, int>, mapdata::CoverTile> tiles;
-	const int cells = mapdata::kRainTiles * mapdata::kCoverRes;
+	// The top of what's over each sample point (kSub x kSub a metre); a metre's
+	// is the lowest of its samples', so it's only covered where all of it is.
+	constexpr int side = mapdata::kCoverRes * kSub;
+	std::map<std::pair<int, int>, std::vector<float>> tiles; // samples, by tile
+	const int cells = mapdata::kRainTiles * side;
 	for (const Face &f : faces) {
 		if (!Covers(f.surface))
 			continue;
-		// Max-z rasterisation: every 2 m cell whose centre the face covers.
-		auto toCell = [](float w) { return (w - mapdata::kWorldMin) / kCell; };
+		// Max-z rasterisation: every sample point the face covers.
+		auto toCell = [](float w) { return (w - mapdata::kWorldMin) / (kCell / kSub); };
 		const float ax = toCell(f.a.x), ay = toCell(f.a.y), bx = toCell(f.b.x), by = toCell(f.b.y);
 		const float cx = toCell(f.c.x), cy = toCell(f.c.y);
 		const float area = (bx - ax) * (cy - ay) - (cx - ax) * (by - ay);
@@ -53,21 +57,29 @@ std::vector<mapdata::CoverTile> CoverTiles(const std::vector<Face> &faces)
 				if (w0 < -0.02f || w1 < -0.02f || w2 < -0.02f)
 					continue;
 				const float z = w0 * f.a.z + w1 * f.b.z + w2 * f.c.z;
-				const int tx = x / mapdata::kCoverRes, ty = y / mapdata::kCoverRes;
-				auto [it, fresh] = tiles.try_emplace({ty, tx});
-				mapdata::CoverTile &tile = it->second;
-				if (fresh) {
-					tile.cx = int16_t(tx);
-					tile.cy = int16_t(ty);
-					std::fill(std::begin(tile.top), std::end(tile.top), mapdata::kOpenSky);
-				}
-				int16_t &top = tile.top[(y % mapdata::kCoverRes) * mapdata::kCoverRes + x % mapdata::kCoverRes];
-				top = std::max(top, int16_t(std::clamp(std::lround(z * 10), -32767L, 32767L)));
+				auto [it, fresh] = tiles.try_emplace({y / side, x / side});
+				if (fresh)
+					it->second.assign(size_t(side) * side, -1e9f);
+				float &top = it->second[size_t(y % side) * side + size_t(x % side)];
+				top = std::max(top, z);
 			}
 	}
 	std::vector<mapdata::CoverTile> out;
-	for (auto &kv : tiles)
-		out.push_back(kv.second);
+	for (const auto &[key, samples] : tiles) {
+		mapdata::CoverTile tile;
+		tile.cx = int16_t(key.second);
+		tile.cy = int16_t(key.first);
+		for (int y = 0; y < mapdata::kCoverRes; y++)
+			for (int x = 0; x < mapdata::kCoverRes; x++) {
+				float low = 1e9f;
+				for (int sy = 0; sy < kSub; sy++)
+					for (int sx = 0; sx < kSub; sx++)
+						low = std::min(low, samples[size_t(y * kSub + sy) * side + size_t(x * kSub + sx)]);
+				tile.top[y * mapdata::kCoverRes + x] =
+				    low < -1e8f ? mapdata::kOpenSky : int16_t(std::clamp(std::lround(low * 10), -32767L, 32767L));
+			}
+		out.push_back(tile);
+	}
 	return out;
 }
 
