@@ -20,6 +20,7 @@
 #include "achievements.h"
 #include "scanner.h"
 #include "statspage.h"
+#include "streethud.h"
 #include "aimcam.h"
 #include "alert.h"
 #include "gunbank.h"
@@ -460,6 +461,7 @@ void Hook_HudDraw()
 	wantedhud::DrawEyes(gCanvas);
 	driveby::Draw();
 	radiohud::Draw();
+	streethud::Draw();
 	credit::Update();
 	story::Update();
 	achievements::Update();
@@ -694,6 +696,7 @@ __attribute__((constructor)) void Init()
 		Log("phone functions missing; calls left as they are");
 	story::Install();
 	achievements::Install();
+	streethud::Install();
 	if (!scanner::Install())
 		Log("scanner: hook missing (re-run install.sh); the police scanner is heard anywhere, as in the game");
 	if (!credit::Install())
@@ -801,3 +804,5 @@ void minimap::ToggleExpanded()
 {
 	gExpandedUntil = Clock::now() < gExpandedUntil ? Clock::time_point{} : Clock::now() + kExpandedFor;
 }
+bool minimap::Expanded() { return Clock::now() < gExpandedUntil; }
+const mapdata::Map *minimap::BakedMap() { return gMap.streets.empty() ? nullptr : &gMap; }

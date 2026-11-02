@@ -64,6 +64,7 @@ constexpr float kShopRadius = 9.0f;     // around Ammu-Nation counter pickups
 constexpr float kPropertyRadius = 3.0f; // around a "for sale" pickup
 
 void (*orig_PrintString)(float, float, uint16_t *);
+bool gSuppressArea; // the street banner shows the area (streethud.h)
 void (*orig_SetScale)(float, float);
 void (*orig_DrawUV)(const CSprite2d *, const float *, const CRGBA *, float, float, float, float, float, float, float,
                     float);
@@ -242,8 +243,8 @@ __attribute__((noinline)) void Hook_SetScale(float sx, float sy)
 		sy *= kWeaponScale;
 		break;
 	case kZone:
-		sx *= kZoneScale;
-		sy *= kZoneScale;
+		sx *= gSuppressArea ? 0.0f : kZoneScale;
+		sy *= gSuppressArea ? 0.0f : kZoneScale;
 		break;
 	case kClock:
 		gClockScaleXY = {sx, sy};
@@ -484,6 +485,8 @@ float Pill(Canvas &canvas, float x, float bottom, const char *label, CRGBA colou
 }
 
 } // namespace
+
+void SuppressAreaName(bool on) { gSuppressArea = on; }
 
 void DrawPills(Canvas &canvas, float mapX, float mapY, float mapW, float mapH, bool expanded)
 {

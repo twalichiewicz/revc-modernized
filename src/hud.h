@@ -34,4 +34,8 @@ void FormatMoney(int32_t money, char *out, size_t size);
 // map `expanded` (D-pad down) they all show, what he owes on credit too.
 void DrawPills(Canvas &canvas, float mapX, float mapY, float mapW, float mapH, bool expanded);
 
+// While on, the game's own area name (bottom right) is drawn at no size: the
+// street banner (streethud.h) shows the area itself.
+void SuppressAreaName(bool on);
+
 } // namespace hud

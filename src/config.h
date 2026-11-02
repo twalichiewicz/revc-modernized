@@ -30,6 +30,7 @@ struct Config {
 	bool raceArrows = true;      // racing checkpoints point toward the next checkpoint
 	bool carRadios = true;      // on foot, hear nearby car radios (and your own after getting out), muffled
 	bool scannerInPoliceVehicles = true; // the police scanner only in a police vehicle (#34)
+	bool streetNames = true;    // the street he's on over the area, bottom right (#35)
 	bool radioLogo = true;      // the station's logo at the bottom when it changes, not the big name
 	bool places = true;         // map icons for hospitals, police stations and businesses not yet for sale
 	bool storyHints = true;     // Ken texts what the story needs once it waits on the businesses; gold rings on the map
