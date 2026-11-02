@@ -7,6 +7,7 @@
 #include "shaders.h"
 #include "weather.h"
 #include "wetmodel.h"
+#include "worlddraw.h"
 
 #include <algorithm>
 #include <chrono>
@@ -21,36 +22,13 @@ namespace {
 constexpr uint32_t kFromRenderScene = 0x1418c4; // RenderScene's call (not the cars' environment maps)
 constexpr float kRadius = 150.0f;                // m of wet ground drawn around the camera
 constexpr float kDarken = 0.35f;                 // the albedo, darker by this much when soaked
-constexpr int kBatch = 3 * 4000;                 // vertices per draw (16-bit indices)
-
-struct Vertex {
-	float x, y, z, nx, ny, nz;
-	uint8_t r, g, b, a;
-	float u, v;
-};
-// CPointLights::aLights' records (as estatelighting reads them).
-struct PointLight {
-	Vec3 position, direction;
-	float radius;
-	Vec3 colour;
-	uint8_t type, fog, extraShadows, pad;
-};
-static_assert(sizeof(PointLight) == 0x2c);
 
 void (*orig_RenderEverythingBarRoads)();
-void *(*gTransform)(Vertex *, uint32_t, float *, uint32_t);
-int (*gRender)(int, uint16_t *, int);
-int (*gEnd)();
-void (*gUse)(void *shader);
-const int16_t *gPointCount;
-const PointLight *gPointLights;
 const int32_t *gArea;
 
 bool gTried, gReady;
 void *gWet, *gStreak;
 int uEye, uState, uSkyTop, uSkyLow, uSun, uSunColour;
-std::vector<Vertex> gVertices;
-std::vector<uint16_t> gIndices;
 
 // Shared by both: placed on the world just over the ground (the collision the
 // ground comes from and the road's model differ by centimetres).
@@ -142,47 +120,6 @@ bool Prepare()
 	return gReady;
 }
 
-void Flush(void *shader)
-{
-	if (gVertices.empty())
-		return;
-	gIndices.resize(gVertices.size());
-	for (size_t i = 0; i < gIndices.size(); i++)
-		gIndices[i] = uint16_t(i);
-	if (gTransform(gVertices.data(), uint32_t(gVertices.size()), nullptr, 1)) {
-		gUse(shader); // after the transform picked the game's, before the draw sends the camera to it
-		gRender(3, gIndices.data(), int(gIndices.size()));
-		gEnd();
-	}
-	gVertices.clear();
-}
-
-void Put(void *shader, Vec3 p, uint8_t r, uint8_t g, uint8_t b, float u, float v)
-{
-	gVertices.push_back({p.x, p.y, p.z, 0, 0, 1, r, g, b, 255, u, v});
-	if (gVertices.size() >= size_t(kBatch))
-		Flush(shader);
-}
-
-uint8_t Byte(float x) { return uint8_t(std::clamp(x * 255.0f, 0.0f, 255.0f)); }
-
-std::vector<wetmodel::Light> Lights()
-{
-	std::vector<wetmodel::Light> out;
-	if (!gPointCount || !gPointLights)
-		return out;
-	const int count = std::clamp(int(*gPointCount), 0, 64);
-	for (int i = 0; i < count; i++) {
-		const PointLight &l = gPointLights[i];
-		if (l.type > 1 || !std::isfinite(l.position.x) || !std::isfinite(l.position.y) || !std::isfinite(l.position.z) ||
-		    !std::isfinite(l.radius) || !std::isfinite(l.colour.x) || !std::isfinite(l.colour.y) ||
-		    !std::isfinite(l.colour.z))
-			continue; // points and headlights; not the darkening or fog-only kinds
-		out.push_back({l.position, l.colour, l.radius});
-	}
-	return out;
-}
-
 struct Stats {
 	double ms = 0;
 	size_t triangles = 0, streaks = 0, frames = 0;
@@ -221,24 +158,32 @@ void Draw()
 	api.RwRenderStateSet(kStateSrcBlend, reinterpret_cast<void *>(kBlendOne));
 	api.RwRenderStateSet(kStateDestBlend, reinterpret_cast<void *>(kBlendInvSrcAlpha));
 	size_t triangles = 0;
-	for (int c : wetmodel::CellsNear(*map, {eye.x, eye.y, eye.z}, kRadius)) {
-		const std::vector<Vec3> &tris = map->wet[size_t(c)].tris;
-		for (const Vec3 &p : tris)
-			Put(gWet, p, 255, 255, 255, 0, 0);
-		triangles += tris.size() / 3;
+	{
+		worlddraw::Batch ground(gWet);
+		for (int c : wetmodel::CellsNear(*map, {eye.x, eye.y, eye.z}, kRadius)) {
+			const std::vector<Vec3> &tris = map->wet[size_t(c)].tris;
+			for (const Vec3 &p : tris)
+				ground.Put(p, 255, 255, 255, 0, 0);
+			triangles += tris.size() / 3;
+		}
 	}
-	Flush(gWet);
 
 	const wetmodel::GroundAt ground = [&](Vec3 p, float &z) { return wetmodel::WetGroundAt(*map, p, z); };
-	const std::vector<wetmodel::Reflection> streaks = wetmodel::Reflections(Lights(), {eye.x, eye.y, eye.z}, ground);
+	std::vector<wetmodel::Light> lights;
+	for (const worlddraw::Light &l : worlddraw::PointLights())
+		lights.push_back({l.pos, l.colour, l.radius});
+	const std::vector<wetmodel::Reflection> streaks = wetmodel::Reflections(lights, {eye.x, eye.y, eye.z}, ground);
 	api.RwRenderStateSet(kStateDestBlend, reinterpret_cast<void *>(kBlendOne));
-	for (const wetmodel::Reflection &s : streaks) {
-		const uint8_t r = Byte(s.colour.x * 0.8f), g = Byte(s.colour.y * 0.8f), b = Byte(s.colour.z * 0.8f);
-		const float u[4] = {-1, 1, 1, -1}, v[4] = {0, 0, 1, 1};
-		for (int k : {0, 1, 2, 0, 2, 3})
-			Put(gStreak, s.quad[k], r, g, b, u[k], v[k]);
+	{
+		worlddraw::Batch batch(gStreak);
+		for (const wetmodel::Reflection &s : streaks) {
+			const uint8_t r = worlddraw::Byte(s.colour.x * 0.8f), g = worlddraw::Byte(s.colour.y * 0.8f),
+			              b = worlddraw::Byte(s.colour.z * 0.8f);
+			const float u[4] = {-1, 1, 1, -1}, v[4] = {0, 0, 1, 1};
+			for (int k : {0, 1, 2, 0, 2, 3})
+				batch.Put(s.quad[k], r, g, b, u[k], v[k]);
+		}
 	}
-	Flush(gStreak);
 
 	gStats.ms += std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - start).count();
 	gStats.triangles += triangles;
@@ -259,25 +204,15 @@ void Hook_RenderEverythingBarRoads()
 		Draw();
 }
 
-template <typename T> bool Bind(T &out, const char *symbol)
-{
-	out = reinterpret_cast<T>(dlsym(RTLD_MAIN_ONLY, symbol));
-	return out != nullptr;
-}
-
 } // namespace
 
 bool Install()
 {
 	if (!gConfig.wetGround)
 		return true;
-	gPointCount = static_cast<const int16_t *>(dlsym(RTLD_MAIN_ONLY, "_ZN12CPointLights9NumLightsE"));
-	gPointLights = static_cast<const PointLight *>(dlsym(RTLD_MAIN_ONLY, "_ZN12CPointLights7aLightsE"));
 	gArea = static_cast<const int32_t *>(dlsym(RTLD_MAIN_ONLY, "_ZN5CGame8currAreaE"));
-	const bool ready = weather::Install() && hooks::IsCallTo(kFromRenderScene, "_ZN9CRenderer24RenderEverythingBarRoadsEv") &&
-	                   Bind(gTransform, "_Z15RwIm3DTransformPN2rw3gl310Im3DVertexEjPNS_6MatrixEj") &&
-	                   Bind(gRender, "_Z28RwIm3DRenderIndexedPrimitive15RwPrimitiveTypePti") &&
-	                   Bind(gEnd, "_Z9RwIm3DEndv") && Bind(gUse, "_ZN2rw3gl36Shader3useEv");
+	const bool ready = weather::Install() && worlddraw::Install() &&
+	                   hooks::IsCallTo(kFromRenderScene, "_ZN9CRenderer24RenderEverythingBarRoadsEv");
 	const bool installed =
 	    ready && hooks::Install("_ZN9CRenderer24RenderEverythingBarRoadsEv", Hook_RenderEverythingBarRoads,
 	                            orig_RenderEverythingBarRoads);

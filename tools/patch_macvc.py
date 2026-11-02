@@ -201,6 +201,8 @@ DEFAULT_HOOKS = [
     "_ZN10C3dMarkers6RenderEv",
     # wet streets in the rain (#32): drawn once the world is
     "_ZN9CRenderer24RenderEverythingBarRoadsEv",
+    # ...and its rain, in place of the game's streaks
+    "_ZN8CWeather17RenderRainStreaksEv",
     # police come by car, not made on foot near a wanted player
     "_ZN11CPopulation15AddToPopulationEffff",
     # his car's door: opened only at a crawl; faster, they hang on to it

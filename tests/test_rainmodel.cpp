@@ -57,6 +57,72 @@ static void TestPuddlesBuildAndDrain()
 	CHECK(Run(light, 0.3f, 0.3f, 180).puddles < 0.4f); // light rain fills them less
 }
 
+static const Vec3 kCamera{1000, -500, 30};
+static bool Open(Vec3) { return false; }
+
+static void TestStreaksSlantWithWind()
+{
+	const std::vector<Streak> s = Streaks(kCamera, {7, 3}, 500, 12.5f, Open);
+	CHECK(s.size() == 500);
+	bool slant = true;
+	for (const Streak &x : s) {
+		const float dx = x.bottom.x - x.top.x, dy = x.bottom.y - x.top.y, dz = x.bottom.z - x.top.z;
+		slant &= dz < 0 && dx > 0 && dy > 0 && std::fabs(dx / -dz - 7.0f / 9) < 0.01f && std::fabs(dy / -dz - 3.0f / 9) < 0.01f;
+	}
+	CHECK(slant);
+	bool straight = true;
+	for (const Streak &x : Streaks(kCamera, {0, 0}, 100, 3, Open))
+		straight &= x.bottom.x == x.top.x && x.bottom.y == x.top.y && x.bottom.z < x.top.z;
+	CHECK(straight);
+}
+
+static void TestCoveredLeftOut()
+{
+	const auto east = [](Vec3 p) { return p.x > kCamera.x; }; // a roof over everything east of him
+	const std::vector<Streak> s = Streaks(kCamera, {7, 3}, 2000, 4, east);
+	bool west = true;
+	for (const Streak &x : s)
+		west &= x.top.x <= kCamera.x && x.bottom.x <= kCamera.x;
+	CHECK(west && s.size() > 700 && s.size() < 1300);
+}
+
+static void TestWrapsAroundCamera()
+{
+	const std::vector<Streak> a = Streaks(kCamera, {7, 3}, 1000, 100, Open);
+	bool inside = true;
+	for (const Streak &x : a)
+		inside &= std::fabs(x.top.x - kCamera.x) <= kStreakBox / 2 && std::fabs(x.top.y - kCamera.y) <= kStreakBox / 2 &&
+		          x.top.z >= kCamera.z - kStreakBelow && x.top.z <= kCamera.z - kStreakBelow + kStreakHeight;
+	CHECK(inside);
+	// He walks half a metre: the rain stays where it is in the world, but for the few that wrap.
+	const std::vector<Streak> b = Streaks({kCamera.x + 0.5f, kCamera.y, kCamera.z}, {7, 3}, 1000, 100, Open);
+	int same = 0;
+	for (size_t i = 0; i < a.size() && i < b.size(); i++)
+		same += a[i].top.x == b[i].top.x && a[i].top.y == b[i].top.y && a[i].top.z == b[i].top.z;
+	CHECK(b.size() == 1000 && same > 950 && same < 1000);
+	// And it falls: later, lower (or wrapped back to the top).
+	const std::vector<Streak> c = Streaks(kCamera, {0, 0}, 1000, 100.1f, Open);
+	int fell = 0;
+	for (size_t i = 0; i < a.size(); i++)
+		fell += c[i].top.z < a[i].top.z;
+	CHECK(fell > 900);
+}
+
+static void TestInteriorNoStreaks()
+{
+	CHECK(StreakCount(1, true) == 0 && StreakCount(1, false) == kMaxStreaks);
+	CHECK(Streaks(kCamera, {7, 3}, StreakCount(1, true), 5, Open).empty());
+}
+
+static void TestLitByNearLights()
+{
+	const Vec3 sky{0.2f, 0.2f, 0.25f};
+	const std::vector<Lamp> lamps{{{10, 0, 5}, {1, 0.5f, 0.2f}, 8}};
+	const Vec3 far = Lit({100, 0, 5}, sky, lamps), near = Lit({11, 0, 5}, sky, lamps);
+	CHECK(far.x == sky.x && far.y == sky.y && far.z == sky.z);
+	CHECK(near.x > sky.x + 0.5f && near.y > sky.y + 0.2f && near.z < near.y);
+}
+
 static void TestStreakCounts()
 {
 	CHECK(StreakCount(0) == 0 && StreakCount(0.04f) == 0);
@@ -71,6 +137,11 @@ int main()
 	TestDriesSmoothly();
 	TestPuddlesBuildAndDrain();
 	TestStreakCounts();
+	TestStreaksSlantWithWind();
+	TestCoveredLeftOut();
+	TestWrapsAroundCamera();
+	TestInteriorNoStreaks();
+	TestLitByNearLights();
 	if (failures)
 		return 1;
 	std::puts("rainmodel: all rain weather tests passed");
