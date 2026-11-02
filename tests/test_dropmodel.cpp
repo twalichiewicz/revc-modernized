@@ -24,14 +24,14 @@ static void Run(Drops &d, float rain, bool exposed, float speed, DropMode mode, 
 static void TestModeFor()
 {
 	CHECK(ModeFor(false, false, kCar, false, false) == DropMode::None);   // third person
-	CHECK(ModeFor(true, false, kCar, false, false) == DropMode::Lens);    // on foot in first person
+	CHECK(ModeFor(true, false, kCar, false, false) == DropMode::None);    // on foot: his own eyes, no lens
 	CHECK(ModeFor(false, true, kCar, false, false) == DropMode::Windscreen);
 	CHECK(ModeFor(false, true, kHeli, false, false) == DropMode::Windscreen);
 	CHECK(ModeFor(false, true, kPlane, false, false) == DropMode::Windscreen);
 	CHECK(ModeFor(false, true, kBike, false, false) == DropMode::Lens);
 	CHECK(ModeFor(false, true, kBoat, false, false) == DropMode::Lens);
 	CHECK(ModeFor(false, true, kCar, true, false) == DropMode::Lens);     // the top down
-	CHECK(ModeFor(true, false, kCar, false, true) == DropMode::None);     // indoors
+	CHECK(ModeFor(false, true, kBike, false, true) == DropMode::None);    // indoors
 	CHECK(ModeFor(false, true, kCar, false, true) == DropMode::None);
 }
 
@@ -117,6 +117,21 @@ static void TestOnTheWindscreen()
 	CHECK(std::fabs(WindscreenAngle(0.02f) - 0.02f * kWindscreenHigh) < 1e-6f); // a drop's size as an angle
 }
 
+// Where a drop sits: the glass the ray from his eye meets first, its normal
+// turned towards him; nothing where there's no glass that way.
+static void TestOnTheGlass()
+{
+	// A windscreen a metre ahead, leaning back, and a second pane further on.
+	const std::vector<Pane> glass = {{{-1, 1, -0.5f}, {1, 1, -0.5f}, {0, 0.6f, 0.6f}}, {{-1, 3, -1}, {1, 3, -1}, {0, 3, 1}}};
+	float t = 0;
+	Vec3 n{};
+	CHECK(HitGlass(glass, {0, 0, 0}, {0, 1, 0}, t, n) && std::fabs(t - 0.8182f) < 0.001f); // the near one
+	CHECK(n.y < 0 && n.z < 0);                                                            // facing him
+	CHECK(!HitGlass(glass, {0, 0, 0}, {0, -1, 0}, t, n));                                 // behind him: none
+	CHECK(!HitGlass(glass, {0, 0, 0}, {1, 0, 0}, t, n));                                  // out of the side: none
+	CHECK(!HitGlass({}, {0, 0, 0}, {0, 1, 0}, t, n));
+}
+
 static void TestModeSwitchClears()
 {
 	Drops d;
@@ -129,7 +144,7 @@ static void TestModeSwitchClears()
 static void TestInteriorNoDrops()
 {
 	Drops d;
-	Run(d, 1, true, 0, ModeFor(true, false, kCar, false, true), 2);
+	Run(d, 1, true, 0, ModeFor(false, true, kBike, false, true), 2);
 	CHECK(d.All().empty());
 }
 
@@ -141,6 +156,7 @@ int main()
 	TestMergeAndTrickle();
 	TestSpeedPushesUp();
 	TestOnTheWindscreen();
+	TestOnTheGlass();
 	TestModeSwitchClears();
 	TestInteriorNoDrops();
 	if (failures)

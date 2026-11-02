@@ -179,7 +179,39 @@ static void TestCurtainsBlowPast()
 		downwind += (later[i].centre.x - now[i].centre.x) * kBaseWind.x + (later[i].centre.y - now[i].centre.y) * kBaseWind.y > 0;
 	CHECK(downwind >= int(now.size()) - 2);
 	CHECK(Curtains(kCamera, 0, 30, 0.2f).empty());
+	bool soft = true; // none pops in or out: gone by the edge it wraps round at, and close by
+	for (float t = 0; t < 60; t += 0.25f)
+		for (const Curtain &c : Curtains(kCamera, 1, t, 1)) {
+			const float d = std::hypot(c.centre.x - kCamera.x, c.centre.y - kCamera.y);
+			const float edge = std::fmax(std::fabs(c.centre.x - kCamera.x), std::fabs(c.centre.y - kCamera.y));
+			soft &= (edge < kCurtainBox / 2 - 6 || c.density < 0.02f) && (d > 10 || c.density < 0.02f);
+		}
+	CHECK(soft);
 	CHECK(Curtains(kCamera, 1, 30, 1)[0].density > Curtains(kCamera, 1, 30, 0)[0].density);
+}
+
+// Heavy rain closes the view in (the game's fog nearer, its far clip shorter);
+// light rain barely; never further than the game had it.
+static void TestHeavyRainHidesTheDistance()
+{
+	float far = 0, fog = 0;
+	Haze(0, 1100, 80, far, fog);
+	CHECK(far == 1100 && fog == 80);
+	Haze(0.5f, 1100, 80, far, fog); // CATSANDDOGS
+	CHECK(far <= 450 && fog <= 5);
+	Haze(0.2f, 1100, 80, far, fog);
+	CHECK(far > 450 && far < 1100 && fog > 5 && fog < 80);
+	Haze(0.5f, 300, 2, far, fog); // the game's own nearer still: kept
+	CHECK(far == 300 && fog == 2);
+}
+
+// And darker, greyer: the picture's exposure and colour down with it.
+static void TestRainIsGloomy()
+{
+	const Gloom dry = GloomFor(0), pour = GloomFor(0.5f), drizzle = GloomFor(0.15f);
+	CHECK(dry.exposure == 1 && dry.saturation == 1);
+	CHECK(pour.exposure < 0.8f && pour.exposure > 0.6f && pour.saturation < 0.85f);
+	CHECK(drizzle.exposure > pour.exposure && drizzle.exposure < 1);
 }
 
 static void TestStreakCounts()
@@ -204,6 +236,8 @@ int main()
 	TestNotInsideTheCabin();
 	TestGustsComeAndGo();
 	TestCurtainsBlowPast();
+	TestHeavyRainHidesTheDistance();
+	TestRainIsGloomy();
 	if (failures)
 		return 1;
 	std::puts("rainmodel: all rain weather tests passed");

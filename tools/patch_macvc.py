@@ -205,6 +205,8 @@ DEFAULT_HOOKS = [
     "_ZN8CWeather17RenderRainStreaksEv",
     # ...and its drops on the screen give way to the mod's
     "_ZN8CWeather7AddRainEv",
+    # ...and heavy rain closes the view in
+    "_ZN10CTimeCycle6UpdateEv",
     # police come by car, not made on foot near a wanted player
     "_ZN11CPopulation15AddToPopulationEffff",
     # his car's door: opened only at a crawl; faster, they hang on to it

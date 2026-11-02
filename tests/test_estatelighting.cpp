@@ -44,6 +44,8 @@ void *Install(const char *, void *) { return reinterpret_cast<void *>(Native); }
 namespace sniper { bool Active() { return gScoped; } }
 static int gFrames, gDropDraws;
 namespace raindrops { void Draw() { ++gDropDraws; } }
+static rainmodel::Weather gWeather;
+namespace weather { const rainmodel::Weather &Now() { return gWeather; } }
 void SetHudRenderStates() {}
 void Im2DCanvas::SetTexture(void *) {}
 void Im2DCanvas::SetDepthMode(DepthMode) {}
@@ -159,8 +161,21 @@ int main()
 	Frame();
 	CHECK(gNativeType == 0 && gNativeAlpha == 0);
 	CHECK(*reinterpret_cast<int32_t *>(gCamera + 0xb8) == 1 && *reinterpret_cast<int32_t *>(gCamera + 0xc8) == 100);
+	// Rain makes it gloomier outdoors (darker, greyer), not indoors.
+	CHECK(Start());
+	gArea = 0;
+	gWeather.rain = 0.5f;
+	grade::SlowMotion(0);
+	Frame();
+	const rainmodel::Gloom gloom = rainmodel::GloomFor(0.5f);
+	CHECK(Near(gLook[1], 1.1f * gloom.saturation) && Near(gLook[3], gloom.exposure));
+	gArea = 3;
+	Frame();
+	CHECK(Near(gLook[1], 1.1f) && Near(gLook[3], 1));
+	gWeather.rain = 0;
+
 	// The rain's drops go on after it every frame: graded, the grade off, its shader or frame missing.
-	CHECK(gFrames == 9 && gDropDraws == gFrames);
+	CHECK(gFrames == 11 && gDropDraws == gFrames);
 	if (gFailures) return 1;
 	std::puts("all estate lighting hook tests passed");
 }

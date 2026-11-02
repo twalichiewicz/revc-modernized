@@ -98,10 +98,34 @@ std::vector<Curtain> Curtains(Vec3 camera, float rain, float seconds, float gust
 		const double y = Wrap(Unit(b) * kCurtainBox + double(kBaseWind.y) * seconds, y0, kCurtainBox);
 		const float dx = camera.x - float(x), dy = camera.y - float(y), d = std::hypot(dx, dy);
 		const Vec2 facing = d > 1e-3f ? Vec2{dx / d, dy / d} : Vec2{1, 0};
-		const float density = amount * (0.35f + 0.65f * std::clamp(gust, 0.0f, 1.0f)) * float(0.6 + 0.4 * Unit(Hash(a ^ b)));
+		// Faded in from 10 m (never a flat card in his face) and out before the edge it wraps round at.
+		const float edge = float(std::max(std::fabs(x - camera.x), std::fabs(y - camera.y)));
+		const float fade = std::clamp((d - 10.0f) / 14.0f, 0.0f, 1.0f) * std::clamp((kCurtainBox / 2 - 6 - edge) / 18.0f, 0.0f, 1.0f);
+		const float density = amount * (0.35f + 0.65f * std::clamp(gust, 0.0f, 1.0f)) * float(0.6 + 0.4 * Unit(Hash(a ^ b))) * fade;
 		out.push_back({{float(x), float(y), camera.z + 4}, facing, 30, 34, density});
 	}
 	return out;
+}
+
+namespace {
+float Heavy(float rain) // 0 dry .. 1 at the game's rainy weather and over
+{
+	const float x = std::clamp((rain - 0.1f) / (kFullRain - 0.1f), 0.0f, 1.0f);
+	return x * x * (3 - 2 * x);
+}
+} // namespace
+
+void Haze(float rain, float farClip, float fogStart, float &far, float &fog)
+{
+	const float k = Heavy(rain);
+	far = std::min(farClip, farClip + (420.0f - farClip) * k);
+	fog = std::min(fogStart, fogStart + (2.0f - fogStart) * k);
+}
+
+Gloom GloomFor(float rain)
+{
+	const float k = Heavy(rain);
+	return {1.0f - 0.3f * k, 1.0f - 0.25f * k};
 }
 
 bool Inside(const Box &b, Vec3 p)

@@ -1,5 +1,7 @@
 #include "weather.h"
+#include "config.h"
 #include "game.h"
+#include "hooks.h"
 
 #include <algorithm>
 #include <dlfcn.h>
@@ -12,7 +14,29 @@ const uint32_t *gFrame;
 rainmodel::Model gModel;
 rainmodel::Weather gNow;
 uint32_t gLastMs, gLastFrame = ~0u;
+void (*orig_TimeCycleUpdate)();
+float *gFarClip, *gFogStart;
 } // namespace
+
+void Hook_TimeCycleUpdate()
+{
+	orig_TimeCycleUpdate();
+	if (!gConfig.rainHaze || !gFarClip || !gFogStart)
+		return;
+	float far, fog;
+	rainmodel::Haze(Now().rain, *gFarClip, *gFogStart, far, fog);
+	*gFarClip = far;
+	*gFogStart = fog;
+}
+
+bool InstallHaze()
+{
+	if (!gConfig.rainHaze)
+		return true;
+	gFarClip = static_cast<float *>(dlsym(RTLD_MAIN_ONLY, "_ZN10CTimeCycle17m_fCurrentFarClipE"));
+	gFogStart = static_cast<float *>(dlsym(RTLD_MAIN_ONLY, "_ZN10CTimeCycle18m_fCurrentFogStartE"));
+	return gFarClip && gFogStart && hooks::Install("_ZN10CTimeCycle6UpdateEv", Hook_TimeCycleUpdate, orig_TimeCycleUpdate);
+}
 
 bool Install()
 {

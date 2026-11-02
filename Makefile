@@ -77,8 +77,8 @@ $(BUILD)/test_gameplaymodel: tests/test_gameplaymodel.cpp src/gameplaymodel.cpp 
 $(BUILD)/test_menulabels: tests/test_menulabels.cpp src/menulabels.h | $(BUILD)
 	$(CXX) $(CXXFLAGS) -Isrc -o $@ tests/test_menulabels.cpp
 
-$(BUILD)/test_estatelighting: tests/test_estatelighting.cpp src/grade.cpp src/grade.h src/shaders.h | $(BUILD)
-	$(CXX) $(CXXFLAGS) -Isrc -o $@ tests/test_estatelighting.cpp
+$(BUILD)/test_estatelighting: tests/test_estatelighting.cpp src/grade.cpp src/grade.h src/shaders.h src/rainmodel.cpp | $(BUILD)
+	$(CXX) $(CXXFLAGS) -Isrc -o $@ tests/test_estatelighting.cpp src/rainmodel.cpp
 
 $(BUILD)/test_carlightrules: tests/test_carlightrules.cpp src/carlightrules.h | $(BUILD)
 	$(CXX) $(CXXFLAGS) -Isrc -o $@ tests/test_carlightrules.cpp
@@ -106,6 +106,9 @@ $(BUILD)/test_worlddraw: tests/test_worlddraw.cpp src/worlddraw.cpp src/worlddra
 
 $(BUILD)/test_gamedrops: tests/test_gamedrops.cpp src/gamedrops.cpp src/gamedrops.h src/config.h | $(BUILD)
 	$(CXX) $(CXXFLAGS) -Isrc -o $@ tests/test_gamedrops.cpp
+
+$(BUILD)/test_haze: tests/test_haze.cpp src/weather.cpp src/weather.h src/rainmodel.cpp src/rainmodel.h src/config.h | $(BUILD)
+	$(CXX) $(CXXFLAGS) -Isrc -o $@ tests/test_haze.cpp src/rainmodel.cpp
 
 $(BUILD)/test_rainmodel: tests/test_rainmodel.cpp src/rainmodel.cpp src/rainmodel.h | $(BUILD)
 	$(CXX) $(CXXFLAGS) -Isrc -o $@ tests/test_rainmodel.cpp src/rainmodel.cpp
@@ -331,7 +334,7 @@ FEEDBACK_TESTS := test_aircraft test_apb test_helilight test_fpfeedback test_swi
                   test_reactnavigation test_reactcorpse test_playerragdoll test_reactrecovery test_recoveryhook test_reacthit test_reacthit_native \
                   test_reactcontact test_reactionhook test_drivershook test_trafficinstall \
                   test_shotimpact test_hookchain test_reactimpact test_playerreact test_playerreacthook test_playerreactview test_windowmode \
-                  test_aimposehook test_aimfire test_aimspreadhook test_damageoverlayhook test_helihook test_npcthreat test_populationroute test_achievementsmodel test_achievements test_statsmodel test_rtgeometry test_rtshadowshook test_storycredit test_scanner test_mapstreets test_streetsnap test_streetmodel test_streethud test_rainmodel test_wetground test_wetmodel test_dropmodel test_worlddraw test_gamedrops test_policemove test_policeseek test_policedrive test_policearrive test_policepullup test_policefootsearch test_visualmodel test_mapvisual test_estatehook test_ballistics test_pedcontacthook test_shotcollision test_hunterhook \
+                  test_aimposehook test_aimfire test_aimspreadhook test_damageoverlayhook test_helihook test_npcthreat test_populationroute test_achievementsmodel test_achievements test_statsmodel test_rtgeometry test_rtshadowshook test_storycredit test_scanner test_mapstreets test_streetsnap test_streetmodel test_streethud test_rainmodel test_wetground test_wetmodel test_dropmodel test_worlddraw test_gamedrops test_haze test_policemove test_policeseek test_policedrive test_policearrive test_policepullup test_policefootsearch test_visualmodel test_mapvisual test_estatehook test_ballistics test_pedcontacthook test_shotcollision test_hunterhook \
                   test_flightmodelhook test_flightmodel_hunter test_planeflight test_planeflight_roster test_fpwalkcontacthook test_flightownership_native test_aircraftcamerahook test_airportjets test_aircraftdamage test_jetlights test_jetwheel_flight test_jetwheels test_jetaudio test_gridfixhook test_planestability test_planeengine test_planeglide test_jetground test_airworld test_jetwash test_trafficweave test_towercollision test_jetboarding test_airportjetspawners
 
 $(BUILD)/test_jetboarding: tests/test_jetboarding.cpp tests/test_airportjets.cpp tests/test_planeflight.cpp src/airportjets.cpp src/jetboarding.h $(wildcard src/*.h) | $(BUILD)

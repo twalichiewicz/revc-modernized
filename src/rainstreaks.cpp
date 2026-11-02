@@ -66,7 +66,13 @@ uniform vec4 u_rainSheet; // seconds, unused, the sheet's width and height (m)
 FSIN vec4 v_colour;
 FSIN vec2 v_uv;
 FSIN float v_fog;
-float Hash(vec2 p) { return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453); }
+// (no sin(): it loses its precision on large arguments on the GPU, and the noise frays)
+float Hash(vec2 p)
+{
+	vec3 q = fract(vec3(p.xyx) * 0.1031);
+	q += dot(q, q.yzx + 33.33);
+	return fract((q.x + q.y) * q.z);
+}
 float Noise(vec2 p)
 {
 	vec2 i = floor(p), f = fract(p);
@@ -236,7 +242,7 @@ void Draw()
 	if (gCurtainShader) {
 		const std::vector<rainmodel::Curtain> curtains = rainmodel::Curtains({eye.x, eye.y, eye.z}, w.rain, seconds, gust.strength);
 		if (!curtains.empty()) {
-			shaders::Set(uSheet, seconds, 0, curtains[0].width, curtains[0].height);
+			shaders::Set(uSheet, std::fmod(seconds, 600.0f), 0, curtains[0].width, curtains[0].height); // (small: precise)
 			api.RwRenderStateSet(kStateSrcBlend, reinterpret_cast<void *>(kBlendSrcAlpha));
 			api.RwRenderStateSet(kStateDestBlend, reinterpret_cast<void *>(kBlendInvSrcAlpha));
 			worlddraw::Batch batch(gCurtainShader);
@@ -285,6 +291,8 @@ bool Install()
 	const bool installed = weather::Install() && worlddraw::Install() &&
 	                       hooks::Install("_ZN8CWeather17RenderRainStreaksEv", Hook_RenderRainStreaks, orig_RenderRainStreaks);
 	Log("rain streaks: %s", installed ? "on" : "hook missing (re-run install.sh); the game's own rain");
+	if (!weather::InstallHaze())
+		Log("rain haze: hook missing (re-run install.sh); the view as far in the rain as the game has it");
 	return installed;
 }
 

@@ -10,4 +10,9 @@ bool Install();
 // This frame's weather (updated on the frame's first call; dry if not installed).
 const rainmodel::Weather &Now();
 
+// Heavy rain closes the view in: after CTimeCycle::Update sets the frame's far
+// clip and fog start, they're brought in with the rain (RainHaze=1).
+bool InstallHaze();
+void Hook_TimeCycleUpdate();
+
 } // namespace weather

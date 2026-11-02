@@ -48,6 +48,15 @@ struct Streak {
 // roof or a bridge keeps off.
 std::vector<Streak> Streaks(Vec3 camera, Vec2 wind, int count, float seconds, const std::function<bool(Vec3)> &covered);
 
+// Heavy rain closes the view in: the game's far clip and fog start (the
+// time cycle's) brought nearer with it, never further than the game had them.
+void Haze(float rain, float farClip, float fogStart, float &far, float &fog);
+// And the picture darker and greyer.
+struct Gloom {
+	float exposure, saturation; // scales, 1 dry
+};
+Gloom GloomFor(float rain);
+
 // A box in its own axes (unit vectors), `half` its half sizes along them: the
 // cabin of the car he's in, where no rain falls.
 struct Box {

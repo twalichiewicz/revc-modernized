@@ -7,6 +7,7 @@
 #include "shaders.h"
 #include "raindrops.h"
 #include "sniper.h"
+#include "weather.h"
 
 #include <algorithm>
 #include <cmath>
@@ -227,8 +228,10 @@ void Grade()
 	// with windows (the mansion is area 2), so use the native area instead.
 	const bool interior = gArea && *gArea != 0;
 	// Bullet time keeps its deliberate desaturation and extra vignette.
-	shaders::Set(uLook, interior ? 0.0f : kContrast, kSaturation * (1.0f - 0.55f * gSlowMotion),
-	             (interior ? 0.0f : kVignette) + 0.3f * gSlowMotion, kExposure);
+	// Rain outdoors: darker and greyer (the game's rainy nights are bright).
+	const rainmodel::Gloom gloom = interior ? rainmodel::Gloom{1, 1} : rainmodel::GloomFor(weather::Now().rain);
+	shaders::Set(uLook, interior ? 0.0f : kContrast, kSaturation * gloom.saturation * (1.0f - 0.55f * gSlowMotion),
+	             (interior ? 0.0f : kVignette) + 0.3f * gSlowMotion, kExposure * gloom.exposure);
 
 	const shaders::SavedStates saved;
 	SetHudRenderStates();

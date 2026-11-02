@@ -25,9 +25,7 @@ namespace {
 // CVehicle / CPhysical (macVC 1.0.5217).
 constexpr size_t kMoveSpeed = 0x84, kVehicleType = 0x348;
 constexpr uint8_t kNoRainZone = 0x08; // CCullZones' no-rain attribute (as CWeather::AddRain tests it)
-constexpr int kMaskUnit = 12;         // texture units: librw 0-3, the clouds 4-8, the lighting 9-11
-constexpr int kMaskDown = 2;          // the glass mask at half the frame's resolution
-constexpr int kBlendZero = 1;         // rwBLENDZERO
+constexpr float kOffGlass = 0.008f;   // m a drop sits in front of its glass (towards him), clear of its depth
 
 const int32_t *gArea;
 const uint8_t *gCameraZone, *gPlayerZone;
@@ -35,9 +33,8 @@ dropmodel::Drops gDrops;
 bool gInstalled;
 uint32_t gLastMs;
 bool gTried, gReady;
-void *gDropShader, *gMaskShader;
+void *gDropShader, *gGlassShader;
 int uFrame;
-shaders::Target gMask;
 Im2DCanvas gCanvas;
 using worlddraw::Face;
 
@@ -75,14 +72,14 @@ void main(void)
 
 // A drop: the frame round it seen through it upside down (a drop is a strong
 // lens), its rim darker, a glint up on its left. A trail: the wet line a
-// running drop leaves, a faint smear. Alpha-blended; the windscreen's mask
-// keeps both off everything but the car's glass.
-const char *const kDropFragment = R"(
+// running drop leaves, a faint smear. Alpha-blended. The same body serves the
+// lens (on the screen) and the windscreen (on the glass, in the world: its
+// size on the screen from how fast its own coordinates change across it).
+const char *const kDropBody = R"(
 uniform sampler2D tex0;
-uniform sampler2D u_dropMask;
-uniform vec4 u_dropFrame; // frame width, height (px); the mask on; frame px per screen px
+uniform vec4 u_dropFrame; // frame width, height (px); on the glass (1) or the lens; frame px per screen px
 FSIN vec2 v_tex0;
-FSIN vec4 v_color;        // its radius (screen px / 255), a trail or not, its shape's seed, its strength
+FSIN vec4 v_color;        // its radius (screen px / 255; on the glass, unused), a trail or not, its shape's seed, its strength
 vec3 Frame(vec2 px)
 {
 	vec2 size = vec2(textureSize(tex0, 0));
@@ -91,15 +88,17 @@ vec3 Frame(vec2 px)
 }
 void main(void)
 {
-	float mask = u_dropFrame.z > 0.5 ? texture(u_dropMask, gl_FragCoord.xy / u_dropFrame.xy).r : 1.0;
-	float radius = v_color.r * 255.0 * u_dropFrame.w;
+	float mask = 1.0;
 	vec2 local = v_tex0;
-	vec2 up = vec2(local.x, -local.y); // the screen's y runs down, gl_FragCoord's up
+	float radius = u_dropFrame.z > 0.5 ? 1.0 / max(length(vec2(dFdx(local.x), dFdy(local.x))), 0.0001)
+	                                   : v_color.r * 255.0 * u_dropFrame.w;
+	// Its own up, on the screen (gl_FragCoord's y runs up): the lens's local y runs down the screen, the glass's up it.
+	vec2 up = u_dropFrame.z > 0.5 ? local : vec2(local.x, -local.y);
 	if (v_color.g > 0.5) {
 		// The wet line a running drop leaves: a faint smear.
 		float across = 1.0 - local.x * local.x;
 		vec3 c = Frame(gl_FragCoord.xy + vec2(local.x * radius * 0.5, 0.0));
-		FRAGCOLOR(vec4(c, across * (1.0 - local.y) * 0.35 * mask * v_color.a));
+		FRAGCOLOR(vec4(c, across * (1.0 - abs(local.y)) * 0.35 * mask * v_color.a));
 		return;
 	}
 	// Not quite round...
@@ -124,21 +123,16 @@ void main(void)
 }
 )";
 
-// The car's triangles from the camera: its glass white, the rest black.
-const char *const kMaskVertex = R"(
+// A windscreen's drop, on its glass in the world.
+const char *const kGlassVertex = R"(
 VSIN(ATTRIB_POS) vec3 in_pos;
-VSOUT vec4 v_colour;
+VSOUT vec2 v_tex0;
+VSOUT vec4 v_color;
 void main(void)
 {
-	v_colour = in_color;
+	v_tex0 = in_tex0;
+	v_color = in_color;
 	gl_Position = u_proj * u_view * (u_world * vec4(in_pos, 1.0));
-}
-)";
-const char *const kMaskFragment = R"(
-FSIN vec4 v_colour;
-void main(void)
-{
-	FRAGCOLOR(vec4(v_colour.rgb, 1.0));
 }
 )";
 
@@ -150,49 +144,72 @@ bool Prepare()
 	if (!shaders::LoadGL())
 		return false;
 	uFrame = shaders::Uniform("u_dropFrame");
-	gDropShader = shaders::Create("rain drops", kScreenVertex, kDropFragment);
-	gMaskShader = shaders::Create("rain drops (the glass)", kMaskVertex, kMaskFragment);
-	gReady = gDropShader && gMaskShader;
-	if (gReady)
-		shaders::SetSampler(gDropShader, "u_dropMask", kMaskUnit);
+	gDropShader = shaders::Create("rain drops", kScreenVertex, kDropBody);
+	gGlassShader = shaders::Create("rain drops (on the glass)", kGlassVertex, kDropBody);
+	gReady = gDropShader && gGlassShader;
 	return gReady;
 }
 
-// The glass, white, where it isn't behind the car's own dash, pillars or roof:
-// the car's triangles drawn farthest first (the mask has no depth of its own).
-bool DrawMask(const std::vector<Face> &faces, CVector eye, float w, float h)
+// The windscreen's drops on its glass: each where the ray from his eye
+// through its place in the windscreen's window (fixed to the car) meets the
+// car's glass, lying on it, a little in front; drawn in the world, depth-tested,
+// so the dash, pillars and roof hide what's behind them. With the frame (for
+// the view through them) as the texture.
+void DrawOnGlass(const std::vector<Face> &faces, const uint8_t *car, CVector eye, void *frame)
 {
-	if (!shaders::Resize(gMask, std::max(1, int(w) / kMaskDown), std::max(1, int(h) / kMaskDown)))
-		return false;
-	std::vector<std::pair<float, const Face *>> order;
-	order.reserve(faces.size());
-	for (const Face &f : faces) {
-		const float x = (f.a.x + f.b.x + f.c.x) / 3 - eye.x, y = (f.a.y + f.b.y + f.c.y) / 3 - eye.y,
-		            z = (f.a.z + f.b.z + f.c.z) / 3 - eye.z;
-		order.push_back({x * x + y * y + z * z, &f});
-	}
-	std::sort(order.begin(), order.end(), [](const auto &a, const auto &b) { return a.first > b.first; });
-	const shaders::DrawInto into(gMask);
-	// Written as they are (whatever blending the game left on).
-	api.RwRenderStateSet(kStateVertexAlpha, nullptr);
-	api.RwRenderStateSet(kStateSrcBlend, reinterpret_cast<void *>(kBlendOne));
-	api.RwRenderStateSet(kStateDestBlend, reinterpret_cast<void *>(kBlendZero));
-	const float W = float(ScreenWidth()), H = float(ScreenHeight());
-	shaders::OverrideIm2D(nullptr);
-	gCanvas.SetTexture(nullptr);
-	gCanvas.Quad({0, 0}, {W, 0}, {W, H}, {0, H}, {0, 0, 0, 255});
-	gCanvas.Flush();
-	api.RwRenderStateSet(kStateZTest, nullptr); // (the batch draws both sides: the glass seen from inside is its back)
-	{
-		worlddraw::Batch batch(gMaskShader);
-		for (const auto &[distance, f] : order) {
-			const uint8_t c = f->glass ? 255 : 0;
-			batch.Put(f->a, c, c, c, 0, 0);
-			batch.Put(f->b, c, c, c, 0, 0);
-			batch.Put(f->c, c, c, c, 0, 0);
+	std::vector<dropmodel::Pane> glass;
+	for (const Face &f : faces)
+		if (f.glass)
+			glass.push_back({f.a, f.b, f.c});
+	if (glass.empty())
+		return;
+	const worlddraw::Axes axes = worlddraw::VehicleAxes(car);
+	auto world = [&](Vec3 d) {
+		return Vec3{axes.right.x * d.x + axes.forward.x * d.y + axes.up.x * d.z, axes.right.y * d.x + axes.forward.y * d.y + axes.up.y * d.z,
+		            axes.right.z * d.x + axes.forward.z * d.y + axes.up.z * d.z};
+	};
+	api.RwRenderStateSet(kStateTextureRaster, frame);
+	api.RwRenderStateSet(kStateZTest, reinterpret_cast<void *>(1));
+	api.RwRenderStateSet(kStateZWrite, nullptr);
+	api.RwRenderStateSet(kStateVertexAlpha, reinterpret_cast<void *>(1));
+	api.RwRenderStateSet(kStateFog, nullptr);
+	api.RwRenderStateSet(kStateSrcBlend, reinterpret_cast<void *>(kBlendSrcAlpha));
+	api.RwRenderStateSet(kStateDestBlend, reinterpret_cast<void *>(kBlendInvSrcAlpha));
+	const Vec3 from{eye.x, eye.y, eye.z};
+	worlddraw::Batch batch(gGlassShader);
+	for (const dropmodel::Drop &d : gDrops.All()) {
+		const Vec3 dir = world(dropmodel::WindscreenDirection(d.pos));
+		float t;
+		Vec3 n;
+		if (!dropmodel::HitGlass(glass, from, dir, t, n) || t > 3.0f)
+			continue; // no glass that way (a pillar, an open side)
+		// Up the glass (the car's up, laid on it) and across it.
+		Vec3 up = axes.up;
+		const float into = up.x * n.x + up.y * n.y + up.z * n.z;
+		up = {up.x - n.x * into, up.y - n.y * into, up.z - n.z * into};
+		const float ul = std::sqrt(up.x * up.x + up.y * up.y + up.z * up.z);
+		if (ul < 1e-4f)
+			continue;
+		up = {up.x / ul, up.y / ul, up.z / ul};
+		const Vec3 across{up.y * n.z - up.z * n.y, up.z * n.x - up.x * n.z, up.x * n.y - up.y * n.x};
+		const float r = dropmodel::WindscreenAngle(d.radius) * t;
+		const Vec3 c{from.x + dir.x * (t - kOffGlass), from.y + dir.y * (t - kOffGlass), from.z + dir.z * (t - kOffGlass)};
+		auto at = [&](float a, float b) { // across, up (m) from its middle
+			return Vec3{c.x + across.x * a + up.x * b, c.y + across.y * a + up.y * b, c.z + across.z * a + up.z * b};
+		};
+		const uint8_t strength = 230;
+		if (d.trail > 0.002f) { // the wet line above it, up the glass
+			const float h = dropmodel::WindscreenAngle(d.trail) * t, half = r * 0.45f;
+			const Vec3 q[4] = {at(-half, 0), at(half, 0), at(half, h), at(-half, h)};
+			const float u[4] = {-1, 1, 1, -1}, v[4] = {0, 0, 1, 1};
+			for (int i : {0, 1, 2, 0, 2, 3})
+				batch.Put(q[i], 0, 255, 0, u[i], v[i], uint8_t(strength * 0.8f));
 		}
+		const Vec3 q[4] = {at(-r, -r), at(r, -r), at(r, r), at(-r, r)};
+		const float u[4] = {-1, 1, 1, -1}, v[4] = {-1, -1, 1, 1};
+		for (int i : {0, 1, 2, 0, 2, 3})
+			batch.Put(q[i], 0, 0, uint8_t(d.seed * 255), u[i], v[i], strength);
 	}
-	return true;
 }
 
 struct Stats {
@@ -252,54 +269,27 @@ void Draw()
 			}
 		}
 	} timed{start, mode == dropmodel::DropMode::Windscreen ? "windscreen" : "lens"};
-	const bool masked = mode == dropmodel::DropMode::Windscreen;
-	if (masked && faces.empty())
+	const bool onGlass = mode == dropmodel::DropMode::Windscreen;
+	if (onGlass && faces.empty())
 		return; // no glass to put them on
 	float fw, fh;
 	shaders::FrameSize(fw, fh);
 	const float W = float(ScreenWidth()), H = float(ScreenHeight());
 	const shaders::SavedStates saved;
-	if (masked && !DrawMask(faces, eye, fw, fh))
-		return;
 	void *frame = shaders::GrabFrame();
 	if (!frame)
 		return;
-	if (masked)
-		shaders::BindTexture(kMaskUnit, false, gMask.texture);
-	shaders::Set(uFrame, fw, fh, masked ? 1.0f : 0.0f, fw / W);
+	shaders::Set(uFrame, fw, fh, onGlass ? 1.0f : 0.0f, fw / W);
+	if (onGlass) {
+		DrawOnGlass(faces, car, eye, frame);
+		return;
+	}
 	SetHudRenderStates();
 	shaders::OverrideIm2D(gDropShader);
 	gCanvas.SetTexture(frame);
 	const uint8_t strength = 230;
-	// On a windscreen: where its glass is from his seat, through the camera
-	// (fixed to the car, so they stay on the glass as he looks round).
-	float vp[16];
-	const bool onGlass = masked && shaders::ViewProjection(vp);
-	const worlddraw::Axes axes = onGlass ? worlddraw::VehicleAxes(car) : worlddraw::Axes{};
-	auto toScreen = [&](Vec2 at, float &x, float &y) { // a place in the windscreen's window, on the screen
-		const Vec3 d = dropmodel::WindscreenDirection(at);
-		const float wx = axes.right.x * d.x + axes.forward.x * d.y + axes.up.x * d.z;
-		const float wy = axes.right.y * d.x + axes.forward.y * d.y + axes.up.y * d.z;
-		const float wz = axes.right.z * d.x + axes.forward.z * d.y + axes.up.z * d.z;
-		const float px = eye.x + wx, py = eye.y + wy, pz = eye.z + wz;
-		const float cx = vp[0] * px + vp[4] * py + vp[8] * pz + vp[12], cy = vp[1] * px + vp[5] * py + vp[9] * pz + vp[13];
-		const float cw = vp[3] * px + vp[7] * py + vp[11] * pz + vp[15];
-		if (cw <= 0.01f)
-			return false; // behind him
-		x = (cx / cw * 0.5f + 0.5f) * W;
-		y = (0.5f - cy / cw * 0.5f) * H;
-		return true;
-	};
 	for (const dropmodel::Drop &d : gDrops.All()) {
-		float r = d.radius * H, x = d.pos.x * W, y = d.pos.y * H, top = y - d.trail * H;
-		if (onGlass) {
-			float ex, ey, tx; // its edge, a radius up the glass; the top of its trail
-			if (!toScreen(d.pos, x, y) || !toScreen({d.pos.x, d.pos.y - d.radius}, ex, ey))
-				continue;
-			r = std::hypot(ex - x, ey - y);
-			if (!toScreen({d.pos.x, d.pos.y - d.trail}, tx, top))
-				top = y;
-		}
+		const float r = d.radius * H, x = d.pos.x * W, y = d.pos.y * H, top = y - d.trail * H;
 		const uint8_t rpx = uint8_t(std::clamp(r, 1.0f, 255.0f));
 		if (d.trail > 0.002f) { // the wet line above it, fading to the top
 			const float half = r * 0.45f;

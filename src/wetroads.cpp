@@ -25,7 +25,7 @@ namespace {
 
 constexpr uint32_t kFromRenderScene = 0x1418c4; // RenderScene's call (not the cars' environment maps)
 constexpr float kRadius = 150.0f;                // m of wet ground drawn around the camera
-constexpr float kDarken = 0.55f;                 // the albedo, darker by this much when soaked
+constexpr float kDarken = 0.65f;                 // the albedo, darker by this much when soaked
 
 void (*orig_RenderEverythingBarRoads)();
 const int32_t *gArea;
@@ -98,7 +98,13 @@ vec3 Frame(vec2 px)
 	px = clamp(px, vec2(0.5), u_wetFrame.xy - 0.5);
 	return texture(tex0, (px + vec2(0.0, size.y - u_wetFrame.y)) / size).rgb;
 }
-float Hash(vec2 p) { return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453); }
+// (no sin(): it loses its precision on large arguments on the GPU, and the noise frays)
+float Hash(vec2 p)
+{
+	vec3 q = fract(vec3(p.xyx) * 0.1031);
+	q += dot(q, q.yzx + 33.33);
+	return fract((q.x + q.y) * q.z);
+}
 float Noise(vec2 p)
 {
 	vec2 i = floor(p), f = fract(p);
@@ -371,7 +377,7 @@ void Draw()
 	const CVector eye = shaders::CameraPosition();
 	const shaders::Sky sky = shaders::CurrentSky();
 	Put4(kEye, eye.x, eye.y, eye.z, kRadius);
-	Put4(kState, w.wetness, kDarken, w.puddles, shaders::Seconds());
+	Put4(kState, w.wetness, kDarken, w.puddles, std::fmod(shaders::Seconds(), 600.0f)); // (small: precise)
 	Put4(kSkyTop, sky.top.x, sky.top.y, sky.top.z, sky.daylight);
 	Put4(kSkyLow, sky.bottom.x, sky.bottom.y, sky.bottom.z);
 	Put4(kSun, sky.sun.x, sky.sun.y, sky.sun.z, sky.daylight * (1.0f - 0.7f * sky.cloudCover));

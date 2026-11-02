@@ -23,11 +23,8 @@ float Push(float speed) { return std::clamp((speed - 4.0f) / 26.0f, 0.0f, 1.0f);
 
 DropMode ModeFor(bool firstPersonOnFoot, bool seatView, int vehicleType, bool topDown, bool interior)
 {
-	if (interior)
-		return DropMode::None;
-	if (firstPersonOnFoot)
-		return DropMode::Lens;
-	if (!seatView)
+	(void)firstPersonOnFoot; // on foot his view is his own eyes: no drops on it (the user's call)
+	if (interior || !seatView)
 		return DropMode::None;
 	switch (vehicleType) {
 	case kCar:
@@ -50,6 +47,38 @@ Vec3 WindscreenDirection(Vec2 pos)
 }
 
 float WindscreenAngle(float size) { return size * kWindscreenHigh; }
+
+bool HitGlass(const std::vector<Pane> &glass, Vec3 from, Vec3 dir, float &t, Vec3 &normal)
+{
+	bool hit = false;
+	for (const Pane &p : glass) { // Moller-Trumbore
+		const Vec3 e1{p.b.x - p.a.x, p.b.y - p.a.y, p.b.z - p.a.z}, e2{p.c.x - p.a.x, p.c.y - p.a.y, p.c.z - p.a.z};
+		const Vec3 h{dir.y * e2.z - dir.z * e2.y, dir.z * e2.x - dir.x * e2.z, dir.x * e2.y - dir.y * e2.x};
+		const float det = e1.x * h.x + e1.y * h.y + e1.z * h.z;
+		if (std::fabs(det) < 1e-9f)
+			continue;
+		const Vec3 s{from.x - p.a.x, from.y - p.a.y, from.z - p.a.z};
+		const float u = (s.x * h.x + s.y * h.y + s.z * h.z) / det;
+		if (u < 0 || u > 1)
+			continue;
+		const Vec3 q{s.y * e1.z - s.z * e1.y, s.z * e1.x - s.x * e1.z, s.x * e1.y - s.y * e1.x};
+		const float v = (dir.x * q.x + dir.y * q.y + dir.z * q.z) / det;
+		if (v < 0 || u + v > 1)
+			continue;
+		const float d = (e2.x * q.x + e2.y * q.y + e2.z * q.z) / det;
+		if (d <= 1e-4f || (hit && d >= t))
+			continue;
+		Vec3 n{e1.y * e2.z - e1.z * e2.y, e1.z * e2.x - e1.x * e2.z, e1.x * e2.y - e1.y * e2.x};
+		const float len = std::sqrt(n.x * n.x + n.y * n.y + n.z * n.z);
+		if (!(len > 0))
+			continue;
+		const float side = (n.x * dir.x + n.y * dir.y + n.z * dir.z) > 0 ? -1.0f : 1.0f; // towards him
+		normal = {n.x / len * side, n.y / len * side, n.z / len * side};
+		t = d;
+		hit = true;
+	}
+	return hit;
+}
 
 float Drops::Random()
 {
