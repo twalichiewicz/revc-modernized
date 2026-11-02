@@ -241,8 +241,8 @@ void LoadMapData()
 	attempted = true;
 	const std::string path = SupportDir() + "/vcmodernhud/map.bin";
 	if (gMap.Load(path))
-		Log("map data: %d px base, %zu buildings, %zu road segments", gMap.size, gMap.buildings.size(),
-		    gMap.roads.size());
+		Log("map data: %d px base, %zu buildings, %zu road segments, %zu streets", gMap.size, gMap.buildings.size(),
+		    gMap.roads.size(), gMap.streets.size());
 	else
 		Log("map data missing or from an older version (%s); using the radar tiles (re-run install.sh)",
 		    path.c_str());
