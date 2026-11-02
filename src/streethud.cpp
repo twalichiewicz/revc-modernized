@@ -6,6 +6,7 @@
 #include "minimap.h"
 #include "streetmodel.h"
 #include "text.h"
+#include <algorithm>
 #include <cmath>
 #include <dlfcn.h>
 #include <memory>
@@ -72,13 +73,23 @@ void Draw()
 	const float W = float(ScreenWidth()), H = float(ScreenHeight()), m = gConfig.margin * H;
 	const uint8_t a = uint8_t(235 * alpha);
 	const text::Style big{1, H * 0.36f / 480, H * 0.5f / 448, {255, 255, 255, a}};
-	const text::Style small{1, H * 0.29f / 480, H * 0.4f / 448, {200, 210, 220, a}};
-	float top, bottom;
-	text::LineExtent(small, 0, top, bottom);
+	// The area in the game's own heading font (as its area name was), at the
+	// height the smaller line had, with the game's dark shadow under it.
+	const text::Style sized{1, H * 0.29f / 480, H * 0.4f / 448, {}};
+	float top, bottom, unitTop, unitBottom;
+	text::LineExtent(sized, 0, top, bottom);
+	text::LineExtent({2, 1, 1, {}}, 0, unitTop, unitBottom);
+	// (as controlsmodel::ScaleFor: CFont's cell is 32 wide and 20 tall, drawn 0.8 as wide as tall)
+	const float sy = (bottom - top) / std::max(1.0f, unitBottom - unitTop), sx = sy * 0.8f * 20 / 32;
+	const text::Style heading{2, sx, sy, {255, 255, 255, a}};
+	const text::Style shadow{2, sx, sy, {20, 20, 20, uint8_t(230 * alpha)}};
+	text::LineExtent(heading, 0, top, bottom);
 	float y = H - m - bottom;
 	if (area && *area) {
-		text::Draw(W - m - text::Width(area, small), y, area, small);
-		y -= (bottom - top) * 1.25f;
+		const float x = W - m - text::Width(area, heading), offset = (bottom - top) * 0.05f + 1;
+		text::Draw(x + offset, y + offset, area, shadow);
+		text::Draw(x, y, area, heading);
+		y -= (bottom - top) * 1.15f;
 	}
 	if (street >= 0 && size_t(street) < map->streets.size()) {
 		const char *name = map->streets[size_t(street)].c_str();
