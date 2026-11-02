@@ -62,6 +62,13 @@ std::vector<Streak> Streaks(Vec3 camera, Vec2 wind, int count, float seconds, co
 	return out;
 }
 
+bool Inside(const Box &b, Vec3 p)
+{
+	const float dx = p.x - b.centre.x, dy = p.y - b.centre.y, dz = p.z - b.centre.z;
+	auto along = [&](Vec3 a) { return std::fabs(dx * a.x + dy * a.y + dz * a.z); };
+	return along(b.right) <= b.half.x && along(b.forward) <= b.half.y && along(b.up) <= b.half.z;
+}
+
 Vec3 Lit(Vec3 p, Vec3 sky, const std::vector<Lamp> &lamps)
 {
 	Vec3 c = sky;

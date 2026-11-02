@@ -3,6 +3,7 @@
 #include "config.h"
 #include "draw.h"
 #include "dropmodel.h"
+#include "gamedrops.h"
 #include "game.h"
 #include "log.h"
 #include "minimap.h"
@@ -24,14 +25,14 @@ namespace {
 // CVehicle / CPhysical (macVC 1.0.5217).
 constexpr size_t kMoveSpeed = 0x84, kVehicleType = 0x348;
 constexpr uint8_t kNoRainZone = 0x08; // CCullZones' no-rain attribute (as CWeather::AddRain tests it)
-constexpr int kStateCull = 20, kCullNone = 1;
 constexpr int kMaskUnit = 12;         // texture units: librw 0-3, the clouds 4-8, the lighting 9-11
 constexpr int kMaskDown = 2;          // the glass mask at half the frame's resolution
+constexpr int kBlendZero = 1;         // rwBLENDZERO
 
-int (*gStateGet)(int state, void *value);
 const int32_t *gArea;
 const uint8_t *gCameraZone, *gPlayerZone;
 dropmodel::Drops gDrops;
+bool gInstalled;
 uint32_t gLastMs;
 bool gTried, gReady;
 void *gDropShader, *gMaskShader;
@@ -108,7 +109,7 @@ void main(void)
 	c *= mix(1.0, 0.55, smoothstep(0.55, 1.0, r2));
 	float glint = pow(max(0.0, 1.0 - length(local - vec2(-0.35, -0.4)) * 3.2), 3.0);
 	c += vec3(glint * 0.7);
-	FRAGCOLOR(vec4(c, smoothstep(1.0, 0.82, r2) * mask * v_color.a));
+	FRAGCOLOR(vec4(c, (1.0 - smoothstep(0.82, 1.0, r2)) * mask * v_color.a));
 }
 )";
 
@@ -161,15 +162,16 @@ bool DrawMask(const std::vector<Face> &faces, CVector eye, float w, float h)
 	}
 	std::sort(order.begin(), order.end(), [](const auto &a, const auto &b) { return a.first > b.first; });
 	const shaders::DrawInto into(gMask);
+	// Written as they are (whatever blending the game left on).
+	api.RwRenderStateSet(kStateVertexAlpha, nullptr);
+	api.RwRenderStateSet(kStateSrcBlend, reinterpret_cast<void *>(kBlendOne));
+	api.RwRenderStateSet(kStateDestBlend, reinterpret_cast<void *>(kBlendZero));
 	const float W = float(ScreenWidth()), H = float(ScreenHeight());
 	shaders::OverrideIm2D(nullptr);
 	gCanvas.SetTexture(nullptr);
 	gCanvas.Quad({0, 0}, {W, 0}, {W, H}, {0, H}, {0, 0, 0, 255});
 	gCanvas.Flush();
-	void *cull = nullptr;
-	gStateGet(kStateCull, &cull);
-	api.RwRenderStateSet(kStateCull, reinterpret_cast<void *>(kCullNone)); // the glass seen from inside: its back
-	api.RwRenderStateSet(kStateZTest, nullptr);
+	api.RwRenderStateSet(kStateZTest, nullptr); // (the batch draws both sides: the glass seen from inside is its back)
 	{
 		worlddraw::Batch batch(gMaskShader);
 		for (const auto &[distance, f] : order) {
@@ -179,7 +181,6 @@ bool DrawMask(const std::vector<Face> &faces, CVector eye, float w, float h)
 			batch.Put(f->c, c, c, c, 0, 0);
 		}
 	}
-	api.RwRenderStateSet(kStateCull, cull);
 	return true;
 }
 
@@ -199,7 +200,7 @@ bool Sheltered()
 
 void Draw()
 {
-	if (!gConfig.rainDrops || !api.timeMs)
+	if (!gConfig.rainDrops || !gInstalled || !api.timeMs)
 		return;
 	const uint32_t now = *api.timeMs;
 	const float dt = gLastMs && now >= gLastMs ? std::min(0.25f, float(now - gLastMs) / 1000.0f) : 0.0f;
@@ -283,8 +284,10 @@ bool Install()
 	gArea = static_cast<const int32_t *>(dlsym(RTLD_MAIN_ONLY, "_ZN5CGame8currAreaE"));
 	gCameraZone = static_cast<const uint8_t *>(dlsym(RTLD_MAIN_ONLY, "_ZN10CCullZones19CurrentFlags_CameraE"));
 	gPlayerZone = static_cast<const uint8_t *>(dlsym(RTLD_MAIN_ONLY, "_ZN10CCullZones19CurrentFlags_PlayerE"));
-	gStateGet = reinterpret_cast<int (*)(int, void *)>(dlsym(RTLD_MAIN_ONLY, "_Z16RwRenderStateGet13RwRenderStatePv"));
-	const bool ready = weather::Install() && worlddraw::Install() && gStateGet;
+	gInstalled = weather::Install() && worlddraw::Install();
+	if (gInstalled && !gamedrops::Install())
+		Log("rain drops: the game's own screen drops can't be turned off (re-run install.sh); both show");
+	const bool ready = gInstalled;
 	Log("rain drops: %s", ready ? "on" : "unavailable");
 	return ready;
 }

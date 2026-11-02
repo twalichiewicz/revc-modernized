@@ -19,7 +19,11 @@ struct Vertex {
 
 bool Install(); // false if a binding is missing
 
-// Triangles (three Put()s each) for one shader, sent in batches the 16-bit indices allow.
+// Triangles (three Put()s each) for one shader, sent in batches librw's Im3D
+// buffers hold (10,000 vertices and indices; more fails to upload), drawn from
+// both sides (the game culls back faces while the world draws; cull mode is put back).
+constexpr size_t kBatch = 9999;
+static_assert(kBatch <= 10000 && kBatch % 3 == 0, "whole triangles, within librw's Im3D buffers");
 class Batch {
 public:
 	explicit Batch(void *shader) : shader_(shader) {}

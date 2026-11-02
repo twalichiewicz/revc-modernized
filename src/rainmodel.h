@@ -46,6 +46,13 @@ struct Streak {
 // roof or a bridge keeps off.
 std::vector<Streak> Streaks(Vec3 camera, Vec2 wind, int count, float seconds, const std::function<bool(Vec3)> &covered);
 
+// A box in its own axes (unit vectors), `half` its half sizes along them: the
+// cabin of the car he's in, where no rain falls.
+struct Box {
+	Vec3 centre, right, forward, up, half;
+};
+bool Inside(const Box &box, Vec3 p);
+
 // A streak's light: the sky's, and each lamp's within its reach.
 struct Lamp {
 	Vec3 pos, colour;

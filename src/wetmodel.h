@@ -51,6 +51,8 @@ struct Puddle {
 	float radius;
 };
 std::vector<Puddle> Puddles(const mapdata::WetCell &cell, float level);
+// Whether there's anything wet to draw: the ground, or puddles still draining after it's dried.
+bool Shows(float wetness, float puddles);
 
 // Splashes: drops bursting on the wet ground (and on car roofs) round the
 // camera, each for a moment, as many as the rain is heavy.
@@ -63,7 +65,9 @@ struct Splash {
 	float size; // m
 	float age;  // 0..1 through its life
 };
+// `covered` keeps them off the roofs of cars under bridges and awnings (the
+// wet ground is already only where the rain falls).
 std::vector<Splash> Splashes(Vec3 camera, float rain, float seconds, const GroundAt &ground,
-                             const std::vector<Roof> &roofs = {});
+                             const std::vector<Roof> &roofs = {}, const std::function<bool(Vec3)> &covered = {});
 
 } // namespace wetmodel

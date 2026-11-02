@@ -186,6 +186,12 @@ static void TestNoPuddlesWhenDry()
 	CHECK(Puddles(steep, 1).empty());
 }
 
+static void TestPuddlesOutlastWetGround()
+{
+	CHECK(Shows(0.5f, 0) && Shows(0, 0.5f)); // the road dried (the game's within the hour), the puddles still draining
+	CHECK(!Shows(0, 0) && !Shows(0.01f, 0.03f));
+}
+
 static void TestSplashesScaleWithRain()
 {
 	const Vec3 eye{0, 0, 2};
@@ -210,6 +216,13 @@ static void TestSplashesScaleWithRain()
 	for (const Splash &s : roofs)
 		onRoof |= s.pos.z == 1.4f && std::fabs(s.pos.x - 5) < 0.6f;
 	CHECK(roofs.size() > heavy.size() && onRoof);
+	// A car under a bridge or an awning: none on its roof.
+	const auto underBridge = [](Vec3 p) { return p.x > 4 && p.x < 6; };
+	const std::vector<Splash> covered = Splashes(eye, 1, 7.3f, kFlat, {{{5, 0, 1.4f}, {1, 0, 0}, {0, 1, 0}}}, underBridge);
+	bool dry = true;
+	for (const Splash &s : covered)
+		dry &= s.pos.z != 1.4f;
+	CHECK(dry);
 	// Nowhere wet: none.
 	CHECK(Splashes(eye, 1, 7.3f, [](Vec3, float &) { return false; }).empty());
 }
@@ -226,6 +239,7 @@ int main()
 	TestPuddlesStable();
 	TestPuddlesGrowWithLevel();
 	TestNoPuddlesWhenDry();
+	TestPuddlesOutlastWetGround();
 	TestSplashesScaleWithRain();
 	if (failures)
 		return 1;

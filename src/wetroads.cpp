@@ -85,9 +85,9 @@ void main(void)
 	float fade = v_fog * (1.0 - smoothstep(u_wetEye.w * 0.7, u_wetEye.w, dist));
 	if (v_colour.g < 0.5) {
 		// A puddle (over the wet ground already drawn): a mirror, soft at its edge, rippled by the rain.
-		float edge = smoothstep(1.0, 0.65, v_uv.x);
+		float edge = 1.0 - smoothstep(0.65, 1.0, v_uv.x);
 		float ripple = 1.0 + 0.1 * sin(v_uv.x * 47.0 - u_wetState.w * 9.0);
-		float mirror = fresnel * 0.9 * edge * wet;
+		float mirror = fresnel * 0.9 * edge * max(wet, u_wetState.z); // they outlast the wet road
 		vec3 seen = (sky * ripple + u_wetSunColour.rgb * pow(max(dot(R, u_wetSun.xyz), 0.0), 600.0) * u_wetSun.w * 2.0);
 		FRAGCOLOR(vec4(seen * mirror, mirror) * fade);
 		return;
@@ -111,7 +111,7 @@ void main(void)
 {
 	float across = 1.0 - abs(v_uv.x);
 	across *= across;
-	float along = smoothstep(0.0, 0.12, v_uv.y) * pow(1.0 - v_uv.y, 1.5);
+	float along = smoothstep(0.0, 0.12, v_uv.y) * pow(max(1.0 - v_uv.y, 0.0), 1.5); // (never NaN: the frame is FP16)
 	float ripple = 0.75 + 0.25 * sin(v_uv.y * 37.0 + u_wetState.w * 5.0 + v_uv.x * 2.0);
 	FRAGCOLOR(vec4(v_colour.rgb * (across * along * ripple * u_wetState.x * v_fog), 1.0));
 }
@@ -205,7 +205,9 @@ void DrawSplashes(const mapdata::Map &map, Vec3 eye, const rainmodel::Weather &w
 {
 	const wetmodel::GroundIndex index(map, eye, wetmodel::kSplashReach);
 	const wetmodel::GroundAt ground = [&](Vec3 p, float &z) { return index.At(p, z); };
-	const std::vector<wetmodel::Splash> splashes = wetmodel::Splashes(eye, w.rain, shaders::Seconds(), ground, Roofs(eye));
+	const auto covered = [&](Vec3 p) { return mapdata::CoveredAt(map, p); };
+	const std::vector<wetmodel::Splash> splashes =
+	    wetmodel::Splashes(eye, w.rain, shaders::Seconds(), ground, Roofs(eye), covered);
 	std::vector<rainmodel::Lamp> lamps;
 	for (const worlddraw::Light &l : lights)
 		if (std::hypot(l.pos.x - eye.x, l.pos.y - eye.y) < wetmodel::kSplashReach + l.radius && lamps.size() < 8)
@@ -238,7 +240,7 @@ struct Stats {
 void Draw()
 {
 	const rainmodel::Weather &w = weather::Now();
-	if (!gConfig.wetGround || w.wetness < 0.02f || (gArea && *gArea != 0))
+	if (!gConfig.wetGround || !wetmodel::Shows(w.wetness, w.puddles) || (gArea && *gArea != 0))
 		return;
 	const mapdata::Map *map = minimap::RainMap();
 	static bool told;
@@ -278,7 +280,7 @@ void Draw()
 		}
 		ground.Flush();
 		// The puddles over it: discs, their radius growing with how long it's rained.
-		if (w.puddles > 0.05f)
+		if (wetmodel::Shows(0, w.puddles))
 			for (int c : cells) {
 				auto it = gPuddles.find(c);
 				if (it == gPuddles.end())

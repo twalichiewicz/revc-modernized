@@ -1,4 +1,5 @@
 #include "rainstreaks.h"
+#include "camera.h"
 #include "config.h"
 #include "game.h"
 #include "hooks.h"
@@ -13,6 +14,7 @@
 #include <chrono>
 #include <cmath>
 #include <dlfcn.h>
+#include <unordered_map>
 
 using namespace game;
 namespace rainstreaks {
@@ -71,6 +73,45 @@ bool Prepare()
 	return gReady;
 }
 
+// The cabin of the car he's in (the box round its glass, in its own axes,
+// found once per model): no rain falls in it, though the cars aren't in the
+// map's cover. None for an open car.
+std::unordered_map<int, rainmodel::Box> gCabins; // centre relative to the car, axes unused
+bool Cabin(const uint8_t *car, rainmodel::Box &out)
+{
+	if (!car || worlddraw::OpenTop(car))
+		return false;
+	const int model = *reinterpret_cast<const int16_t *>(car + 0x6a); // CEntity::m_modelIndex
+	const worlddraw::Axes ax = worlddraw::VehicleAxes(car);
+	auto it = gCabins.find(model);
+	if (it == gCabins.end()) {
+		Vec3 lo{1e9f, 1e9f, 1e9f}, hi{-1e9f, -1e9f, -1e9f};
+		for (const worlddraw::Face &f : worlddraw::VehicleFaces(car)) {
+			if (!f.glass)
+				continue;
+			for (const Vec3 &v : {f.a, f.b, f.c}) {
+				const float dx = v.x - ax.pos.x, dy = v.y - ax.pos.y, dz = v.z - ax.pos.z;
+				const Vec3 c{dx * ax.right.x + dy * ax.right.y + dz * ax.right.z, dx * ax.forward.x + dy * ax.forward.y + dz * ax.forward.z,
+				             dx * ax.up.x + dy * ax.up.y + dz * ax.up.z};
+				lo = {std::min(lo.x, c.x), std::min(lo.y, c.y), std::min(lo.z, c.z)};
+				hi = {std::max(hi.x, c.x), std::max(hi.y, c.y), std::max(hi.z, c.z)};
+			}
+		}
+		rainmodel::Box local{};
+		if (hi.x > lo.x)
+			local = {{(lo.x + hi.x) / 2, (lo.y + hi.y) / 2, (lo.z + hi.z) / 2}, {}, {}, {}, {(hi.x - lo.x) / 2, (hi.y - lo.y) / 2, (hi.z - lo.z) / 2}};
+		it = gCabins.emplace(model, local).first;
+	}
+	const rainmodel::Box &l = it->second;
+	if (!(l.half.x > 0))
+		return false;
+	out = {{ax.pos.x + ax.right.x * l.centre.x + ax.forward.x * l.centre.y + ax.up.x * l.centre.z,
+	        ax.pos.y + ax.right.y * l.centre.x + ax.forward.y * l.centre.y + ax.up.y * l.centre.z,
+	        ax.pos.z + ax.right.z * l.centre.x + ax.forward.z * l.centre.y + ax.up.z * l.centre.z},
+	       ax.right, ax.forward, ax.up, l.half};
+	return true;
+}
+
 bool Sheltered()
 {
 	return (gArea && *gArea != 0) || (gCameraZone && (*gCameraZone & kNoRainZone)) ||
@@ -93,7 +134,9 @@ void Draw()
 	const CVector eye = shaders::CameraPosition();
 	const shaders::Sky sky = shaders::CurrentSky();
 	const mapdata::Map *map = minimap::RainMap();
-	const auto covered = [&](Vec3 p) { return map && mapdata::CoveredAt(*map, p); };
+	rainmodel::Box cabin;
+	const bool inCar = camera::InSeat() && Cabin(camera::SeatVehicle(), cabin);
+	const auto covered = [&](Vec3 p) { return (map && mapdata::CoveredAt(*map, p)) || (inCar && rainmodel::Inside(cabin, p)); };
 	const std::vector<rainmodel::Streak> streaks =
 	    rainmodel::Streaks({eye.x, eye.y, eye.z}, kWind, count, shaders::Seconds(), covered);
 

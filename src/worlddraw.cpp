@@ -9,7 +9,7 @@
 namespace worlddraw {
 namespace {
 
-constexpr size_t kBatch = 3 * 4000; // vertices per draw
+constexpr int kStateCull = 20, kCullNone = 1;
 
 // CPointLights::aLights' records (as estatelighting reads them).
 struct PointLight {
@@ -24,6 +24,8 @@ void *(*gTransform)(Vertex *, uint32_t, float *, uint32_t);
 int (*gRender)(int, uint16_t *, int);
 int (*gEnd)();
 void (*gUse)(void *shader);
+int (*gStateGet)(int state, void *value);
+bool gBound; // every one of them found
 const int16_t *gPointCount;
 const PointLight *gPointLights;
 std::vector<uint16_t> gIndices;
@@ -110,9 +112,9 @@ bool Install()
 	            Bind(rw.Colour, "_Z18RpMaterialGetColorPKN2rw8MaterialE");
 	gVehiclePool = static_cast<uint8_t **>(dlsym(RTLD_MAIN_ONLY, "_ZN6CPools15ms_pVehiclePoolE"));
 	gIsOpenTopCar = reinterpret_cast<bool (*)(const void *)>(dlsym(RTLD_MAIN_ONLY, "_ZN11CAutomobile12IsOpenTopCarEv"));
-	return Bind(gTransform, "_Z15RwIm3DTransformPN2rw3gl310Im3DVertexEjPNS_6MatrixEj") &&
+	return gBound = Bind(gTransform, "_Z15RwIm3DTransformPN2rw3gl310Im3DVertexEjPNS_6MatrixEj") &&
 	       Bind(gRender, "_Z28RwIm3DRenderIndexedPrimitive15RwPrimitiveTypePti") && Bind(gEnd, "_Z9RwIm3DEndv") &&
-	       Bind(gUse, "_ZN2rw3gl36Shader3useEv");
+	       Bind(gUse, "_ZN2rw3gl36Shader3useEv") && Bind(gStateGet, "_Z16RwRenderStateGet13RwRenderStatePv");
 }
 
 void Batch::Put(Vec3 p, uint8_t r, uint8_t g, uint8_t b, float u, float v, uint8_t a)
@@ -124,18 +126,22 @@ void Batch::Put(Vec3 p, uint8_t r, uint8_t g, uint8_t b, float u, float v, uint8
 
 void Batch::Flush()
 {
-	if (vertices_.empty() || !gTransform || !shader_) {
+	if (vertices_.empty() || !gBound || !game::api.RwRenderStateSet || !shader_) {
 		vertices_.clear();
 		return;
 	}
 	if (gIndices.size() < vertices_.size())
 		for (size_t i = gIndices.size(); i < vertices_.size(); i++)
 			gIndices.push_back(uint16_t(i));
+	void *cull = nullptr; // (a 32-bit state: the low half)
+	gStateGet(kStateCull, &cull);
+	game::api.RwRenderStateSet(kStateCull, reinterpret_cast<void *>(kCullNone));
 	if (gTransform(vertices_.data(), uint32_t(vertices_.size()), nullptr, 1)) {
 		gUse(shader_);
 		gRender(3, gIndices.data(), int(vertices_.size()));
 		gEnd();
 	}
+	game::api.RwRenderStateSet(kStateCull, cull);
 	vertices_.clear();
 }
 

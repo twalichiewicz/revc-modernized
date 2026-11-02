@@ -174,6 +174,8 @@ std::vector<Reflection> Reflections(const std::vector<Light> &lights, Vec3 camer
 	return out;
 }
 
+bool Shows(float wetness, float puddles) { return wetness >= 0.02f || puddles > kPuddleLevel; }
+
 std::vector<Puddle> Puddles(const mapdata::WetCell &cell, float level)
 {
 	std::vector<Puddle> out;
@@ -217,7 +219,8 @@ std::vector<Puddle> Puddles(const mapdata::WetCell &cell, float level)
 	return out;
 }
 
-std::vector<Splash> Splashes(Vec3 camera, float rain, float seconds, const GroundAt &ground, const std::vector<Roof> &roofs)
+std::vector<Splash> Splashes(Vec3 camera, float rain, float seconds, const GroundAt &ground, const std::vector<Roof> &roofs,
+                             const std::function<bool(Vec3)> &covered)
 {
 	std::vector<Splash> out;
 	const float amount = std::clamp(rain, 0.0f, 1.0f);
@@ -233,6 +236,8 @@ std::vector<Splash> Splashes(Vec3 camera, float rain, float seconds, const Groun
 		const float size = 0.18f + 0.22f * Unit(Hash(h + 7));
 		if (i >= count) {
 			const Roof &r = roofs[size_t((i - count) / std::max(perRoof, 1))];
+			if (covered && covered({r.centre.x, r.centre.y, r.centre.z + 0.3f}))
+				continue;
 			const float u = (Unit(h) - 0.5f) * 0.9f, v = (Unit(Hash(h)) - 0.5f) * 1.4f;
 			out.push_back({{r.centre.x + r.right.x * u + r.forward.x * v, r.centre.y + r.right.y * u + r.forward.y * v,
 			                r.centre.z},

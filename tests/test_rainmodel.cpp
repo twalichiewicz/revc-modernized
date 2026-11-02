@@ -114,6 +114,20 @@ static void TestInteriorNoStreaks()
 	CHECK(Streaks(kCamera, {7, 3}, StreakCount(1, true), 5, Open).empty());
 }
 
+static void TestNotInsideTheCabin()
+{
+	// A car turned 90 degrees (its forward along -x), its cabin 0.7 wide, 1.2 long, 0.5 tall either way.
+	const Box cabin{{kCamera.x, kCamera.y, kCamera.z}, {0, 1, 0}, {-1, 0, 0}, {0, 0, 1}, {0.7f, 1.2f, 0.5f}};
+	CHECK(Inside(cabin, {kCamera.x - 1.1f, kCamera.y + 0.6f, kCamera.z + 0.4f}));
+	CHECK(!Inside(cabin, {kCamera.x + 0.6f, kCamera.y + 1.1f, kCamera.z})); // along its width: out of it
+	CHECK(!Inside(cabin, {kCamera.x, kCamera.y, kCamera.z + 0.6f}));        // over its roof
+	const auto inCabin = [&](Vec3 p) { return Inside(cabin, p); };
+	bool out = true;
+	for (const Streak &s : Streaks(kCamera, {7, 3}, kMaxStreaks, 9, inCabin))
+		out &= !Inside(cabin, s.top) && !Inside(cabin, s.bottom);
+	CHECK(out);
+}
+
 static void TestLitByNearLights()
 {
 	const Vec3 sky{0.2f, 0.2f, 0.25f};
@@ -142,6 +156,7 @@ int main()
 	TestWrapsAroundCamera();
 	TestInteriorNoStreaks();
 	TestLitByNearLights();
+	TestNotInsideTheCabin();
 	if (failures)
 		return 1;
 	std::puts("rainmodel: all rain weather tests passed");
