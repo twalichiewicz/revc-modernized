@@ -11,6 +11,7 @@
 #include "worlddraw.h"
 
 #include <algorithm>
+#include <chrono>
 #include <cmath>
 #include <cstring>
 #include <dlfcn.h>
@@ -182,6 +183,12 @@ bool DrawMask(const std::vector<Face> &faces, CVector eye, float w, float h)
 	return true;
 }
 
+struct Stats {
+	double ms = 0;
+	size_t drops = 0, frames = 0;
+	std::chrono::steady_clock::time_point since = std::chrono::steady_clock::now();
+} gStats;
+
 bool Sheltered()
 {
 	return (gArea && *gArea != 0) || (gCameraZone && (*gCameraZone & kNoRainZone)) ||
@@ -218,6 +225,21 @@ void Draw()
 	gDrops.Update(w.rain, exposed, speed, mode, dt);
 	if (gDrops.All().empty() || !Prepare())
 		return;
+	const auto start = std::chrono::steady_clock::now();
+	struct Timed {
+		std::chrono::steady_clock::time_point start;
+		const char *mode;
+		~Timed()
+		{
+			gStats.ms += std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - start).count();
+			gStats.drops += gDrops.All().size();
+			if (++gStats.frames && std::chrono::steady_clock::now() - gStats.since > std::chrono::seconds(20)) {
+				Log("rain drops: on the %s, %zu a frame, %.3f ms a frame to send", mode, gStats.drops / gStats.frames,
+				    gStats.ms / double(gStats.frames));
+				gStats = {};
+			}
+		}
+	} timed{start, mode == dropmodel::DropMode::Windscreen ? "windscreen" : "lens"};
 	const bool masked = mode == dropmodel::DropMode::Windscreen;
 	if (masked && faces.empty())
 		return; // no glass to put them on
