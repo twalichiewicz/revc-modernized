@@ -127,8 +127,85 @@ static void TestSwitchAfter15m()
 	CHECK(t.Current() == 1);
 }
 
+// The banner: shows (rising over 0.25 s) on a new street, a new area or getting
+// into a vehicle; holds 4 s, fades over 0.6 s; held while the expanded map is
+// up; back on the street it last showed within 3 s, it isn't shown again.
+static void Run(Banner &b, int street, int area, float seconds, bool expanded = false)
+{
+	for (float t = 0; t < seconds - 1e-4f; t += 1.0f / 60)
+		b.Update(street, area, false, expanded, 1.0f / 60);
+}
+
+static void TestShowsOnNewStreet()
+{
+	Banner b;
+	Run(b, 0, 1, 5);
+	CHECK(b.Alpha() == 0);
+	b.Update(1, 1, false, false, 1.0f / 60);
+	Run(b, 1, 1, 0.3f);
+	CHECK(b.Alpha() == 1);
+}
+
+static void TestFadesAfterHold()
+{
+	Banner b;
+	Run(b, 0, 1, 5);
+	b.Update(1, 1, false, false, 0);
+	Run(b, 1, 1, 0.1f);
+	CHECK(b.Alpha() > 0 && b.Alpha() < 1); // rising
+	Run(b, 1, 1, 3.8f);                    // 3.9 s
+	CHECK(b.Alpha() == 1);
+	Run(b, 1, 1, 0.8f);                    // 4.7 s
+	CHECK(b.Alpha() == 0);
+}
+
+static void TestShowsOnAreaChange()
+{
+	Banner b;
+	Run(b, -1, 1, 5);
+	b.Update(-1, 2, false, false, 0); // off-road, into another area: the area line alone
+	Run(b, -1, 2, 1);
+	CHECK(b.Alpha() == 1);
+}
+
+static void TestShowsOnVehicleEntry()
+{
+	Banner b;
+	Run(b, 0, 1, 5);
+	b.Update(0, 1, true, false, 0);
+	Run(b, 0, 1, 1);
+	CHECK(b.Alpha() == 1);
+}
+
+static void TestExpandedHolds()
+{
+	Banner b;
+	Run(b, 0, 1, 5);
+	CHECK(b.Alpha() == 0);
+	Run(b, 0, 1, 10, true);
+	CHECK(b.Alpha() == 1);
+}
+
+static void TestBriefGapNoRebanner()
+{
+	Banner b;
+	Run(b, 0, 1, 5);
+	Run(b, -1, 1, 1); // a car park entrance
+	Run(b, 0, 1, 1);
+	CHECK(b.Alpha() == 0);
+	Run(b, -1, 1, 4); // longer off it
+	Run(b, 0, 1, 0.5f);
+	CHECK(b.Alpha() == 1);
+}
+
 int main()
 {
+	TestShowsOnNewStreet();
+	TestFadesAfterHold();
+	TestShowsOnAreaChange();
+	TestShowsOnVehicleEntry();
+	TestExpandedHolds();
+	TestBriefGapNoRebanner();
 	TestOnFootNearest();
 	TestOffRoadNone();
 	TestDrivingUsesHeading();

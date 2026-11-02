@@ -86,4 +86,37 @@ int Tracker::Update(int seen, Vec3 pos, float dt)
 	return current_;
 }
 
+void Banner::Update(int street, int area, bool gotIntoVehicle, bool expandedMap, float dt)
+{
+	bool show = gotIntoVehicle || !started_ || area != area_;
+	started_ = true;
+	area_ = area;
+	if (street != current_) {
+		if (street >= 0 && !(street == lastShown_ && away_ <= kBack))
+			show = true;
+		current_ = street;
+	}
+	away_ = current_ == lastShown_ ? 0 : away_ + dt;
+	if (show) {
+		if (current_ >= 0)
+			lastShown_ = current_;
+		away_ = 0;
+		age_ = 0;
+	} else {
+		age_ += dt;
+	}
+	expanded_ = expandedMap;
+}
+
+float Banner::Alpha() const
+{
+	if (expanded_)
+		return 1;
+	if (age_ < kRise)
+		return age_ / kRise;
+	if (age_ < kHold)
+		return 1;
+	return std::clamp(1 - (age_ - kHold) / kFade, 0.0f, 1.0f);
+}
+
 } // namespace streetmodel

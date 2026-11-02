@@ -41,4 +41,20 @@ private:
 	bool started_ = false;
 };
 
+// When the street and area show, GTA IV's way: on a new street, a new area
+// (`area`: anything that changes when it does) or getting into a vehicle,
+// rising over kRise, held kHold, fading over kFade; held while the expanded
+// map is up; back on the street it last showed within kBack, not again.
+constexpr float kRise = 0.25f, kHold = 4.0f, kFade = 0.6f, kBack = 3.0f; // s
+class Banner {
+public:
+	void Update(int street, int area, bool gotIntoVehicle, bool expandedMap, float dt);
+	float Alpha() const;
+
+private:
+	bool started_ = false, expanded_ = false;
+	int area_ = 0, current_ = -1, lastShown_ = -1;
+	float age_ = 1e9f, away_ = 0;
+};
+
 } // namespace streetmodel
