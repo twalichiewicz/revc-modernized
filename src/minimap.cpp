@@ -30,6 +30,7 @@
 #include "anims.h"
 #include "camera.h"
 #include "checkpoint.h"
+#include "wetroads.h"
 #include "carlights.h"
 #include "carradio.h"
 #include "combat.h"
@@ -794,6 +795,7 @@ __attribute__((constructor)) void Init()
 		Log("reaction hits: native collision hook unavailable; original NPC hit volumes retained");
 	if (!checkpoint::Install())
 		Log("checkpoint: missing marker hook; racing arrows unavailable");
+	wetroads::Install();
 	if (!rtshadows::Install())
 		Log("rt shadows: no re3_debug hook (re-run install.sh); their reports stay in the terminal");
 }
@@ -809,4 +811,9 @@ const mapdata::Map *minimap::BakedMap()
 {
 	LoadMapData(); // once; street names don't need the minimap on
 	return gMap.streets.empty() ? nullptr : &gMap;
+}
+const mapdata::Map *minimap::RainMap()
+{
+	LoadMapData();
+	return gMap.wet.empty() ? nullptr : &gMap;
 }

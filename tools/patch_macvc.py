@@ -199,6 +199,8 @@ DEFAULT_HOOKS = [
     "_ZN12CPointLights8AddLightEh7CVectorS0_ffffhb",
     "_ZN7CEntity22ProcessLightsForEntityEv",
     "_ZN10C3dMarkers6RenderEv",
+    # wet streets in the rain (#32): drawn once the world is
+    "_ZN9CRenderer24RenderEverythingBarRoadsEv",
     # police come by car, not made on foot near a wanted player
     "_ZN11CPopulation15AddToPopulationEffff",
     # his car's door: opened only at a crawl; faster, they hang on to it

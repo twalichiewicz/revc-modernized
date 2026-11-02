@@ -10,5 +10,7 @@ void ToggleExpanded();
 bool Expanded();
 // The baked map data, when it has street names (map.bin 5); else null.
 const mapdata::Map *BakedMap();
+// The baked map with the rain's wet ground (map.bin 6), loaded once; null without.
+const mapdata::Map *RainMap();
 
 } // namespace minimap

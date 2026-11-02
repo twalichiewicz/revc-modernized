@@ -42,6 +42,7 @@ const char kDefaultIni[] = "; VC Modern HUD for macVC. Delete this file to resto
                            "CarRadios=1          ; on foot, hear car radios muffled: yours after you get out, stopped cars nearby\n"
                            "PoliceScanner=1      ; hear the police scanner only in a police vehicle (0: anywhere you're wanted)\n"
                            "StreetNames=1        ; the street you're on over the area, bottom right, as in GTA IV\n"
+                           "WetGround=1          ; wet streets in the rain: darker, glossy, the lights streaked on them\n"
                            "RadioLogo=1          ; station logo at the bottom centre when it changes, instead of the big name\n"
                            "Places=1             ; map icons: hospitals, police stations, businesses before they're for sale\n"
                            "StoryHints=1         ; Ken texts what the story needs from your businesses; gold rings on the map\n"
@@ -184,6 +185,8 @@ void Apply(const char *key, const char *value, const char *section)
 		gConfig.scannerInPoliceVehicles = b;
 	else if (!strcasecmp(key, "StreetNames"))
 		gConfig.streetNames = b;
+	else if (!strcasecmp(key, "WetGround"))
+		gConfig.wetGround = b;
 	else if (!strcasecmp(key, "RadioLogo"))
 		gConfig.radioLogo = b;
 	else if (!strcasecmp(key, "Places"))
