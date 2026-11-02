@@ -29,7 +29,7 @@ const std::vector<size_t> *Index::Near(Vec2 p) const
 	return found == cells_.end() ? nullptr : &found->second;
 }
 
-int StreetAt(const Index &index, const mapdata::Map &map, Vec3 pos, Vec2 heading, bool driving)
+int StreetAt(const Index &index, const mapdata::Map &map, Vec3 pos, Vec2 heading, bool driving, int keep)
 {
 	const std::vector<size_t> *near = index.Near({pos.x, pos.y});
 	if (!near)
@@ -53,7 +53,11 @@ int StreetAt(const Index &index, const mapdata::Map &map, Vec3 pos, Vec2 heading
 		const float distance = std::hypot(pos.x - (road.a.x + dx * t), pos.y - (road.a.y + dy * t));
 		const float z = r * 2 + 1 < map.roadZ.size() ? map.roadZ[r * 2] + (map.roadZ[r * 2 + 1] - map.roadZ[r * 2]) * t
 		                                              : pos.z;
-		if (distance > road.width / 2 + kPavement || std::fabs(pos.z - z) > kHeight || distance >= bestDistance)
+		if (distance > road.width / 2 + kPavement || std::fabs(pos.z - z) > kHeight)
+			continue;
+		if (keep >= 0 && map.roadStreet[r] == keep)
+			return keep; // still on it
+		if (distance >= bestDistance)
 			continue;
 		bestDistance = distance;
 		best = map.roadStreet[r];

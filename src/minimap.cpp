@@ -805,4 +805,8 @@ void minimap::ToggleExpanded()
 	gExpandedUntil = Clock::now() < gExpandedUntil ? Clock::time_point{} : Clock::now() + kExpandedFor;
 }
 bool minimap::Expanded() { return Clock::now() < gExpandedUntil; }
-const mapdata::Map *minimap::BakedMap() { return gMap.streets.empty() ? nullptr : &gMap; }
+const mapdata::Map *minimap::BakedMap()
+{
+	LoadMapData(); // once; street names don't need the minimap on
+	return gMap.streets.empty() ? nullptr : &gMap;
+}

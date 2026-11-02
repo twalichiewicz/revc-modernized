@@ -24,8 +24,10 @@ private:
 	std::map<std::pair<int, int>, std::vector<size_t>> cells_;
 };
 
-// The street (an index into map.streets) under `pos`, or -1.
-int StreetAt(const Index &index, const mapdata::Map &map, Vec3 pos, Vec2 heading, bool driving);
+// The street (an index into map.streets) under `pos`, or -1. `keep`, the
+// street he's been on: while one of its roads still has him (walking the
+// pavement past a side street's mouth), it stays his.
+int StreetAt(const Index &index, const mapdata::Map &map, Vec3 pos, Vec2 heading, bool driving, int keep = -1);
 
 // The street shown: a new one takes over after kSwitchAfter s or kSwitchFar m
 // on it; none (-1) after kNoneAfter s. Flipping back and forth keeps the current.

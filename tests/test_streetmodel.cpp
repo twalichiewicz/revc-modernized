@@ -87,6 +87,20 @@ static void TestUnnamedRoadIgnored()
 	CHECK(StreetAt(index, f.map, {50, 1, 1}, {1, 0}, false) == -1);
 }
 
+// Walking the pavement past a side street's mouth: it's nearer for a few
+// metres, but he's still on the main street (within its reach), so it stays.
+static void TestPavementPastCornerKeepsStreet()
+{
+	Fixture f;
+	f.map.streets = {"Ocean Drive", "13th Street"};
+	f.Add({0, 0}, {200, 0}, 0);
+	f.Add({100, 0}, {100, 100}, 1);
+	const Index index(f.map);
+	CHECK(StreetAt(index, f.map, {103, 8, 1}, {1, 0}, false) == 1);    // the side street, nearer
+	CHECK(StreetAt(index, f.map, {103, 8, 1}, {1, 0}, false, 0) == 0); // but he's still on Ocean Drive
+	CHECK(StreetAt(index, f.map, {103, 30, 1}, {0, 1}, false, 0) == 1); // gone up it: out of Ocean Drive's reach
+}
+
 static void TestCrossroadsKeepsCurrent()
 {
 	Tracker t;
@@ -213,6 +227,7 @@ int main()
 	TestOverpassPicksByHeight();
 	TestUnnamedRoadIgnored();
 	TestCrossroadsKeepsCurrent();
+	TestPavementPastCornerKeepsStreet();
 	TestSwitchAfterSecond();
 	TestSwitchAfter15m();
 	if (failures)

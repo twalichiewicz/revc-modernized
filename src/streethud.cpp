@@ -17,12 +17,16 @@ namespace streethud {
 namespace {
 
 const uint16_t *const *gZoneName; // CHud::m_pZoneName: the area's name, as the game shows it
+const bool *gWantsHud;            // CHud::m_Wants_To_Draw_Hud: a script's HUD switch
+constexpr size_t kWideScreen = 0x75; // CCamera::m_WideScreenOn: a cutscene
+constexpr float kJump = 50.0f;       // m in one frame: a respawn, a load or a teleport, not travel
 std::unique_ptr<streetmodel::Index> gIndex;
 const mapdata::Map *gIndexed;
 streetmodel::Tracker gTracker;
 streetmodel::Banner gBanner;
 uint32_t gLastMs;
 bool gWasInVehicle;
+Vec3 gLastPos;
 
 int AreaKey(const uint16_t *name)
 {
@@ -38,6 +42,8 @@ bool Install()
 {
 	if (!gZoneName)
 		gZoneName = static_cast<const uint16_t *const *>(dlsym(RTLD_MAIN_ONLY, "_ZN4CHud11m_pZoneNameE"));
+	if (!gWantsHud)
+		gWantsHud = static_cast<const bool *>(dlsym(RTLD_MAIN_ONLY, "_ZN4CHud19m_Wants_To_Draw_HudE"));
 	if (!gZoneName)
 		Log("streethud: CHud::m_pZoneName missing; no street names");
 	return gZoneName != nullptr;
@@ -50,17 +56,25 @@ void Draw()
 	hud::SuppressAreaName(map != nullptr);
 	if (!map || !player || !api.timeMs)
 		return;
+	// Not over a cutscene, nor when a script has the HUD off (the game's own area name isn't shown then either).
+	if ((api.theCamera && api.theCamera[kWideScreen]) || (gWantsHud && !*gWantsHud))
+		return;
 	if (map != gIndexed) {
 		gIndex = std::make_unique<streetmodel::Index>(*map);
 		gIndexed = map;
 	}
 	const uint32_t now = *api.timeMs;
 	const float dt = gLastMs && now >= gLastMs ? std::min(0.25f, (now - gLastMs) / 1000.0f) : 0.0f;
-	gLastMs = now;
 	const bool inVehicle = PedInVehicle(player) && PedVehicle(player);
 	const uint8_t *body = inVehicle ? PedVehicle(player) : player;
 	const CVector pos = EntityPos(body), forward = EntityForward(body);
-	const int seen = streetmodel::StreetAt(*gIndex, *map, {pos.x, pos.y, pos.z}, {forward.x, forward.y}, inVehicle);
+	// Put somewhere else (a respawn, a load, a teleport): where he is now, at once.
+	if (now < gLastMs || std::hypot(pos.x - gLastPos.x, pos.y - gLastPos.y) > kJump)
+		gTracker = {};
+	gLastMs = now;
+	gLastPos = {pos.x, pos.y, pos.z};
+	const int seen = streetmodel::StreetAt(*gIndex, *map, {pos.x, pos.y, pos.z}, {forward.x, forward.y}, inVehicle,
+	                                       gTracker.Current());
 	const int street = gTracker.Update(seen, {pos.x, pos.y, pos.z}, dt);
 	const uint16_t *area = *gZoneName;
 	gBanner.Update(street, AreaKey(area), inVehicle && !gWasInVehicle, minimap::Expanded(), dt);

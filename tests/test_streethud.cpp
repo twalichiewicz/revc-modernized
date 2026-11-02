@@ -47,7 +47,8 @@ static int failures;
 		}                                                                                                      \
 	} while (0)
 
-static uint8_t gTommy[0x900], gScreen[16];
+static uint8_t gTommy[0x900], gScreen[16], gCamera[0x100];
+static bool gWantsHud = true;
 static uint32_t gNow = 1000;
 static uint16_t gArea[] = {'O', 'c', 'e', 'a', 'n', ' ', 'B', 'e', 'a', 'c', 'h', 0};
 static const uint16_t *gAreaName = gArea;
@@ -81,11 +82,13 @@ int main()
 	*reinterpret_cast<int32_t *>(gScreen + 8) = 1920;
 	*reinterpret_cast<int32_t *>(gScreen + 0xc) = 1080;
 	gConfig.streetNames = true;
-	gMapData.streets = {"Ocean Drive"};
-	gMapData.roads = {{{0, 0}, {100, 0}, 10, 10, 10}};
-	gMapData.roadStreet = {0};
-	gMapData.roadZ = {0, 0};
+	gMapData.streets = {"Ocean Drive", "5th Street"};
+	gMapData.roads = {{{0, 0}, {100, 0}, 10, 10, 10}, {{1000, 1000}, {1100, 1000}, 10, 10, 10}};
+	gMapData.roadStreet = {0, 1};
+	gMapData.roadZ = {0, 0, 0, 0};
 	streethud::gZoneName = &gAreaName;
+	game::api.theCamera = gCamera;
+	streethud::gWantsHud = &gWantsHud;
 
 	// TestSuppressesWhileActive: on Ocean Drive, both lines; the game's own hidden.
 	gBaked = &gMapData;
@@ -107,6 +110,30 @@ int main()
 	gAreaName = haiti;
 	Frames(10);
 	CHECK(Drew("Little Haiti") && !Drew("Ocean Drive") && gDrawn.size() == 2); // the area and its shadow
+
+	// TestTeleportShowsNewStreetAtOnce: a respawn or a script's teleport onto
+	// another street: that street, not a second of the old one under it.
+	At(50, 2);
+	Frames(200);
+	At(1050, 1002);
+	bool oldShown = false, newShown = false;
+	for (int i = 0; i < 15; ++i) { // half a second
+		Frames(1);
+		oldShown |= Drew("Ocean Drive");
+		newShown |= Drew("5th Street");
+	}
+	CHECK(newShown && !oldShown);
+
+	// TestHiddenHudDrawsNothing: in a cutscene (widescreen), or with the game's HUD off, no banner.
+	gCamera[0x75] = 1;
+	At(50, 2);
+	Frames(20);
+	CHECK(gDrawn.empty());
+	gCamera[0x75] = 0;
+	gWantsHud = false;
+	Frames(5);
+	CHECK(gDrawn.empty());
+	gWantsHud = true;
 
 	// TestOldMapLeavesGameAreaName: no v5 map: nothing drawn, the game's shown.
 	gBaked = nullptr;
