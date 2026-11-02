@@ -8,7 +8,7 @@
 namespace mapdata {
 namespace {
 
-constexpr char kMagic[8] = {'V', 'C', 'M', 'M', 'M', 'A', 'P', '4'};
+constexpr char kMagic[8] = {'V', 'C', 'M', 'M', 'M', 'A', 'P', '5'};
 
 template <typename T>
 bool Read(FILE *f, T &v) { return fread(&v, sizeof v, 1, f) == 1; }
@@ -41,10 +41,10 @@ bool Map::Load(const std::string &path)
 		return false;
 	char magic[8];
 	uint32_t mapSize = 0, count = 0;
-	bool ok = Read(f, magic) && memcmp(magic, kMagic, 7) == 0 && (magic[7] == '3' || magic[7] == '4') &&
+	bool ok = Read(f, magic) && memcmp(magic, kMagic, 7) == 0 && magic[7] >= '3' && magic[7] <= '5' &&
 	          Read(f, mapSize) && mapSize > 0 && mapSize <= 8192 &&
 	          ReadVec(f, classes, size_t(mapSize) * mapSize) && Read(f, count) && count <= 100000;
-	const bool visual = ok && magic[7] == '4';
+	const bool visual = ok && magic[7] >= '4', named = ok && magic[7] >= '5';
 	size = int(mapSize);
 	for (uint32_t i = 0; ok && i < count; i++) {
 		Building b;
@@ -68,6 +68,26 @@ bool Map::Load(const std::string &path)
 		buildings.push_back(std::move(b));
 	}
 	ok = ok && Read(f, count) && count <= 1000000 && ReadVec(f, roads, count);
+	if (ok && named) {
+		uint32_t names = 0;
+		ok = Read(f, names) && names < Map::kNoStreet;
+		for (uint32_t i = 0; ok && i < names; i++) {
+			uint8_t length = 0;
+			std::string name;
+			ok = Read(f, length) && length > 0;
+			name.resize(length);
+			ok = ok && fread(name.data(), 1, length, f) == length;
+			streets.push_back(std::move(name));
+		}
+		ok = ok && ReadVec(f, roadStreet, roads.size()) && ReadVec(f, roadZ, roads.size() * 2);
+		for (uint16_t street : roadStreet)
+			ok = ok && (street == Map::kNoStreet || street < streets.size());
+		for (float z : roadZ)
+			ok = ok && std::isfinite(z);
+	} else if (ok) {
+		roadStreet.assign(roads.size(), Map::kNoStreet);
+		roadZ.assign(roads.size() * 2, 0.0f);
+	}
 	fclose(f);
 	if (!ok) {
 		*this = {};
@@ -96,6 +116,18 @@ bool Map::Save(const std::string &path) const
 	}
 	Write(f, uint32_t(roads.size()));
 	WriteVec(f, roads);
+	// Street names: written as they are (Load checks them). A road without one,
+	// or without heights, is written as none / 0.
+	Write(f, uint32_t(streets.size()));
+	for (const std::string &name : streets) {
+		const uint8_t length = uint8_t(std::min<size_t>(name.size(), 255));
+		Write(f, length);
+		fwrite(name.data(), 1, length, f);
+	}
+	for (size_t i = 0; i < roads.size(); i++)
+		Write(f, i < roadStreet.size() ? roadStreet[i] : Map::kNoStreet);
+	for (size_t i = 0; i < roads.size() * 2; i++)
+		Write(f, i < roadZ.size() ? roadZ[i] : 0.0f);
 	const bool ok = ferror(f) == 0;
 	fclose(f);
 	return ok;

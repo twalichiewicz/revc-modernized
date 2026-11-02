@@ -48,6 +48,13 @@ struct Map {
 	std::vector<uint8_t> classes;
 	std::vector<Building> buildings;
 	std::vector<Road> roads;
+	// Street names (#35, map.bin 5): each road's street (an index into
+	// `streets`, kNoStreet for none) and its height at a and b (two a road).
+	// Older files load with none, every road kNoStreet and its heights 0.
+	static constexpr uint16_t kNoStreet = 0xffff;
+	std::vector<std::string> streets;
+	std::vector<uint16_t> roadStreet;
+	std::vector<float> roadZ;
 
 	bool Load(const std::string &path);
 	bool Save(const std::string &path) const;
