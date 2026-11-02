@@ -42,6 +42,7 @@ constexpr uint32_t kSuspendedWithinMs = 2000;
 constexpr uint32_t kSummaryMs = 30000;
 
 void (*gSetWantedLevel)(uint8_t *wanted, int32_t level);
+int (*gVehicleRef)(uint8_t *vehicle); // CPools::GetVehicleRef: a handle that dies with the vehicle
 void (*gRemovePickUp)(int32_t handle);
 bool (*gOnAMission)();
 bool *gCutscene;       // CCutsceneMgr::ms_running
@@ -78,12 +79,27 @@ heat::Looks LooksOf(const uint8_t *player)
 		l.outfit.assign(name, strnlen(name, 24));
 	}
 	if (PedInVehicle(player)) {
-		const uint8_t *v = PedVehicle(player);
+		uint8_t *v = PedVehicle(player);
 		l.vehicleModel = EntityModel(v);
 		l.colour1 = v[kColour1];
 		l.colour2 = v[kColour2];
+		l.vehicle = gVehicleRef ? gVehicleRef(v) : -1;
 	}
 	return l;
+}
+
+// The car on the description destroyed, or gone from the world (the game
+// cleared it away): off it.
+void CarGone()
+{
+	const heat::Description &d = gModel.description();
+	if (!d.haveVehicle || d.vehicle < 0 || !api.PoolsGetVehicle)
+		return;
+	const uint8_t *car = api.PoolsGetVehicle(d.vehicle);
+	if (car && !Wrecked(car))
+		return;
+	Log("wanted: the car on his description %s; off it", car ? "is wrecked" : "is gone");
+	gModel.VehicleGone(d.vehicle);
 }
 
 bool Down(const uint8_t *player)
@@ -259,6 +275,7 @@ bool Install()
 {
 	auto sym = [](const char *name) { return dlsym(RTLD_MAIN_ONLY, name); };
 	gSetWantedLevel = reinterpret_cast<decltype(gSetWantedLevel)>(sym("_ZN7CWanted14SetWantedLevelEi"));
+	gVehicleRef = reinterpret_cast<decltype(gVehicleRef)>(sym("_ZN6CPools13GetVehicleRefEP8CVehicle"));
 	gRemovePickUp = reinterpret_cast<decltype(gRemovePickUp)>(sym("_ZN8CPickups12RemovePickUpEi"));
 	gOnAMission = reinterpret_cast<decltype(gOnAMission)>(sym("_ZN11CTheScripts18IsPlayerOnAMissionEv"));
 	gCutscene = static_cast<bool *>(sym("_ZN12CCutsceneMgr10ms_runningE"));
@@ -384,6 +401,7 @@ void Update()
 	sight::Update(*api.timeStep / 50.0f);
 	witness::Update(now);
 	gModel.Calling(witness::Calling() > 0.0f);
+	CarGone();
 	gModel.Tick(V(him), now);
 	if (!gPending) {
 		if (gModel.gameStars() != Field(wanted, kLevel))

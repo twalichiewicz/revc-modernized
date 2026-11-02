@@ -40,6 +40,8 @@ std::atomic<bool> gNoiseMade{false};
 enum class Gpu { kWaiting, kReady, kFailed };
 Gpu gGpu = Gpu::kWaiting;
 bool gTried;
+clouds::Weather gWeatherNow; // as they were drawn this frame
+bool gDrawnNow;
 void *gMarch, *gResolve, *gComposite;
 int uView, uWind, uSun, uSunCol, uSky, uLow, uJitter, uPick, uPrev;
 unsigned gShape, gDetail, gWeather;
@@ -108,6 +110,7 @@ float Dot(const CVector &a, const CVector &b) { return a.x * b.x + a.y * b.y + a
 
 void Hook_Render()
 {
+	gDrawnNow = false;
 	if (!gConfig.clouds || !gCanSeeOutside() || !Prepare() || !Upload()) {
 		orig_Render();
 		return;
@@ -142,6 +145,8 @@ void Hook_Render()
 		colour = kMoonColour;
 		strength = kMoonLight;
 	}
+	gWeatherNow = weather;
+	gDrawnNow = true;
 	float windX, windY;
 	clouds::Wind(weather.time, windX, windY);
 	int pickX, pickY;
@@ -198,6 +203,27 @@ void Hook_Render()
 }
 
 } // namespace
+
+bool Through(const CVector &from, const CVector &to, float &shows)
+{
+	shows = 1.0f;
+	if (!gDrawnNow || !gNoiseMade.load(std::memory_order_acquire))
+		return false;
+	const float a[3] = {from.x, from.y, from.z}, b[3] = {to.x, to.y, to.z};
+	shows = clouds::Between(gNoise, gWeatherNow, a, b);
+	return true;
+}
+
+bool SunAt(const CVector &at, float &sunlight)
+{
+	sunlight = 1.0f;
+	if (!gDrawnNow || !gNoiseMade.load(std::memory_order_acquire))
+		return false;
+	const shaders::Sky sky = shaders::CurrentSky();
+	const float from[3] = {at.x, at.y, at.z}, dir[3] = {sky.sun.x, sky.sun.y, sky.sun.z};
+	sunlight = clouds::Transmittance(gNoise, gWeatherNow, from, dir);
+	return true;
+}
 
 bool Install()
 {

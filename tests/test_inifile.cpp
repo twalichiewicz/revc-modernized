@@ -31,11 +31,20 @@ static void TestAddsSection()
 	      "[Minimap]\nGPS=1\n[Keys]\nMOD_RELOAD=kbd:T\n");
 }
 
+static void TestSameKeyInDifferentSections()
+{
+	CHECK(inifile::WithValue("[Minimap]\nSize=1.25\n[Crosshair]\nSize=1\n", "Crosshair", "Size", "2") ==
+	      "[Minimap]\nSize=1.25\n[Crosshair]\nSize=2\n");
+	CHECK(inifile::WithValue("[Minimap]\nSize=1.25\n", "Crosshair", "Size", "2") ==
+	      "[Minimap]\nSize=1.25\n[Crosshair]\nSize=2\n");
+}
+
 int main()
 {
 	TestReplacesAndKeepsComment();
 	TestAddsToSection();
 	TestAddsSection();
+	TestSameKeyInDifferentSections();
 	if (gFailures) {
 		printf("%d inifile test(s) failed\n", gFailures);
 		return 1;

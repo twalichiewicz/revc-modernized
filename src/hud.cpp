@@ -2,7 +2,7 @@
 #include "shaders.h"
 #include "fpshoot.h"
 #include "sniper.h"
-#include "fpcross.h"
+#include "reticle.h"
 #include "aimcam.h"
 #include "config.h"
 #include "credit.h"
@@ -41,7 +41,6 @@ constexpr CallSite kScaleSites[] = {{0x1f89dc, kAmmo}, {0x1fa4b8, kClock}};
 constexpr CallSite kDrawSites[] = {{0x1f8800, kWeapon}, {0x1f8968, kWeapon}};
 // The third-person (free-aim camera) crosshair: the M4, Ruger and M60's, and every other gun's.
 constexpr uint32_t kCrosshairSites[] = {0x1f7be8, 0x1fc714};
-constexpr float kThirdPersonGap = 1.5f;  // third person's aiming crosshair: its lines this many times first person's least gap out
 
 constexpr float kWeaponScale = 0.5f;
 // Our stars, in the clock's font scale (CHud::Draw gives both 0.7 x 1.25 units).
@@ -68,7 +67,7 @@ void (*orig_DrawUV)(const CSprite2d *, const float *, const CRGBA *, float, floa
                     float);
 
 const uint8_t *gText;  // __TEXT base of the running game
-bool gCrosshairOnlyWhenAiming;
+bool gCrosshairOnlyWhenAiming, gCrosshairReady;
 Im2DCanvas gDotCanvas;
 bool gActive;          // HUD changes on this frame
 bool gHideClock;       // our clock replaces the vanilla one this frame
@@ -250,28 +249,6 @@ __attribute__((noinline)) void Hook_SetScale(float sx, float sy)
 	orig_SetScale(sx, sy);
 }
 
-// The four-line crosshair (fpcross.h): square-ended, on whole pixels, in the
-// game's crosshair colour with a thin dark edge; first person's, opening with
-// the spread, and third person's aiming, at a set gap.
-void DrawLines(float cx, float cy, float gap, const CRGBA &ink)
-{
-	const float h = float(ScreenHeight());
-	fpcross::Rect lines[4];
-	fpcross::Lines(cx, cy, gap, h, lines);
-	const float o = fpcross::Edge(h);
-	const CRGBA edge{0, 0, 0, 150};
-	SetHudRenderStates();
-	gDotCanvas.SetTexture(nullptr);
-	for (int pass = 0; pass < 2; pass++) {
-		const float grow = pass == 0 ? o : 0.0f;
-		for (const fpcross::Rect &r : lines) {
-			const float x0 = r.x - grow, y0 = r.y - grow, x1 = r.x + r.w + grow, y1 = r.y + r.h + grow;
-			gDotCanvas.Quad({x0, y0}, {x1, y0}, {x1, y1}, {x0, y1}, pass == 0 ? edge : ink);
-		}
-	}
-	gDotCanvas.Flush();
-}
-
 // The mod's sniper scope (sniper.cpp): the game's own art (CHud::Sprites
 // 63 sitesniper, 65 sitelaser, drawn as four mirrored quarters) as a circle the
 // screen's height, faded in as the scope comes up, black beyond it, and a soft
@@ -331,15 +308,9 @@ __attribute__((noinline)) void Hook_DrawUV(const CSprite2d *sprite, const float 
 	}
 	// The full crosshair only while aiming; otherwise a small dot where it points.
 	const intptr_t site = static_cast<const uint8_t *>(__builtin_return_address(0)) - gText;
-	if (gCrosshairOnlyWhenAiming && (site == kCrosshairSites[0] || site == kCrosshairSites[1]) && fpshoot::Firing()) {
-		// First person: Counter-Strike's four lines, opening with the spread (fpcross.h).
-		const float cx = (rect[0] + rect[2]) / 2, cy = (rect[1] + rect[3]) / 2, h = ScreenHeight();
-		float proj[16], view[16];
-		const float tanHalf = shaders::CameraMatrices(proj, view) && proj[5] != 0.0f ? 1.0f / std::fabs(proj[5]) : 0.6f;
-		static float gap = 0.0f;
-		const float want = fpcross::Gap(fpshoot::SpreadShown(), tanHalf, h);
-		gap = gap <= 0.0f ? want : gap + (want - gap) * std::min(1.0f, 15.0f * *api.timeStep / 50.0f);
-		DrawLines(cx, cy, gap, *col);
+	if (gCrosshairReady && (site == kCrosshairSites[0] || site == kCrosshairSites[1]) && fpshoot::Firing()) {
+		const float cx = (rect[0] + rect[2]) / 2, cy = (rect[1] + rect[3]) / 2;
+		reticle::Draw(cx, cy, fpshoot::SpreadShown());
 		return;
 	}
 	if (gCrosshairOnlyWhenAiming && (site == kCrosshairSites[0] || site == kCrosshairSites[1]) &&
@@ -353,11 +324,10 @@ __attribute__((noinline)) void Hook_DrawUV(const CSprite2d *sprite, const float 
 		gDotCanvas.Flush();
 		return;
 	}
-	if (gCrosshairOnlyWhenAiming && (site == kCrosshairSites[0] || site == kCrosshairSites[1])) {
-		// Aiming in third person: first person's four lines, as thick (the game's
-		// sprite, shrunk so it didn't read as a wide spread, drew them thin).
-		const float h = float(ScreenHeight());
-		DrawLines(*api.crosshairMultX * ScreenWidth(), *api.crosshairMultY * h, fpcross::MinGap(h) * kThirdPersonGap, *col);
+	if (gCrosshairReady && (site == kCrosshairSites[0] || site == kCrosshairSites[1])) {
+		// The game's aim point also remains valid with the shoulder camera disabled.
+		// Aimed and moving, it opens to the shot's slight spread (#20).
+		reticle::Draw((rect[0] + rect[2]) / 2, (rect[1] + rect[3]) / 2, aimcam::Spread());
 		return;
 	}
 	if (gActive && Find(kDrawSites, __builtin_return_address(0)) == kWeapon) {
@@ -390,10 +360,10 @@ bool Install()
 	gNotWantedColour = static_cast<const CRGBA *>(dlsym(RTLD_MAIN_ONLY, "NOTWANTED_COLOR"));
 	if (!gNotWantedColour)
 		gWantedColour = nullptr; // the vanilla stars stay
-	gCrosshairOnlyWhenAiming = gConfig.aimCamera;
+	gCrosshairReady = true;
 	for (uint32_t site : kCrosshairSites)
-		gCrosshairOnlyWhenAiming =
-		    gCrosshairOnlyWhenAiming && hooks::IsCallTo(site, "_ZN9CSprite2d4DrawERK5CRectRK5CRGBAffffffff");
+		gCrosshairReady = gCrosshairReady && hooks::IsCallTo(site, "_ZN9CSprite2d4DrawERK5CRectRK5CRGBAffffffff");
+	gCrosshairOnlyWhenAiming = gConfig.aimCamera && gCrosshairReady;
 	return hooks::Install("_ZN5CFont11PrintStringEffPt", Hook_PrintString, orig_PrintString) &&
 	       hooks::Install("_ZN5CFont8SetScaleEff", Hook_SetScale, orig_SetScale) &&
 	       hooks::Install("_ZN9CSprite2d4DrawERK5CRectRK5CRGBAffffffff", Hook_DrawUV, orig_DrawUV);

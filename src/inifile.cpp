@@ -41,10 +41,16 @@ bool IsKey(const std::string &line, const std::string &key)
 }
 
 // The first `key=` line given `value`, its comment kept; false if there's none.
-bool Replace(std::vector<std::string> &lines, const std::string &key, const std::string &value)
+bool Replace(std::vector<std::string> &lines, const std::string &section, const std::string &key, const std::string &value)
 {
+	bool inside = section.empty();
 	for (std::string &line : lines) {
-		if (!IsKey(line, key))
+		const std::string name = SectionOf(line);
+		if (!name.empty()) {
+			inside = !strcasecmp(name.c_str(), section.c_str());
+			continue;
+		}
+		if (!inside || !IsKey(line, key))
 			continue;
 		const size_t eq = line.find('=');
 		const std::string rest = line.substr(eq + 1);
@@ -66,7 +72,7 @@ std::string WithValue(const std::string &ini, const std::string &section, const 
                       const std::string &value)
 {
 	std::vector<std::string> lines = Lines(ini);
-	if (!Replace(lines, key, value)) {
+	if (!Replace(lines, section, key, value)) {
 		// At the end of [section]: its last line before the next section's.
 		int at = -1;
 		for (size_t i = 0; i < lines.size(); i++) {

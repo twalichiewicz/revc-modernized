@@ -18,4 +18,37 @@ Frame GunInView(const Gun &gun, const Framing &framing, float aim)
 	return Inverse(Look(Lerp(hipEye, aimEye, t), Normal(Lerp(hipAhead, line, t)), {0, 0, 1}));
 }
 
+void ClearArmNearPlane(const Arm &arm, std::vector<Vec3> &positions, float nearPlane, float tanHalfV)
+{
+	if (positions.size() != arm.vertices.size() || nearPlane <= 0)
+		return;
+	const float bottom = -nearPlane * tanHalfV - 0.002f;
+	auto movable = [&](size_t i) {
+		const auto &v = arm.vertices[i];
+		float weight = 0;
+		for (int k = 0; k < 4; ++k)
+			if (v.bone[k] == kUpper || v.bone[k] == kFore)
+				weight += v.weight[k];
+		return weight > 0.5f;
+	};
+	for (const Triangle &triangle : arm.triangles)
+		for (int edge = 0; edge < 3; ++edge) {
+			const size_t i = triangle.v[edge], j = triangle.v[(edge + 1) % 3];
+			if (i >= positions.size() || j >= positions.size())
+				continue;
+			Vec3 &a = positions[i], &b = positions[j];
+			if ((a.y - nearPlane) * (b.y - nearPlane) >= 0)
+				continue;
+			const float t = (nearPlane - a.y) / (b.y - a.y), z = a.z + (b.z - a.z) * t;
+			if (z <= bottom)
+				continue;
+			const float wa = movable(i) ? 1 - t : 0, wb = movable(j) ? t : 0, weight = wa * wa + wb * wb;
+			if (weight < 1e-8f)
+				continue;
+			const float down = (z - bottom) / weight;
+			a.z -= down * wa;
+			b.z -= down * wb;
+		}
+}
+
 } // namespace vm

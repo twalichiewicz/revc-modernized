@@ -1,7 +1,9 @@
 #include "sight.h"
 #include "alert.h"
 #include "heat.h"
+#include "heli.h"
 #include "log.h"
+#include "spotters.h"
 #include "wanted.h"
 
 #include <algorithm>
@@ -31,6 +33,7 @@ constexpr float kPedRange = 90.0f, kHeliRange = 225.0f;
 constexpr float kOnFootCone = 75.0f, kDriverCone = 100.0f;
 constexpr float kDriverEyes = 1.2f; // above a car's position
 constexpr float kLookEvery = 0.05f; // s between looks
+constexpr uint8_t kNightFrom = 20, kNightTo = 6; // the hours the police helicopter's searchlight is on
 
 uint8_t **gPedPool, **gHelis;
 uint32_t *gZoneFlags;
@@ -38,7 +41,9 @@ int (*gPedRef)(uint8_t *ped);
 void (*gComponentPosition)(void *ik, CVector *pos, uint32_t node);
 bool gReady, gSeen;
 float gSince; // s since the last look
-std::vector<Eye> gEyes;
+std::vector<Eye> gEyes;    // filling
+std::vector<Eye> gShown;   // and the spotters', for the HUD
+spotters::Spotters gSpotters;
 
 CVector Part(uint8_t *ped, uint32_t node)
 {
@@ -77,6 +82,7 @@ struct Looker {
 	bool helicopter;
 	CVector eyes;
 	bool sees;
+	bool shooting = false; // at him (a cop on foot attacking)
 };
 
 // Every cop and police helicopter, and whether each sees `him`.
@@ -103,20 +109,45 @@ std::vector<Looker> Look(uint8_t *player, const CVector &him)
 			} else {
 				l.eyes = Part(ped, kPedHead);
 				l.sees = Sees(l.eyes, EntityForward(ped), kOnFootCone, kPedRange, him);
+				l.shooting = PedState(ped) == kPedAttack;
 			}
 			found.push_back(l);
 		}
 	}
+	// At night, one whose searchlight's been shot out sees less far.
+	const bool night = *api.clockHours >= kNightFrom || *api.clockHours < kNightTo;
 	for (int i = 0; gHelis && i < kHelis; i++) {
 		const uint8_t *heli = gHelis[i];
 		if (!heli || heli[kHeliStatus] == kHeliShotDown)
 			continue;
 		Looker l{-1 - i, true, EntityPos(heli), false};
 		l.eyes.z -= 1.0f; // its underside, out of its own body
-		l.sees = Sees(l.eyes, {0, 0, 0}, 0.0f, kHeliRange, him);
+		const float range = night && heli::LightOut(i) ? kHeliRange * heli::SightAtNight() : kHeliRange;
+		l.sees = Sees(l.eyes, {0, 0, 0}, 0.0f, range, him);
 		found.push_back(l);
 	}
 	return found;
+}
+
+spotters::Look AsLook(const Looker &l, const CVector &him)
+{
+	return {l.handle, l.helicopter, {l.eyes.x, l.eyes.y, l.eyes.z}, l.sees, l.shooting, Length(Minus(him, l.eyes))};
+}
+
+// The spotters, from this look (the police on him or not).
+void Follow(const std::vector<Looker> &lookers, const CVector &him, float dt)
+{
+	std::vector<spotters::Look> looks;
+	for (const Looker &l : lookers)
+		looks.push_back(AsLook(l, him));
+	gSpotters.Follow(wanted::Model().state() == heat::State::Wanted, looks, dt);
+}
+
+void Show()
+{
+	gShown = gEyes;
+	for (const spotters::Spotter &s : gSpotters.all())
+		gShown.push_back({s.handle, s.helicopter, {s.eyes.x, s.eyes.y, s.eyes.z}, 1.0f, true, s.alpha});
 }
 
 } // namespace
@@ -137,6 +168,8 @@ void Update(float dt)
 	if (!player || !wantedOf || state == heat::State::Clear || state == heat::State::Reported) {
 		gSeen = false;
 		gEyes.clear();
+		gSpotters.Clear();
+		gShown.clear();
 		return;
 	}
 	const bool unseeable = (wantedOf[kIgnored] & 3) || (gZoneFlags && (*gZoneFlags & kNoPolice));
@@ -148,6 +181,8 @@ void Update(float dt)
 		gEyes.clear();
 		if (gSeen)
 			wanted::CopSees(him);
+		Follow(lookers, him, dt);
+		Show();
 		return;
 	}
 	// Searching or under the APB: each one looking at him has to know him first.
@@ -158,19 +193,29 @@ void Update(float dt)
 		Eye e = it != gEyes.end() ? *it : Eye{l.handle, l.helicopter, l.eyes, 0.0f};
 		e.head = l.eyes;
 		const float distance = Length(Minus(him, l.eyes));
-		e.fill += l.sees ? heat::FillRate(distance, matches, l.helicopter) * dt : -heat::kEyeDecayPerSecond * dt;
+		// Discard partial identification when the APB no longer describes him.
+		// Otherwise changing clothes with an almost-full eye can expose a clean description.
+		if (state == heat::State::Apb && !matches)
+			e.fill = 0.0f;
+		e.fill += l.sees ? model.RecognitionRate(wanted::Looks(), distance, l.helicopter) * dt
+		                 : -heat::kEyeDecayPerSecond * dt;
 		if (e.fill >= 1.0f) {
 			Log("sight: recognised by %s at %.0f m (%s)", l.helicopter ? "the helicopter" : "a cop", distance,
 			    matches ? "he matched the description" : "a close look");
 			alert::Spotted();
 			wanted::CopSees(him);
 			gEyes.clear();
+			gSpotters.Recognised(AsLook(l, him));
+			Follow(lookers, him, 0.0f);
+			Show();
 			return;
 		}
 		if (e.fill > 0.0f)
 			eyes.push_back(e);
 	}
 	gEyes = std::move(eyes); // (a looker gone from the pool takes its eye with it)
+	Follow(lookers, him, dt);
+	Show();
 	// The fullest eye, for the sound (only while one's filling: an emptying eye is quiet).
 	float fullest = 0.0f;
 	for (const Eye &e : gEyes)
@@ -193,7 +238,19 @@ bool CanSee(const CVector &at)
 	return std::any_of(lookers.begin(), lookers.end(), [](const Looker &l) { return l.sees; });
 }
 
-const std::vector<Eye> &Eyes() { return gEyes; }
+const std::vector<Eye> &Eyes() { return gShown; }
+
+void Spotted(const CVector &at)
+{
+	uint8_t *player = gReady && wanted::Active() ? api.FindPlayerPed() : nullptr;
+	uint8_t *wantedOf = player ? *reinterpret_cast<uint8_t **>(player + kWanted) : nullptr;
+	if (!wantedOf || (wantedOf[kIgnored] & 3) || (gZoneFlags && (*gZoneFlags & kNoPolice)))
+		return;
+	for (const Looker &l : Look(player, at))
+		if (l.sees)
+			gSpotters.SawCrime(AsLook(l, at));
+	Show();
+}
 
 bool Install()
 {

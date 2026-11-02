@@ -203,6 +203,26 @@ void ParseColArchive(const std::vector<uint8_t> &d, std::map<std::string, ColMod
 std::vector<Instance> LoadInstances(const std::string &gameData)
 {
 	std::vector<Instance> out;
+	std::map<std::string, std::pair<int,int>> times;
+	std::ifstream definitions(gameData + "/data/gta_vc.dat");
+	std::string definition;
+	while (std::getline(definitions, definition)) {
+		if (definition.rfind("IDE ", 0) != 0) continue;
+		std::string rel=definition.substr(4);rel.erase(rel.find_last_not_of(" \r\n\t")+1);
+		std::replace(rel.begin(),rel.end(),'\\','/');std::ifstream file(gameData+"/"+Lower(rel));
+		bool timed=false;std::string row;
+		while(std::getline(file,row)) {
+			row.erase(row.find_last_not_of(" \r\n\t")+1);
+			if(row=="tobj"){timed=true;continue;}if(row=="end"){timed=false;continue;}
+			if(!timed||row.empty()||row[0]=='#')continue;
+			std::vector<std::string> fields;std::istringstream stream(row);std::string field;
+			while(std::getline(stream,field,','))fields.push_back(field);
+			if(fields.size()<8)continue;
+			std::string model;int on=-1,off=-1;std::istringstream(fields[1])>>model;
+			if((std::istringstream(fields[fields.size()-2])>>on)&&(std::istringstream(fields.back())>>off)&&
+			   on>=0&&on<=24&&off>=0&&off<=24)times[Lower(model)]={on,off};
+		}
+	}
 	std::ifstream dat(gameData + "/data/gta_vc.dat");
 	std::string line;
 	while (std::getline(dat, line)) {
@@ -234,6 +254,8 @@ std::vector<Instance> LoadInstances(const std::string &gameData)
 			if (ss >> id >> in.model >> in.interior >> in.pos.x >> in.pos.y >> in.pos.z >> sx >> sy >> sz >> in.qx >>
 			    in.qy >> in.qz >> in.qw) {
 				in.model = Lower(in.model);
+				in.scale = {sx, sy, sz};
+				if(auto time=times.find(in.model);time!=times.end()){in.timeOn=time->second.first;in.timeOff=time->second.second;}
 				out.push_back(in);
 			}
 		}

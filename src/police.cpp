@@ -3,10 +3,15 @@
 #include "config.h"
 #include "game.h"
 #include "heat.h"
+#include "hooks.h"
 #include "log.h"
+#include "policedrive.h"
+#include "policemove.h"
+#include "population.h"
 #include "wanted.h"
 
 #include <algorithm>
+#include <array>
 #include <cmath>
 #include <cstring>
 #include <dlfcn.h>
@@ -41,7 +46,7 @@ constexpr float kLaneWidth = 5.0f;
 // law-enforcer flag (bit 0), the siren, its driver, passengers and seats;
 // what kind of vehicle (0 car, 5 bike).
 constexpr size_t kStatusByte = 0x60, kDrivingStyle = 0x19d, kMission = 0x19e, kTempAction = 0x19f,
-                 kTempActionUntil = 0x1a0, kMaxTrafficSpeed = 0x1a4, kCruiseSpeed = 0x1a8, kCreatedBy = 0x294,
+                 kMaxTrafficSpeed = 0x1a4, kCruiseSpeed = 0x1a8, kCreatedBy = 0x294,
                  kLawFlags = 0x295, kSiren = 0x2f1, kDriver = 0x218, kPassengers = 0x220, kSeats = 0x264,
                  kVehicleType = 0x348;
 constexpr uint8_t kSimple = 2, kPhysics = 3, kAbandoned = 4, kWrecked = 5; // eEntityStatus
@@ -51,7 +56,7 @@ constexpr uint8_t kRandomVehicle = 1;                                      // eV
 // chase while it's 10 m or more from him, and with MISSION_NONE a cop at the
 // wheel drives off cruising).
 constexpr uint8_t kRamFar = 2, kBlockHandbrakeStop = 6, kEmergencyStop = 10;
-constexpr uint8_t kHandbrakeLeft = 3, kAvoidCars = 2; // eCarTempAction, eCarDrivingStyle
+constexpr uint8_t kAvoidCars = 2; // eCarDrivingStyle
 // Driving to a point: MISSION_GOTOCOORDS (CCarAI::UpdateCarAI leaves a police
 // car on it, then MISSION_GOTOCOORDS_STRAIGHT the last stretch; arrived,
 // MISSION_NONE, and the chase again), and MISSION_CRUISE; where it's going
@@ -66,7 +71,7 @@ constexpr size_t kRoadblockCar = 0x778, kInPursuit = 0x784, kDisabledCop = 0x785
                  kStinger = 0x7b0;
 constexpr int32_t kCop = 6;                       // ePedType
 constexpr int32_t kKillOnFoot = 8, kKillAnyMeans = 9; // eObjective OBJECTIVE_KILL_CHAR_ON_FOOT, ..._ANY_MEANS
-constexpr int32_t kRunToArea = 25;                     // eObjective OBJECTIVE_RUN_TO_AREA
+constexpr int32_t kSprintToArea = 49;                  // eObjective OBJECTIVE_SPRINT_TO_AREA
 constexpr size_t kAttachedTo = 0x720;                  // CPed::m_attachedTo (a helicopter's door gunner)
 constexpr int32_t kColt = 17, kFirstThrown = 12;  // eWeaponType: from 12 on, thrown and fired weapons
 // Models (data/default.ide): the police car, SWAT's van, SWAT.
@@ -304,6 +309,8 @@ constexpr int kPatrols = 40, kPerStation = 4, kMostStations = 8;
 std::vector<Unit> gUnits;
 std::vector<int> gStationNodes;
 constexpr float kPatrolSpeed = 9.0f;
+uint32_t gForceLogAt;
+uint64_t gReplenished;
 constexpr uint32_t kBackAfter = 90000; // a unit lost is made up at a station after this
 
 // Its next road at a node, not back the way it came (unless it must).
@@ -386,6 +393,7 @@ bool Muster()
 	if (nodes.empty())
 		return false;
 	gUnits.clear();
+	gForceLogAt = 0; gReplenished = 0;
 	for (int k = 0; k < kPatrols; k++) {
 		const float pick = Random(0.0f, total);
 		const size_t at = size_t(std::lower_bound(upTo.begin(), upTo.end(), pick) - upTo.begin());
@@ -439,6 +447,25 @@ void Lose(Unit &u, uint32_t now)
 	u.ready = 0;
 	std::fill(std::begin(u.crew), std::end(u.crew), -1);
 	gTally.lost++;
+}
+
+void Replenish(Unit &u,uint32_t now)
+{
+	if (u.duty!=Duty::Down) return;
+	if (population::Ready()) {
+		CVector departure;
+		const uint64_t token=uint64_t(&u-gUnits.data())+1;
+		const CVector origin=u.station>=0?At(u.station):u.last;
+		if (!population::ReinforceCar(token,origin,now,&departure)) return;
+		u.station=Nearest(departure);
+	} else {
+		if (now-u.since<=kBackAfter) return;
+		u.station=gStationNodes.empty()?-1:gStationNodes[size_t(RandomInt(int(gStationNodes.size())))];
+	}
+	u.duty=u.station<0?Duty::Patrol:Duty::Station;
+	if (u.station>=0) u.node=u.station;
+	u.next=-1; u.along=0;
+	gReplenished++;
 }
 
 // --- Seeing ------------------------------------------------------------------------------
@@ -572,7 +599,9 @@ Came Spawn(Unit &u, const CVector &him, uint32_t now)
 	*reinterpret_cast<CVector *>(car + 0x28) = {0.0f, 0.0f, 1.0f};    // up
 	*reinterpret_cast<CVector *>(car + 0x38) = {at.x, at.y, ground};
 	reinterpret_cast<CVector *>(car + 0x38)->z = ground + gBaseOfModel(car);
-	EntitySpeed(car) = {dir.x * 0.3f, dir.y * 0.3f, 0.0f}; // 15 m/s
+	// 15 m/s, or slower appearing near him on foot: on its braking curve (#21).
+	const float enter = std::min(15.0f, policedrive::ArrivalSpeed(Flat(at, him))) / 50.0f;
+	EntitySpeed(car) = {dir.x * enter, dir.y * enter, 0.0f};
 	car[kStatusByte] = uint8_t((car[kStatusByte] & 7) | (kPhysics << 3));
 	car[kMission] = gChaseMission();
 	car[kCruiseSpeed] = uint8_t(std::clamp(gChaseSpeed(car), 0, 255));
@@ -654,9 +683,92 @@ struct Stopping {
 };
 Stopping gStopping[12];
 
+// Arriving where he is on foot (#21). The game's CCarAI::UpdateCarAI resets a
+// chase car's cruise speed by star level every frame, then CCarAI::
+// MellowOutChaseSpeed caps it (0x100050618), right before steering in the same
+// CAutomobile::ProcessControl. After it, the car's approach is limited to a
+// braking curve onto PullUp's line, so it pulls up instead of arriving at full
+// chase speed. Only the cars PullUp stops: ramming his car, missions untouched.
+void (*orig_MellowOutChaseSpeed)(uint8_t *car);
+void Hook_MellowOutChaseSpeed(uint8_t *car)
+{
+	orig_MellowOutChaseSpeed(car);
+	if (!gConfig.smarterPolice || !car || !api.FindPlayerPed)
+		return;
+	uint8_t *player = api.FindPlayerPed();
+	if (!player || PedInVehicle(player) || !LawCar(car) || car[kCreatedBy] != kRandomVehicle ||
+	    car[kMission] < kRamFar || car[kMission] > kBlockHandbrakeStop)
+		return;
+	const uint8_t *driver = *reinterpret_cast<uint8_t *const *>(car + kDriver);
+	if (!driver || PedType(driver) != kCop)
+		return;
+	car[kCruiseSpeed] = policedrive::Limit(car[kCruiseSpeed], Flat(EntityPos(car), EntityPos(player)));
+}
+
+// A foot chase at a sprint (#23). The game's CPed::Seek runs every police
+// objective at a run and, seeking, only ever raises a ped's pace, so a cop
+// chasing Tommy far behind is raised to a sprint after it and lowered by us
+// again (policemove.h). Deliberate walks, standing to shoot, arrests, mission
+// peds and other objectives keep the game's pace.
+bool (*orig_Seek)(uint8_t *ped);
+struct Sprinter { int handle = -1; };
+std::array<Sprinter, 32> gSprinters;
+constexpr size_t kTargetPed = 0x1a8; // CPed::m_pedInObjective (CPed::SetObjective, 0x1001aab70)
+void SetMoveAnim(uint8_t *ped) { (*reinterpret_cast<void (***)(uint8_t *)>(ped))[0x98 / 8](ped); }
+bool Hook_Seek(uint8_t *ped)
+{
+	const bool result = orig_Seek(ped);
+	if (!gConfig.smarterPolice || !ped || PedType(ped) != kCop || !gPedRef || !api.FindPlayerPed)
+		return result;
+	uint8_t *player = api.FindPlayerPed();
+	const int32_t objective = PedObjective(ped);
+	const bool chasing = player && Health(ped) > 0.0f && !PedFromMission(ped) && !PedInVehicle(ped) &&
+	                     (objective == kKillOnFoot || objective == kKillAnyMeans) &&
+	                     *reinterpret_cast<uint8_t *const *>(ped + kTargetPed) == player;
+	const int handle = gPedRef(ped);
+	Sprinter *promoted = nullptr, *spare = nullptr;
+	for (Sprinter &s : gSprinters) {
+		if (s.handle == handle)
+			promoted = &s;
+		else if (!spare && (s.handle < 0 || api.PoolsGetPed(s.handle) == nullptr))
+			spare = &s;
+	}
+	const float gap = player ? Flat(EntityPos(ped), EntityPos(player)) : 0.0f;
+	int32_t &move = *reinterpret_cast<int32_t *>(ped + 0x304); // CPed::m_nMoveState
+	switch (policemove::Decide(chasing, promoted != nullptr, move, gap)) {
+	case policemove::Pace::Sprint:
+		if (!promoted && !spare)
+			break; // the most chasing at once: the rest keep the game's run
+		move = policemove::kMoveSprint;
+		SetMoveAnim(ped);
+		if (!promoted)
+			spare->handle = handle;
+		break;
+	case policemove::Pace::Run:
+		move = policemove::kMoveRun;
+		SetMoveAnim(ped);
+		break;
+	case policemove::Pace::Repick:
+		move = policemove::kMoveStill; // the game's Seek raises it to its own pace next frame
+		promoted->handle = -1;
+		break;
+	case policemove::Pace::Native:
+		break;
+	}
+	return result;
+}
+
+// The game's close chase (CCarAI::UpdateCarAI, 0x1000502f0): within it a police
+// car heads straight for him, roads or not.
+constexpr float kCloseChase = 50.0f;
+// Its unsticking: a chase car stuck 2 s backs off 0.75 s and drives at him again
+// (eCarTempAction TEMPACT_REVERSE, 0x10004fc10), against the same wall forever.
+constexpr uint8_t kReverse = 2;
+constexpr float kStuckNear = 60.0f;
+
 void PullUp(uint8_t *player, const CVector &him, bool onHim, uint32_t now)
 {
-	if (onHim && !PedInVehicle(player)) {
+	if (!PedInVehicle(player)) {
 		const Slots cars = Pool(gVehiclePool, kVehicleSize);
 		const CVector head{him.x, him.y, him.z + 0.6f};
 		for (int i = 0; i < cars.size; i++) {
@@ -670,12 +782,18 @@ void PullUp(uint8_t *player, const CVector &him, bool onHim, uint32_t now)
 				continue;
 			const CVector at = EntityPos(car);
 			const float d = Flat(at, him);
-			if (d > 45.0f)
-				continue;
-			// Hidden from him (round a corner, behind something), or near enough side-on.
-			if (d > 28.0f && api.GetIsLineOfSightClear(head, {at.x, at.y, at.z + 1.0f}, true, false, false, true,
-			                                           false, true, false))
-				continue;
+			// Stuck ramming a wall near where they think he is: there's no way
+			// through, so its crew get out, seen or not (#22).
+			const bool stuck = car[kTempAction] == kReverse && d <= kStuckNear;
+			if (!stuck) {
+				if (!onHim || d > kCloseChase)
+					continue;
+				// Hidden from him (round a corner, behind a wall, a fence or a
+				// railing: it can't drive through those either), or near enough side-on.
+				if (d > 28.0f && api.GetIsLineOfSightClear(head, {at.x, at.y, at.z + 1.0f}, true, false, false, true,
+				                                           false, false, false))
+					continue;
+			}
 			const int handle = gVehicleRef(car);
 			Stopping *slot = nullptr;
 			bool already = false;
@@ -686,12 +804,10 @@ void PullUp(uint8_t *player, const CVector &him, bool onHim, uint32_t now)
 			}
 			if (already || !slot)
 				continue;
+			// Braked in on the arrival curve (Hook_MellowOutChaseSpeed), it stops
+			// straight: a handbrake swing at chase speed spun cars into crashes (#21).
 			car[kMission] = kEmergencyStop;
 			car[kCruiseSpeed] = 0;
-			if (Speed(car) > 7.0f) { // swung side-on to him, the driver's door away
-				car[kTempAction] = kHandbrakeLeft;
-				*reinterpret_cast<uint32_t *>(car + kTempActionUntil) = now + 450;
-			}
 			*slot = {handle, now};
 			gTally.pulledUp++;
 		}
@@ -1306,16 +1422,37 @@ void Units(const CVector &him, uint8_t *player, float dt, uint32_t now)
 			Check(u, now);
 			break;
 		case Duty::Down:
-			if (now - u.since > kBackAfter) {
-				u.duty = gStationNodes.empty() ? Duty::Patrol : Duty::Station;
-				u.station = gStationNodes.empty() ? -1 : gStationNodes[size_t(RandomInt(int(gStationNodes.size())))];
-				if (u.station >= 0)
-					u.node = u.station;
-				u.next = -1;
-				u.along = 0.0f;
-			}
+			Replenish(u,now);
 			break;
 		}
+	}
+}
+
+// Available with zero stars too: declarations alone cannot establish that
+// patrols move or a depleted station reserve is actually replenished.
+void ReportForce(uint32_t now)
+{
+	if (now-gForceLogAt<30000) return;
+	gForceLogAt=now;
+	int counts[5]{};
+	const Unit *patrol=nullptr;
+	for (const Unit &u:gUnits) {
+		counts[int(u.duty)]++;
+		if (!patrol && u.duty==Duty::Patrol) patrol=&u;
+	}
+	const CVector at=patrol?Where(*patrol):CVector{};
+	Log("police: force %zu total, patrol/station/sent/here/down %d/%d/%d/%d/%d, replacements completed %llu; "
+	    "patrol sample node %d->%d along %.2f at %.0f,%.0f",
+	    gUnits.size(),counts[0],counts[1],counts[2],counts[3],counts[4],(unsigned long long)gReplenished,
+	    patrol?patrol->node:-1,patrol?patrol->next:-1,patrol?patrol->along:0,at.x,at.y);
+	for (size_t i=0;i<gStationNodes.size();i++) {
+		int stock=0,deployed=0,down=0;
+		for (const Unit &u:gUnits) if (u.station==gStationNodes[i]) {
+			stock+=u.duty==Duty::Station;
+			deployed+=u.duty==Duty::Sent || u.duty==Duty::Here;
+			down+=u.duty==Duty::Down;
+		}
+		Log("police: station %zu reserve %d deployed %d down %d",i,stock,deployed,down);
 	}
 }
 
@@ -1367,6 +1504,24 @@ bool gSearchLogged;
 // (A cop seeing him isn't enough: only one who's recognised him ends the search.)
 bool Searching() { return wanted::Active() && wanted::Model().state() == heat::State::Searching; }
 
+// The open path nodes within `radius` of `centre`: its streets (the car nodes,
+// first in CPathFind's array), and with `onFoot` its pedestrian paths too
+// (squares, alleys, beaches: the rest of the array, up to its total at +0x54b78).
+std::vector<int> AreaNodes(const CVector &centre, float radius, bool onFoot)
+{
+	std::vector<int> nodes;
+	const int cars = NumCarPathNodes(), all = onFoot ? *reinterpret_cast<const int32_t *>(api.thePaths + 0x54b78) : cars;
+	for (int i = 0; i < all; i++)
+		if (Open(i) && Flat(At(i), centre) <= radius)
+			nodes.push_back(i);
+	return nodes;
+}
+void Shuffle(std::vector<int> &nodes)
+{
+	for (size_t i = nodes.size(); i > 1; i--)
+		std::swap(nodes[i - 1], nodes[size_t(RandomInt(int(i)))]);
+}
+
 const std::vector<int> &SearchNodes()
 {
 	const Vec3 c = wanted::Model().searchCentre();
@@ -1375,17 +1530,32 @@ const std::vector<int> &SearchNodes()
 		return gSearchNodes;
 	gSearchCentre = {c.x, c.y, c.z};
 	gSearchRadius = r;
-	gSearchNodes.clear();
-	const int n = NumCarPathNodes();
-	for (int i = 0; i < n; i++)
-		if (Open(i) && Flat(At(i), gSearchCentre) <= r)
-			gSearchNodes.push_back(i);
+	gSearchNodes = AreaNodes(gSearchCentre, r, false);
 	if (gSearchNodes.empty()) // (no road in it: the nearest)
 		if (const int nearest = Nearest(gSearchCentre); nearest >= 0)
 			gSearchNodes.push_back(nearest);
-	for (size_t i = gSearchNodes.size(); i > 1; i--) // shuffled
-		std::swap(gSearchNodes[i - 1], gSearchNodes[size_t(RandomInt(int(i)))]);
+	Shuffle(gSearchNodes);
 	return gSearchNodes;
+}
+
+// Cops on foot search where cars can't too: off the roads he isn't left
+// unsearched (#22). Cars keep SearchNodes' streets.
+std::vector<int> gFootSearchNodes;
+CVector gFootSearchCentre{};
+float gFootSearchRadius = -1.0f;
+const std::vector<int> &FootSearchNodes()
+{
+	const Vec3 c = wanted::Model().searchCentre();
+	const float r = wanted::Model().searchRadius();
+	if (!gFootSearchNodes.empty() && c.x == gFootSearchCentre.x && c.y == gFootSearchCentre.y && r == gFootSearchRadius)
+		return gFootSearchNodes;
+	gFootSearchCentre = {c.x, c.y, c.z};
+	gFootSearchRadius = r;
+	gFootSearchNodes = AreaNodes(gFootSearchCentre, r, true);
+	if (gFootSearchNodes.empty())
+		gFootSearchNodes = SearchNodes();
+	Shuffle(gFootSearchNodes);
+	return gFootSearchNodes;
 }
 
 // Its cell on a 40 m grid, to keep the cars spread out.
@@ -1527,7 +1697,7 @@ void SearchOnFoot(uint8_t *player, const CVector &real, int stars)
 		const bool goForHim = stars > 0 && wanted::OnHim();
 		for (const FootSearcher &s : gFootSearchers) {
 			uint8_t *cop = api.PoolsGetPed(s.ped);
-			if (!cop || Health(cop) <= 0.0f || PedObjective(cop) != kRunToArea)
+			if (!cop || Health(cop) <= 0.0f || PedObjective(cop) != kSprintToArea)
 				continue;
 			if (goForHim && Flat(EntityPos(cop), real) < kGoForHim)
 				api.SetObjective(cop, kKillOnFoot, player);
@@ -1556,11 +1726,11 @@ void SearchOnFoot(uint8_t *player, const CVector &real, int stars)
 			const bool near = Flat(at, gSearchCentre) < kOnFootNear || Flat(at, real) < kOnFootNear;
 			if (!(after || objective == 0) || !near)
 				continue;
-		} else if (objective == kRunToArea && Flat(at, it->to) > kOnFootArrived) {
+		} else if (objective == kSprintToArea && Flat(at, it->to) > kOnFootArrived) {
 			continue; // on its way
 		}
-		const CVector to = SearchPoint(gNextSlot++);
-		gSetObjectiveAt(cop, kRunToArea, to);
+		const CVector to = FootSearchPoint(gNextSlot++); // streets and pedestrian paths (#22)
+		gSetObjectiveAt(cop, kSprintToArea, to); // at a sprint (#23)
 		if (it == gFootSearchers.end())
 			gFootSearchers.push_back({handle, to});
 		else
@@ -1595,12 +1765,14 @@ float UnitWithin(const CVector &at, float reach)
 	for (const Unit &u : gUnits)
 		if (u.duty != Duty::Down && u.duty != Duty::Here) // (those here are cars, and their cops)
 			nearest = std::min(nearest, Flat(Where(u), at));
+	for (const CVector &cop:population::FootPatrols())
+		nearest=std::min(nearest,Flat(cop,at));
 	return nearest;
 }
 
 std::vector<CVector> UnitsAbout()
 {
-	std::vector<CVector> out;
+	std::vector<CVector> out=population::FootPatrols();
 	for (const Unit &u : gUnits)
 		if (u.duty != Duty::Down && u.duty != Duty::Here)
 			out.push_back(Where(u));
@@ -1610,6 +1782,13 @@ std::vector<CVector> UnitsAbout()
 CVector SearchPoint(int slot)
 {
 	const std::vector<int> &nodes = SearchNodes();
+	if (nodes.empty())
+		return gSearchCentre;
+	return At(nodes[size_t(slot) % nodes.size()]);
+}
+CVector FootSearchPoint(int slot)
+{
+	const std::vector<int> &nodes = FootSearchNodes();
 	if (nodes.empty())
 		return gSearchCentre;
 	return At(nodes[size_t(slot) % nodes.size()]);
@@ -1644,6 +1823,7 @@ void Update()
 		gSearchNodes.clear();
 	}
 	gLastTime = now;
+	if (now<gForceLogAt) gForceLogAt=0;
 	if (*gCutscene)
 		return;
 	if (gConfig.smarterPolice && gUnits.empty()) {
@@ -1671,6 +1851,7 @@ void Update()
 	NoHoming(player, wanted, stars, onHim, real, now);
 	if (!gConfig.smarterPolice)
 		return;
+	ReportForce(now);
 
 	if (stars != gStars) {
 		if (!gStars)
@@ -1688,8 +1869,8 @@ void Update()
 			for (Unit &u : gUnits)
 				if (u.duty == Duty::Patrol)
 					Drive(u, kPatrolSpeed * dt, false);
-				else if (u.duty == Duty::Down && now - u.since > kBackAfter)
-					BackOnPatrol(u);
+				else if (u.duty == Duty::Down)
+					Replenish(u,now);
 		}
 		return;
 	}
@@ -1780,6 +1961,10 @@ bool Install()
 	         gGiveWeapon && gPedZ && gVehicleRef && gPedRef && gJoinRoadsTo && gSetObjectiveAt && api.thePaths && api.FindNodeClosestToCoors &&
 	         api.PoolsGetVehicle && api.PoolsGetPed && api.ProcessVerticalLine && api.GetIsLineOfSightClear &&
 	         api.RequestModel && api.VehicleUsesSiren;
+	if (!hooks::Install("_ZN6CCarAI19MellowOutChaseSpeedEP8CVehicle", Hook_MellowOutChaseSpeed, orig_MellowOutChaseSpeed))
+		Log("police: cars arrive at the game's chase speed (re-run install.sh)");
+	if (!hooks::Install("_ZN4CPed4SeekEv", Hook_Seek, orig_Seek))
+		Log("police: cops chase on foot at the game's run (re-run install.sh)");
 	if (!gReady)
 		Log("police: a function is missing; the game's police as they were");
 	return gReady;

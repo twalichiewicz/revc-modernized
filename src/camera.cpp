@@ -6,14 +6,25 @@
 #include "combat.h"
 #include "config.h"
 #include "controls.h"
+#include "doorgrab.h"
 #include "driveby.h"
 #include "fpbob.h"
+#include "fpfeedback.h"
+#include "draw.h"
+#include "canvas.h"
+#include "wheel.h"
 #include "game.h"
 #include "heli.h"
+#include "flightmodel.h"
+#include "planeflight.h"
+#include "airportjets.h"
+#include "jetwash.h"
 #include "hooks.h"
 #include "log.h"
 #include "phone.h"
 #include "police.h"
+#include "reactions.h"
+#include "seateye.h"
 #include "shotsound.h"
 #include "sniper.h"
 #include "swim.h"
@@ -141,6 +152,11 @@ float gStepSide;  // m/s to his right, eased: the strafe roll (no jitter off a w
 fpbob::State gBob;          // CS's bob
 fpbob::Steps gSteps;        // his height over steps
 bool gHideHead;             // this frame (after CPed::PreRender)
+// Knocked down (#25): the head's view last frame, and how much of it is left
+// as the view eases back to his look once he's up.
+CVector gDownForward, gDownUp;
+float gDownBlend;
+constexpr float kDownSettle = 0.4f; // s
 bool gOnFoot;               // first person on foot, this frame
 float gLookYaw, gLookPitch; // the right stick's look in the seat, eased
 CVector gViewForward{0.0f, 1.0f, 0.0f}; // last frame's, in first person
@@ -152,6 +168,45 @@ int32_t (*orig_SetupEntityVisibility)(uint8_t *entity);
 bool (*orig_Fire)(uint8_t *weapon, uint8_t *shooter, CVector *source); // CWeapon::Fire
 uint8_t *gFreeCam;                         // CCamera::bFreeCam
 float gLookIdle;                           // s since the right stick last looked about the seat
+fpfeedback::Impact gImpact;
+Im2DCanvas gImpactCanvas;
+fpfeedback::MatrixRestore gOrdinary[64];
+uint8_t *gPoseOwner;
+void *gPoseClump;
+int gPoseModel = -1;
+uint32_t gPoseTime;
+uint8_t *gLifePed;
+void *gLifeClump;
+uint32_t gLifeTime;
+bool gLifeSeen;
+int (*gPedRef)(uint8_t *);
+int gPoseHandle = -1, gLifeHandle = -1;
+uint8_t **gAircraftVehiclePool;
+bool (*gAircraftMission)();
+bool *gAircraftCutscene;
+
+bool PlayerAlive(const uint8_t *ped)
+{
+	return ped && fpfeedback::CanPose(Health(ped), PedState(ped), true);
+}
+void RestorePlayerBones(uint8_t *ped)
+{
+	if (!ped || ped != gPoseOwner || !gHierarchy || !gPedRef || gPedRef(ped) != gPoseHandle || EntityClump(ped) != gPoseClump ||
+	    EntityModel(ped) != gPoseModel || (api.timeMs && *api.timeMs < gPoseTime)) {
+		for (auto &bone : gOrdinary) bone = {};
+		gPoseOwner = nullptr;
+		return;
+	}
+	void *hierarchy = gHierarchy(gPoseClump);
+	float *matrices = hierarchy ? gBoneMatrices(hierarchy) : nullptr;
+	if (matrices)
+		for (int tag = 0; tag < 64; ++tag) {
+			const int index = gBoneIndex(hierarchy, tag);
+			if (index >= 0) gOrdinary[tag].Restore(reinterpret_cast<uintptr_t>(hierarchy), matrices + index * 16);
+		}
+	gPoseOwner = nullptr;
+}
+
 
 CVector &Row(size_t offset) { return *reinterpret_cast<CVector *>(api.theCamera + offset); }
 CVector Add(const CVector &a, const CVector &b) { return {a.x + b.x, a.y + b.y, a.z + b.z}; }
@@ -179,6 +234,10 @@ CVector Turn(const CVector &v, const CVector &axis, float angle)
 void TurnCamera(float yaw, float pitch, float roll)
 {
 	CVector front = Row(0x10), up = Row(0x20);
+	if (gOnFoot) {
+		const float was = std::asin(std::clamp(front.z, -1.0f, 1.0f));
+		pitch = fpfeedback::Pitch(was + pitch) - was; // recoil cannot push the view past the pole
+	}
 	const CVector side = Normal(Cross(front, up));
 	front = Turn(front, up, yaw);
 	front = Turn(front, side, pitch);
@@ -317,6 +376,22 @@ void NearClip(float near)
 
 void OnFoot(uint8_t *ped, float dt)
 {
+	gOnFoot = true; // pitch bounds apply to sway/recoil as well as raw look
+	// Knocked down (#25, fully attached): the eye in his ragdoll's head and the
+	// view his head has, rolling with the tumble; no turning him, no sway.
+	Vec3 headEye, headRight, headForward, headUp;
+	if (reactions::PlayerHeadView(headEye, headRight, headForward, headUp)) {
+		Row(0x10) = {headForward.x, headForward.y, headForward.z};
+		Row(0x20) = {headUp.x, headUp.y, headUp.z};
+		Row(0x00) = Cross(Row(0x20), Row(0x10));
+		Row(0x30) = {headEye.x, headEye.y, headEye.z};
+		NearClip(kNearClipFoot);
+		gDownForward = Row(0x10);
+		gDownUp = Row(0x20);
+		gDownBlend = 1.0f;
+		gHeadReady = false; // his steadied head starts afresh once he's up
+		return;
+	}
 	// Just out of the sniper scope: on where it looked (the follow camera's own
 	// pitch, raised below, would point elsewhere), this frame and after.
 	CVector scoped;
@@ -333,7 +408,21 @@ void OnFoot(uint8_t *ped, float dt)
 	}
 	// Level the view, the same aiming or not: aiming only zooms. (Shots and the
 	// crosshair follow the view itself, so it needn't be the game's aim line.)
-	TurnCamera(0.0f, kLevel, 0.0f);
+	const uint8_t *follow = ActiveCam();
+	const float alpha = *reinterpret_cast<const float *>(follow + kCamAlpha), beta = *reinterpret_cast<const float *>(follow + kCamBeta);
+	const fpfeedback::Basis view = fpfeedback::View(beta + 1.57079633f, alpha + kLevel);
+	Row(0x10) = view.forward; Row(0x20) = view.up; Row(0x00) = Cross(view.up, view.forward);
+	// Up again after a knockdown: from his head's last view back to his look.
+	if (gDownBlend > 0.0f) {
+		gDownBlend = std::max(0.0f, gDownBlend - dt / kDownSettle);
+		const float t = 1.0f - gDownBlend * gDownBlend * (3.0f - 2.0f * gDownBlend); // smoothstep of what's gone
+		const CVector f = Add(Mul(gDownForward, 1.0f - t), Mul(view.forward, t));
+		if (std::sqrt(Dot(f, f)) > 1e-3f) {
+			const CVector forward = Normal(f), u = Add(Mul(gDownUp, 1.0f - t), Mul(view.up, t));
+			const CVector up = Normal(Sub(u, Mul(forward, Dot(u, forward))));
+			Row(0x10) = forward; Row(0x20) = up; Row(0x00) = Cross(up, forward);
+		}
+	}
 	const CVector front = Row(0x10);
 	const CVector flat = Normal(CVector{front.x, front.y, 0.0f});
 	TurnBody(ped, flat, dt); // before his head is found: it turns with him
@@ -360,7 +449,12 @@ void OnFoot(uint8_t *ped, float dt)
 	const float bob = gConfig.headBob ? fpbob::Bob(gBob, speed, dt, onGround) : 0.0f;
 	// The eye is in his head, its sway about his body eased out (SteadyHead):
 	// fixed to his body it would sit behind his head, in his neck.
-	CVector eye = Add(body, ToWorld(ped, SteadyHead(ped, ped, dt, kSettle)));
+	CVector eye;
+	if (swim::EyePosition(ped, eye)) {
+		gHeadReady = false; // leaving the water starts a fresh upright head filter
+	} else {
+		eye = Add(body, ToWorld(ped, SteadyHead(ped, ped, dt, kSettle)));
+	}
 	// Looking down, the eye tips forward past his chest (fpbob::LookDown).
 	const fpbob::Push push = fpbob::LookDown(front.z);
 	eye = Add(eye, Add(CVector{0.0f, 0.0f, kEyeUp + bob - push.down}, Mul(flat, kEyeAhead + push.ahead)));
@@ -385,12 +479,84 @@ void InVehicle(uint8_t *ped, uint8_t *vehicle, float dt)
 	const CVector head = SteadyHead(ped, vehicle, dt, bike ? kSettleOnBike : kSettleInVehicle);
 	const CVector origin = EntityPos(vehicle), &ahead = Axis(vehicle, 0x10), &up = Axis(vehicle, 0x20);
 	CVector eye = Add(origin, ToWorld(vehicle, head));
-	eye = bike ? Add(eye, Add(Mul(ahead, kBikeEyeAhead), Mul(up, kBikeEyeUp))) : Add(eye, Mul(up, kEyeUp * 0.6f));
+	// In a car whose hood or dash comes up to his eyes, raised to see the road over it (seateye).
+	const CVector sat = ToLocal(vehicle, Sub(Head(ped), origin));
+	const float lift = bike ? 0.0f
+	                        : seateye::Lift(vehicle, {sat.x, sat.y, sat.z + kEyeUp * 0.6f}, PedState(ped) == kPedDriving, dt);
+	eye = bike ? Add(eye, Add(Mul(ahead, kBikeEyeAhead), Mul(up, kBikeEyeUp))) : Add(eye, Mul(up, kEyeUp * 0.6f + lift));
 	if (ActiveCam()[7] && bike) { // CCam::LookingBehind
 		const CVector seat = ToLocal(vehicle, Sub(EntityPos(ped), origin));
 		eye = Add(Add(origin, ToWorld(vehicle, CVector{0.0f, seat.y - kBikeBehindBack, head.z})), Mul(up, kEyeUp));
 	} else if (ActiveCam()[7])
-		eye = Add(Add(origin, ToWorld(vehicle, CVector{0.0f, head.y + kBehindAhead, head.z})), Mul(up, kEyeUp + kBehindUp));
+		eye = Add(Add(origin, ToWorld(vehicle, CVector{0.0f, head.y + kBehindAhead, head.z})), Mul(up, kEyeUp + kBehindUp + lift));
+	// A rolled roof can put BOTH the head and origin+0.5 under terrain.
+	// A segment wholly below a one-sided COL triangle sees no hit. Probe down
+	// from above the car first, at the eye and near-plane corners, then sweep
+	// from a clear anchor. This changes placement rather than post exposure.
+	if (api.ProcessLineOfSight) {
+		const CVector rawEye = eye;
+		uint8_t point[64] = {};
+		uint8_t *hit = nullptr;
+		uint8_t *ignored = api.ignoreEntity ? *api.ignoreEntity : nullptr;
+		if (api.ignoreEntity)
+			*api.ignoreEntity = vehicle;
+		const bool rolled = !bike && up.z < 0.35f;
+		bool floorCleared = false;
+		if (rolled) {
+			constexpr float offsets[5][2] = {
+			    {0, 0}, {.08f, .08f}, {-.08f, .08f}, {.08f, -.08f}, {-.08f, -.08f}};
+			for (const auto &offset : offsets) {
+				CVector from{eye.x + offset[0], eye.y + offset[1], std::max(origin.z, rawEye.z) + 2.0f};
+				const CVector to{from.x, from.y, rawEye.z - .2f};
+				for (int layer = 0; layer < 3 && from.z > to.z; ++layer) {
+					if (!api.ProcessLineOfSight(from, to, point, hit, true, false, false, true,
+								    true, false, false, false))
+						break;
+					const CVector contact = *reinterpret_cast<const CVector *>(point);
+					const CVector normal = Normal(*reinterpret_cast<const CVector *>(point + 0x10));
+					// Continue below a bridge/ceiling above the car, instead of
+					// choosing its deck or losing the ground beneath it.
+					if (normal.z <= .25f || contact.z > origin.z + .8f) {
+						from.z = contact.z - .02f;
+						continue;
+					}
+					const float safe = contact.z + (.18f - normal.x * (eye.x - contact.x) -
+									normal.y * (eye.y - contact.y)) /
+									   normal.z;
+					if (safe > eye.z) {
+						eye.z = safe;
+						floorCleared = true;
+					}
+					break;
+				}
+			}
+		}
+		CVector anchor = Add(origin, CVector{0, 0, 0.5f});
+		if (rolled)
+			anchor.z = std::max(anchor.z, eye.z + .25f);
+		if (api.ProcessLineOfSight(anchor, eye, point, hit, true, false, false, true, true, false, false,
+					   false)) {
+			const CVector contact = *reinterpret_cast<const CVector *>(point);
+			CVector normal = Normal(*reinterpret_cast<const CVector *>(point + 0x10));
+			if (Dot(normal, Sub(anchor, contact)) < 0)
+				normal = Mul(normal, -1);
+			eye = Add(contact, Mul(normal, 0.16f));
+		}
+		if (api.ignoreEntity)
+			*api.ignoreEntity = ignored;
+		static bool wasRolled;
+		static uint32_t lastRollLog;
+		const uint32_t now = api.timeMs ? *api.timeMs : 0;
+		if (rolled && (!wasRolled || now < lastRollLog || now - lastRollLog >= 2000)) {
+			Log("camera: rolled cabin upZ %.2f originZ %.2f eyeZ %.2f -> %.2f ground %d native blur %d "
+			    "alpha %d",
+			    up.z, origin.z, rawEye.z, eye.z, floorCleared,
+			    *reinterpret_cast<const int32_t *>(api.theCamera + 0xb8),
+			    *reinterpret_cast<const int32_t *>(api.theCamera + 0xc8));
+			lastRollLog = now;
+		}
+		wasRolled = rolled;
+	}
 	Row(0x30) = eye;
 	if (bike) {
 		const float lean = std::clamp(*reinterpret_cast<const float *>(vehicle + kRiderLean), -1.0f, 1.0f);
@@ -404,7 +570,7 @@ void InVehicle(uint8_t *ped, uint8_t *vehicle, float dt)
 		Row(0x20) = up;
 		Row(0x00) = Cross(up, front);
 		gLookYaw = gLookPitch = 0.0f;
-	} else {
+	} else if (!controls::LookFrozen()) {
 		// The right stick looks about the car from his seat.
 		float yaw, pitch;
 		if (controls::LookTurn(yaw, pitch)) {
@@ -483,7 +649,16 @@ bool Hook_Fire(uint8_t *weapon, uint8_t *shooter, CVector *source)
 		const bool player = shooter && shooter == api.FindPlayerPed(), scoped = player && sniper::Active();
 		if (scoped)
 			sniper::BeforeShot(); // spread as he creeps
+		// Third person aimed and moving: a slight spread (#20), on the front the
+		// game's own aim (Find3rdPersonCamTargetVector) reads, for this shot only.
+		const float spread = player && !scoped && api.theCamera ? aimcam::Spread() : 0.0f;
+		CVector *camFront = spread > 0.0f ? reinterpret_cast<CVector *>(ActiveCam() + kCamFront) : nullptr;
+		const CVector front = camFront ? *camFront : CVector{};
+		if (camFront)
+			*camFront = Spread(front, *reinterpret_cast<const CVector *>(ActiveCam() + kCamUp), spread);
 		const bool fired = orig_Fire(weapon, shooter, source);
+		if (camFront)
+			*camFront = front;
 		if (scoped)
 			sniper::AfterShot(fired); // and the bolt
 		if (fired && player)
@@ -623,13 +798,103 @@ void AimWatch(float dt, bool onFoot)
 		watching = 0;
 }
 
+uint8_t *AircraftRudderPad(uint8_t *cam, uint8_t *ped)
+{
+	if (cam != api.theCamera || !PlayerAlive(ped) || !PedInVehicle(ped) || PedState(ped) != kPedDriving ||
+	    !cam[kLookingAtPlayer] || cam[kWideScreen] || cam[kFirstPersonUsed] || driveby::Aiming() ||
+	    !gAircraftMission || !gAircraftCutscene || *gAircraftCutscene || gAircraftMission() ||
+	    !gAircraftVehiclePool || !*gAircraftVehiclePool || !api.PoolsGetVehicle || !api.GetPad)
+		return nullptr;
+	uint8_t *vehicle = PedVehicle(ped);
+	const uint8_t *pool = *gAircraftVehiclePool;
+	const auto *entries = *reinterpret_cast<uint8_t *const *>(pool);
+	const auto *flags = *reinterpret_cast<uint8_t *const *>(pool + 8);
+	const int capacity = *reinterpret_cast<const int *>(pool + 0x10);
+	const uintptr_t address = reinterpret_cast<uintptr_t>(vehicle), base = reinterpret_cast<uintptr_t>(entries);
+	if (!entries || !flags || capacity <= 0 || capacity > 100000 || address < base || (address - base) % 0x6f0)
+		return nullptr;
+	const size_t index = (address - base) / 0x6f0;
+	if (index >= size_t(capacity) || (flags[index] & 0x80) ||
+	    api.PoolsGetVehicle(int(index * 256) | flags[index]) != vehicle)
+		return nullptr;
+	if (!IsVehicle(vehicle) || (vehicle[0x60] >> 3) != 0 || !std::isfinite(VehicleHealth(vehicle)) ||
+	    VehicleHealth(vehicle) <= 0 || *reinterpret_cast<uint8_t **>(vehicle + 0x218) != ped)
+		return nullptr;
+	const int kind = *reinterpret_cast<const int *>(vehicle + 0x348), model = EntityModel(vehicle);
+	bool aircraft = false;
+	switch (model) {
+	case 155: case 177: case 199: case 217: case 218: case 227: aircraft = kind == 0; break;
+	case 190: aircraft = kind == 1 && gConfig.planes; break;
+	}
+	// Native CPlane ownership includes registered airport jets. A model ID
+	// alone cannot authorize this scope for ambient or foreign aircraft.
+	if (kind == 4 && planeflight::Owns(vehicle)) aircraft = true;
+	// A new CCam fills a null target from TheCamera inside its Process call.
+	const uint8_t *target = *reinterpret_cast<uint8_t **>(ActiveCam() + 0x1b0);
+	if (!aircraft || *reinterpret_cast<uint8_t **>(cam + 0x860) != vehicle || (target && target != vehicle))
+		return nullptr;
+	const uint16_t mode = *reinterpret_cast<const uint16_t *>(ActiveCam() + 0xc);
+	// CCam::Process's native look-side branch admits these four vehicle modes.
+	if (mode != 3 && mode != kModeBumper && mode != 18 && mode != 22)
+		return nullptr;
+	uint8_t *pad = api.GetPad(0);
+	if (!pad || PadControlsDisabled(pad) || (api.padAffectedByController && *api.padAffectedByController == 1 &&
+	    *reinterpret_cast<const uint16_t *>(pad + 0xec) >= 3))
+		return nullptr;
+	return pad;
+}
+
 void Hook_Process(uint8_t *cam)
 {
-	orig_Process(cam);
+	uint8_t *before = api.FindPlayerPed();
+	const uint32_t now = api.timeMs ? *api.timeMs : 0;
+	const int handle = before && gPedRef ? gPedRef(before) : -1;
+	const bool replaced = before != gLifePed || handle != gLifeHandle || (before && EntityClump(before) != gLifeClump) ||
+	                      (gLifeSeen && now < gLifeTime);
+	if (replaced || !PlayerAlive(before) || !gConfig.firstPerson) {
+		RestorePlayerBones(before); // before the game's death camera can pull out
+		gHideHead = gOnFoot = false;
+		gDownBlend = 0.0f; // (a knockdown's ease-back ends with first person on foot)
+		gCockpit = nullptr;
+		gHeadReady = false;
+		gImpact.Reset();
+		fpgun::CancelFrame();
+	}
+	gLifePed = before;
+	gLifeHandle = handle;
+	gLifeClump = before ? EntityClump(before) : nullptr;
+	gLifeTime = now;
+	gLifeSeen = true;
+	{
+		struct RudderScope {
+			uint8_t *pad;
+			int16_t left = 0, right = 0;
+			explicit RudderScope(uint8_t *p) : pad(p)
+			{
+				if (pad) {
+					left = PadNew(pad, kPadLT); right = PadNew(pad, kPadRT);
+					PadNew(pad, kPadLT) = PadNew(pad, kPadRT) = 0;
+				}
+			}
+			~RudderScope()
+			{
+				if (pad) { PadNew(pad, kPadLT) = left; PadNew(pad, kPadRT) = right; }
+			}
+		} rudders(AircraftRudderPad(cam, before));
+		// Native camera getters alias the rudders to side/behind look. Let the
+		// original camera update its cached DirectionWasLooking to forward3,
+		// then restore the raw buttons before any flight/world callback reads.
+		orig_Process(cam);
+	}
+	planeflight::Frame(now);
+	airportjets::Frame(now);
+	jetwash::Frame(now);
+	flightmodel::Frame(now);
 	wanted::Update();
 	traffic::AfterCamera();
 	police::Update();
 	heli::Update();
+	doorgrab::Update();
 	watch::Frame();
 	phone::AfterWorld();
 	uint8_t *ped = api.FindPlayerPed();
@@ -651,7 +916,7 @@ void Hook_Process(uint8_t *cam)
 	const int32_t state = ped ? PedState(ped) : 0;
 	const bool gettingIn = state == kStateOpenDoor || state == kStateCarJack || state == kStateEnterCar;
 	const bool gettingOut = state == kStateExitCar;
-	if (gConfig.firstPerson && ped && !scripted) {
+	if (gConfig.firstPerson && PlayerAlive(ped) && !scripted) {
 		if (vehicle && mode == kModeBumper && !gettingOut) {
 			InVehicle(ped, vehicle, dt);
 			firstPerson = true;
@@ -672,6 +937,8 @@ void Hook_Process(uint8_t *cam)
 	}
 	if (!gCockpit)
 		gLookYaw = gLookPitch = 0.0f;
+	if (!gOnFoot)
+		gDownBlend = 0.0f; // a knockdown's ease-back ends with first person on foot (a car, third person)
 	gHideHead = firstPerson;
 	bool moved = firstPerson;
 	if (OurCamera() || (ped && PedInVehicle(ped) && !api.theCamera[kWideScreen]))
@@ -694,6 +961,7 @@ void Hook_Process(uint8_t *cam)
 	}
 	if (moved)
 		ToRenderWare();
+	gImpact.Tick(std::max(0.0f, dt));
 }
 
 template <typename T>
@@ -709,10 +977,15 @@ bool Bind(T &out, const char *name)
 
 bool Install()
 {
+	// Optional aircraft-camera scope: missing ownership bindings retain native look.
+	Bind(gAircraftVehiclePool, "_ZN6CPools15ms_pVehiclePoolE");
+	Bind(gAircraftMission, "_ZN11CTheScripts18IsPlayerOnAMissionEv");
+	Bind(gAircraftCutscene, "_ZN12CCutsceneMgr10ms_runningE");
 	gNearClipZ = static_cast<float *>(dlsym(RTLD_MAIN_ONLY, "_ZN5CDraw13ms_fNearClipZE"));
 	const bool bound = Bind(gUpdateRW, "_ZN7CMatrix8UpdateRWEv") && Bind(gUpdateRwFrame, "_ZN7CEntity13UpdateRwFrameEv") &&
 	                   Bind(gUpdateRpHAnim, "_ZN7CEntity13UpdateRpHAnimEv") &&
 	                   Bind(gComponentPosition, "_ZN6CPedIK20GetComponentPositionERN2rw3V3dEj") &&
+	                   Bind(gPedRef, "_ZN6CPools9GetPedRefEP4CPed") &&
 	                   Bind(gCameraFrame, "_Z16RwCameraGetFramePKN2rw6CameraE") &&
 	                   Bind(gFrameMatrix, "_Z16RwFrameGetMatrixPN2rw5FrameE") &&
 	                   Bind(gMatrixUpdate, "_Z14RwMatrixUpdatePN2rw6MatrixE") &&
@@ -727,18 +1000,20 @@ bool Install()
 	gFreeCam = static_cast<uint8_t *>(dlsym(RTLD_MAIN_ONLY, "_ZN7CCamera8bFreeCamE"));
 	if (!hooks::Install("_ZN7CWeapon4FireEP7CEntityP7CVector", Hook_Fire, orig_Fire))
 		Log("camera: no CWeapon::Fire hook (re-run install.sh); shots in first person go where the game aims them");
-	if (!hooks::Install("_ZN9CRenderer21SetupEntityVisibilityEP7CEntity", Hook_SetupEntityVisibility,
-	                    orig_SetupEntityVisibility))
+	orig_SetupEntityVisibility = reinterpret_cast<decltype(orig_SetupEntityVisibility)>(
+	    hooks::Chain("_ZN9CRenderer21SetupEntityVisibilityEP7CEntity",
+	                 reinterpret_cast<void *>(Hook_SetupEntityVisibility)));
+	if (!orig_SetupEntityVisibility)
 		Log("camera: no SetupEntityVisibility hook (re-run install.sh); his vehicle isn't drawn in first person");
 	return bound && hooks::Install("_ZN7CCamera7ProcessEv", Hook_Process, orig_Process);
 }
 
-bool FirstPersonOnFoot() { return gOnFoot; }
+bool FirstPersonOnFoot() { return gOnFoot && PlayerAlive(api.FindPlayerPed()); }
 
 bool FirstPersonChosen()
 {
 	uint8_t *ped = api.FindPlayerPed();
-	return gConfig.firstPerson && gFirstPerson && ped && !PedInVehicle(ped);
+	return gConfig.firstPerson && gFirstPerson && PlayerAlive(ped) && !PedInVehicle(ped);
 }
 
 CVector ViewForward() { return Row(0x10); }
@@ -750,24 +1025,78 @@ CVector ScopeEye(uint8_t *ped)
 	return Add(Head(ped), Add(CVector{0.0f, 0.0f, kEyeUp}, Mul(flat, kEyeAhead)));
 }
 bool InSeat() { return gCockpit != nullptr; }
+uint8_t *SeatVehicle() { return gCockpit; }
 float AimBlend() { return gAim; }
 float StepPhase() { return gBobPhase; }
 float StepAmount() { return gBobAmount; }
 float StepSpeed() { return gStepSpeed; }
 
+void BeforePreRender(uint8_t *ped)
+{
+	if (ped == api.FindPlayerPed()) RestorePlayerBones(ped);
+}
+void Damaged(uint8_t *ped, uint8_t *attacker, float before, float after)
+{
+	if (ped != api.FindPlayerPed() || !gConfig.firstPerson || before <= after) return;
+	float side = 0, ahead = 0;
+	if (attacker) {
+		const CVector direction = Sub(EntityPos(attacker), EntityPos(ped));
+		side = Dot(direction, Normal(Cross(Row(0x10), Row(0x20))));
+		ahead = Dot(direction, Row(0x10));
+	}
+	gImpact.Hit(before, after, side, ahead);
+}
+void DrawDamage()
+{
+	// Damage belongs to the player HUD, including third-person ADS and scopes.
+	// The selected camera mode must not silently suppress an accepted hit.
+	if (!gConfig.firstPerson || !PlayerAlive(api.FindPlayerPed()) || !api.theCamera[kLookingAtPlayer] ||
+	    api.theCamera[kWideScreen] || gImpact.Opacity() <= 0.0f)
+		return;
+	const float w = float(ScreenWidth()), h = float(ScreenHeight()), edge = h * 0.19f;
+	SetHudRenderStates();
+	gImpactCanvas.SetTexture(nullptr);
+	// Layered edge blood/impact vignetting leaves the centre readable.
+	for (int i = 0; i < 6; ++i) {
+		const float a = float(i) / 6, b = float(i + 1) / 6;
+		const float alpha = gImpact.Opacity() * (1 - a) * 255;
+		auto strip = [&](float x0, float y0, float x1, float y1, float direction) {
+			const CRGBA colour{130, 5, 8,
+					   uint8_t(std::clamp(alpha * (1.0f + direction * 0.6f), 0.0f, 150.0f))};
+			gImpactCanvas.Quad({x0, y0}, {x1, y0}, {x1, y1}, {x0, y1}, colour);
+		};
+		strip(0, edge * a, w, edge * b, gImpact.Ahead());
+		strip(0, h - edge * b, w, h - edge * a, -gImpact.Ahead());
+		strip(edge * a, edge, edge * b, h - edge, -gImpact.Side());
+		strip(w - edge * b, edge, w - edge * a, h - edge, gImpact.Side());
+	}
+	gImpactCanvas.Flush();
+}
+
 void AfterPreRender(uint8_t *ped)
 {
-	if (!gHideHead || !gHierarchy || ped != api.FindPlayerPed())
+	if (!gHideHead || !gHierarchy || ped != api.FindPlayerPed() || !PlayerAlive(ped)) {
+		if (ped == api.FindPlayerPed()) RestorePlayerBones(ped);
 		return;
-	if (gOnFoot && !fpgun::Prepare(ped))
-		viewmodel::Apply(ped); // a gun without a new viewmodel yet, or fists: his real arms posed
-	else if (gCockpit && driveby::Aiming())
-		viewmodel::Apply(ped, true); // the gun held as on foot, pointing where it shoots
+	}
 	void *clump = *reinterpret_cast<void *const *>(ped + kRwObject);
 	void *hierarchy = clump ? gHierarchy(clump) : nullptr;
 	if (!hierarchy)
 		return;
 	float *matrices = gBoneMatrices(hierarchy);
+	gPoseOwner = ped; gPoseClump = clump; gPoseModel = EntityModel(ped);
+	gPoseHandle = gPedRef ? gPedRef(ped) : -1;
+	gPoseTime = api.timeMs ? *api.timeMs : 0;
+	for (int tag = 0; tag < 64; ++tag) {
+		const int index = gBoneIndex(hierarchy, tag);
+		if (index >= 0) gOrdinary[tag].Save(reinterpret_cast<uintptr_t>(hierarchy), matrices + index * 16);
+	}
+	if (gOnFoot && !reactions::PlayerDown() && !fpgun::Prepare(ped)) // down (#25): his ragdoll's own arms
+		viewmodel::Apply(ped);
+	else if (gCockpit && driveby::Aiming())
+		viewmodel::Apply(ped, true);
+	else if (gCockpit)
+		fpgun::PrepareSteering(ped);
 	// A bone's skin shrunk to a point where bone `to` is (the skin draws it
 	// there), or its axes put back to their length.
 	auto bone = [&](int tag) {

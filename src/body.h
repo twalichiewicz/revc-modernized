@@ -60,6 +60,19 @@ struct Pose {
 // Measures the player's skeleton if it hasn't been (or his model changed):
 // false if it couldn't be, and then nothing is posed.
 bool Prepare(uint8_t *ped);
+// A temporary owner can stop first-use measurement across native calls.
+// `live` checks actor/clump memory identity; `active` checks its current
+// control/animation lease. Cleanup may restore our unchanged key writes
+// after active ownership ends, provided the same memory is still live.
+struct PreparationOwner {
+	bool (*live)(uint8_t *ped, void *context);
+	bool (*active)(uint8_t *ped, void *context);
+	void *context;
+};
+bool Prepare(uint8_t *ped, const PreparationOwner &owner);
+// A temporary pose supplies freshly resolved native bone frames. This pure
+// check rejects a replaced frame/key before any cached frame is read.
+bool CurrentKeys(uint8_t *ped, uint8_t *const (&frames)[kBones]);
 // After Prepare: a joint's place in a pose (ped frame), a bone's standing
 // direction (towards its child) and length.
 CVector Joint(const Pose &pose, Bone b);

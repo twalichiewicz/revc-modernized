@@ -3,6 +3,7 @@
 #include "game.h"
 #include "hooks.h"
 #include "log.h"
+#include "population.h"
 #include "wanted.h"
 
 #include <algorithm>
@@ -48,6 +49,7 @@ void (*orig_AddToPopulation)(float minDist, float maxDist, float minDistOffScree
 int (*gGetAlpha)(void *clump);
 void (*gSetAlpha)(void *clump, int alpha);
 bool gStarted;
+HookState gHookState;
 float gReach = 1.0f; // eased speed reach
 
 // One of the game's caps, scaled: whatever it sets is the base (it starts at
@@ -167,6 +169,8 @@ int32_t Hook_ChooseCarModel(int32_t vehclass)
 // adds them as it did).
 void Hook_AddToPopulation(float minDist, float maxDist, float minDistOffScreen, float maxDistOffScreen)
 {
+	if (population::Active())
+		return; // Outdoor random civilians and foot police materialize from city records.
 	uint8_t *ped = api.FindPlayerPed();
 	uint8_t *wanted = ped ? *reinterpret_cast<uint8_t **>(ped + kWanted) : nullptr;
 	// While the police don't know where he is (the wanted overhaul), no cops
@@ -191,8 +195,14 @@ void Hook_AddToPopulation(float minDist, float maxDist, float minDistOffScreen, 
 
 } // namespace
 
+bool OwnsPopulation(bool bindingsReady, bool enabled)
+{
+	return PopulationMayRun(gHookState, bindingsReady, enabled);
+}
+
 void AfterCamera()
 {
+	population::Frame();
 	const float scale = std::clamp(gConfig.spawnDistance, 1.0f, 4.0f);
 	const float dt = *api.timeStep / 50.0f;
 	// Once the game is running (it sets these up as it starts).
@@ -244,11 +254,12 @@ bool Install()
 		gModelTimer = reinterpret_cast<int32_t *>(base + kModelTimer);
 	else
 		Log("traffic: the car model timer isn't where expected; car models turn over as before");
-	if (!gVehiclePool || !hooks::Install("_ZN8CCarCtrl14ChooseCarModelEi", Hook_ChooseCarModel, orig_ChooseCarModel))
-		return false;
-	if (!hooks::Install("_ZN11CPopulation15AddToPopulationEffff", Hook_AddToPopulation, orig_AddToPopulation))
-		Log("traffic: no CPopulation::AddToPopulation hook (re-run install.sh); street cops still appear on foot");
-	return true;
+	gHookState = InstallHooks(gVehiclePool != nullptr,
+	    [] { return hooks::Install("_ZN8CCarCtrl14ChooseCarModelEi", Hook_ChooseCarModel, orig_ChooseCarModel); },
+	    [] { return hooks::Install("_ZN11CPopulation15AddToPopulationEffff", Hook_AddToPopulation, orig_AddToPopulation); });
+	if (!gHookState.population)
+		Log("traffic: no CPopulation::AddToPopulation interception; native population retained, virtual population disabled");
+	return gHookState.cars;
 }
 
 } // namespace traffic

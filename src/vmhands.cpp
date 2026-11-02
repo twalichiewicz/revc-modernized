@@ -10,21 +10,36 @@ constexpr Vec3 kMagazineForearm{-0.5f, -1.0f, -0.6f}, kMagazineUpper{-0.3f, -1.0
 constexpr Vec3 kAway{0.0f, -0.12f, -0.35f};
 // His left upper arm from the forearm, in the gun's frame: out and up.
 constexpr Vec3 kLeftUpper{-0.35f, 0.0f, 0.55f};
+// m back along his forearm from the wrist a kick turns the gun about (the
+// research's half a gun's length or so behind the grip: Counter-Strike's pistols).
+constexpr float kKickPivot = 0.10f;
 
 const Frame &PartAt(const std::vector<Frame> &parts, uint32_t i) { return i < parts.size() ? parts[i] : parts[0]; }
 
 } // namespace
 
+Frame MovedAbout(const Frame &framed, Vec3 about, const Move &m)
+{
+	const float d = 3.14159265f / 180.0f;
+	Frame f = Compose(TurnAbout({0, 1, 0}, m.roll * d, about), framed);
+	f = Compose(TurnAbout({1, 0, 0}, m.pitch * d, about), f);
+	f = Compose(TurnAbout({0, 0, 1}, m.yaw * d, about), f);
+	f.pos = Add(f.pos, m.offset);
+	return f;
+}
+
 Frame GunCarried(const Gun &gun, const Frame &framed, const Move &m)
 {
 	// Turned about his grip: rolled, tipped, then its muzzle round; then moved.
-	const Vec3 grip = HandFor(gun, framed).pos;
-	const float d = 3.14159265f / 180.0f;
-	Frame f = Compose(TurnAbout({0, 1, 0}, m.roll * d, grip), framed);
-	f = Compose(TurnAbout({1, 0, 0}, m.pitch * d, grip), f);
-	f = Compose(TurnAbout({0, 0, 1}, m.yaw * d, grip), f);
-	f.pos = Add(f.pos, m.offset);
-	return f;
+	return MovedAbout(framed, HandFor(gun, framed).pos, m);
+}
+
+Frame GunKicked(const Gun &gun, const Frame &carried, const KickMove &kick)
+{
+	const Frame hand = HandFor(gun, carried);
+	Vec3 fore, upper;
+	ArmDirections(hand, ArmAngles{}, false, fore, upper);
+	return MovedAbout(carried, Add(hand.pos, Mul(fore, kKickPivot)), Move{kick.offset, kick.pitch, kick.roll, kick.yaw});
 }
 
 Frame GunMoved(const Gun &gun, const Frame &carried, const AnimOutput &out)
@@ -36,6 +51,21 @@ HandPlace RightPlace(const Gun &gun, const Frame &framed, const Frame &moved)
 {
 	HandPlace place{HandFor(gun, moved), ArmAngles{}, true, true, Identity()};
 	ArmDirections(HandFor(gun, framed), ArmAngles{}, false, place.angles.forearm, place.angles.upper);
+	return place;
+}
+
+HandPlace RightPlace(const Arm &arm, const Gun &gun, const Frame &carried, const Frame &moved)
+{
+	HandPlace place = RightPlace(gun, carried, moved);
+	HandPlace rest = RightPlace(gun, carried, carried);
+	if (FindPart(gun, "pump") >= 0) {
+		// The pump shotgun's wrist is pitched50deg around its grip. The
+		// hand's axes therefore point the inferred forearm upward into the
+		// eye. Its elbow/shoulder follow the gun's carried frame instead.
+		rest.angles.forearm = Normal(Rotate(carried, {0.35f, -1.0f, -0.75f}));
+		rest.angles.upper = Normal(Rotate(carried, {0.25f, -1.0f, -0.25f}));
+	}
+	place.angles = KeepShoulder(arm, rest.hand, rest.angles, place.hand.pos, false);
 	return place;
 }
 

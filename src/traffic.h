@@ -23,6 +23,25 @@
 
 namespace traffic {
 
+// Shared installation/gating seam. Population interception is independent of
+// the optional car-model hook; symbol availability alone does not own generation.
+struct HookState {
+	bool cars = false, population = false;
+};
+template <typename CarHook, typename PopulationHook>
+HookState InstallHooks(bool carBindings, CarHook carHook, PopulationHook populationHook)
+{
+	HookState state;
+	state.cars = carBindings && carHook();
+	state.population = populationHook();
+	return state;
+}
+inline bool PopulationMayRun(const HookState &state, bool bindingsReady, bool enabled)
+{
+	return state.population && bindingsReady && enabled;
+}
+bool OwnsPopulation(bool bindingsReady, bool enabled);
+
 bool Install();
 // After CCamera::Process, which sets the multiplier each frame.
 void AfterCamera();

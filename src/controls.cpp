@@ -11,6 +11,7 @@
 #include "shootdodge.h"
 #include "driveby.h"
 #include "fplook.h"
+#include "fpfeedback.h"
 #include "fpshoot.h"
 #include "fpwalk.h"
 #include "sniper.h"
@@ -471,6 +472,8 @@ void LeftStick(uint8_t *pad, const Gamepad &now)
 // small round dead zone, a response curve, slower while aiming. The game's own
 // stick handling only starts at 30% deflection, with a jump (CapturePad).
 bool gLookTurn;
+fpfeedback::LookGate gLookGate;
+bool gLookFrozen;
 float gLookYaw, gLookPitch; // this frame's, for the first-person seat view
 
 bool StickRates(const Gamepad &now, bool precise, float &yaw, float &pitch)
@@ -744,9 +747,26 @@ void Hook_Update(uint8_t *pad, int16_t index)
 	}
 	if (gConfig.dpadActions)
 		RadioDpad(now, control ? vehicle : nullptr);
+	// Wheel input owns every camera path, including the seat's separately
+	// cached stick rates and the opening/release frame after a D-pad hold.
+	gLookFrozen = gLookGate.Update(wheel::IsOpen());
+	if (gLookFrozen) {
+		gLookTurn = false;
+		gLookYaw = gLookPitch = 0.0f;
+		gFirstPersonStick = {};
+		gAimSlowdown = {};
+		PadJoy(pad, kPadRightStickX) = PadJoy(pad, kPadRightStickY) = 0;
+		*reinterpret_cast<float *>(api.newMouseState + 8) = 0.0f;
+		*reinterpret_cast<float *>(api.newMouseState + 12) = 0.0f;
+	}
 	gPrev = now;
 
 	orig_Update(pad, index);
+	if (gLookFrozen) {
+		PadNew(pad, kPadRightStickX) = PadNew(pad, kPadRightStickY) = 0;
+		*reinterpret_cast<float *>(api.newMouseState + 8) = 0.0f;
+		*reinterpret_cast<float *>(api.newMouseState + 12) = 0.0f;
+	}
 
 	// A climb has the controls (keyboard too: this is after the merge), and the
 	// jump that started it isn't a new one once it's done.
@@ -786,19 +806,29 @@ void Hook_Update(uint8_t *pad, int16_t index)
 		sniper::GameAims(false, false, false); // (not read: a script's, a vehicle's, another setup's)
 	gTriggersRead = false;
 	crouch::TakeStick(pad); // crouched, he walks by crouch.cpp, not the game
-	if (aimcam::Aiming()) // a walk (the game runs past about half a push)
+	if (aimcam::Aiming()) { // a walk (the game runs past about half a push)
 		for (PadButton axis : {kPadLeftStickX, kPadLeftStickY})
 			PadNew(pad, axis) = int16_t(PadNew(pad, axis) * aimcam::kWalkStick);
+		// Third person, no sprint while aiming: the game won't fire sprinting
+		// (CPlayerPed::ProcessPlayerWeapon), so it would hold RT back (#20).
+		const bool controller = api.padAffectedByController && *api.padAffectedByController;
+		const int sprint = aimcam::SprintField(*reinterpret_cast<const uint16_t *>(pad + 0xec), controller);
+		if (!camera::FirstPersonOnFoot() && sprint >= 0)
+			*reinterpret_cast<int16_t *>(pad + sprint) = 0;
+	}
 }
 
 } // namespace
 
 bool LookTurn(float &yaw, float &pitch)
 {
-	yaw = gLookTurn ? gLookYaw : 0.0f;
-	pitch = gLookTurn ? gLookPitch : 0.0f;
-	return gLookTurn;
+	const bool live = gLookTurn && !gLookFrozen;
+	yaw = live ? gLookYaw : 0.0f;
+	pitch = live ? gLookPitch : 0.0f;
+	return live;
 }
+
+bool LookFrozen() { return gLookFrozen; }
 
 bindings::PadFamily Family() { return gFamily; }
 

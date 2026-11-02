@@ -51,6 +51,24 @@ void ArmDirections(const Frame &hand, const ArmAngles &angles, bool left, Vec3 &
 	                                    : Normal(Add(Add(forearm, Mul(hy, outward * angles.upperOut)), Mul(hz, angles.upperUp)));
 }
 
+ArmAngles KeepShoulder(const Arm &arm, const Frame &restHand, const ArmAngles &rest, Vec3 hand, bool left)
+{
+	Vec3 fore, upper;
+	ArmDirections(restHand, rest, left, fore, upper);
+	const float l2 = Length(Sub(arm.bind[kFore].pos, arm.bind[kHand].pos)), l1 = Length(Sub(arm.bind[kUpper].pos, arm.bind[kFore].pos));
+	const Vec3 elbow0 = Add(restHand.pos, Mul(fore, l2)), shoulder = Add(elbow0, Mul(upper, l1));
+	const Vec3 reach = Sub(hand, shoulder), along = Normal(reach);
+	const float d = std::clamp(Length(reach), std::fabs(l1 - l2) + 0.01f, l1 + l2 - 0.002f);
+	const float c = std::clamp((l1 * l1 + d * d - l2 * l2) / (2.0f * l1 * d), -1.0f, 1.0f);
+	Vec3 out = Sub(Sub(elbow0, shoulder), Mul(along, Dot(Sub(elbow0, shoulder), along))); // the way it was bent
+	out = Length(out) > 1e-5f ? Normal(out) : Normal(Cross(along, {0, 0, 1}));
+	const Vec3 elbow = Add(shoulder, Add(Mul(along, l1 * c), Mul(out, l1 * std::sqrt(1.0f - c * c))));
+	ArmAngles a = rest;
+	a.forearm = Normal(Sub(elbow, hand));
+	a.upper = Normal(Sub(shoulder, elbow));
+	return a;
+}
+
 void Pose(const Arm &arm, const Frame &handWorld, const Vec3 anchors[kDigits], const bool reach[kDigits],
           const ArmAngles &angles, bool left, Frame out[kArmBones], const Vec3 *bends)
 {

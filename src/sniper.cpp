@@ -1,5 +1,7 @@
 #include "sniper.h"
 #include "camera.h"
+#include "fpfeedback.h"
+#include "controls.h"
 #include "game.h"
 #include "hooks.h"
 #include "log.h"
@@ -50,6 +52,10 @@ CVector Normalised(const CVector &v)
 // After the game's sniper camera: first person's eye, swayed, at the scope's zoom.
 void Hook_ProcessSniper(uint8_t *cam, const CVector &target, float a, float b, float c)
 {
+	const float beforeAlpha = *reinterpret_cast<float *>(cam + kCamAlpha);
+	const float mousePitch = api.newMouseState ? *reinterpret_cast<float *>(api.newMouseState + 12) : 0.0f;
+	const float inputPitch = controls::LookFrozen() || !api.mouseAccelV ? 0.0f
+	    : mousePitch * 4.0f * *api.mouseAccelV * *reinterpret_cast<float *>(cam + kCamFov) / 80.0f;
 	orig_ProcessSniper(cam, target, a, b, c);
 	uint8_t *ped = api.FindPlayerPed();
 	if (!Active() || !ped || cam != ActiveCam())
@@ -63,6 +69,10 @@ void Hook_ProcessSniper(uint8_t *cam, const CVector &target, float a, float b, f
 		*reinterpret_cast<float *>(cam + kCamBeta) = a.beta;
 		front = {std::cos(a.alpha) * std::cos(a.beta), std::cos(a.alpha) * std::sin(a.beta), std::sin(a.alpha)};
 		gWasScoped = true;
+	} else {
+		const float alpha = fpfeedback::Pitch(beforeAlpha + inputPitch), beta = *reinterpret_cast<float *>(cam + kCamBeta);
+		*reinterpret_cast<float *>(cam + kCamAlpha) = alpha;
+		front = {std::cos(alpha)*std::cos(beta), std::cos(alpha)*std::sin(beta), std::sin(alpha)};
 	}
 	const CVector up{0.0f, 0.0f, 1.0f};
 	const CVector right = Normalised({front.y * up.z - front.z * up.y, front.z * up.x - front.x * up.z, front.x * up.y - front.y * up.x});

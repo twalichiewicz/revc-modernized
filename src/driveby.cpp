@@ -1,13 +1,18 @@
 #include "driveby.h"
+#include "ballistics.h"
 #include "camera.h"
 #include "canvas.h"
 #include "config.h"
 #include "fpcross.h"
+#include "reticle.h"
+#include "fpfire.h"
 #include "draw.h"
 #include "game.h"
 #include "hooks.h"
 #include "log.h"
 #include "player.h"
+#include "seatgun.h"
+#include "shaders.h"
 
 #include <algorithm>
 #include <chrono>
@@ -52,7 +57,11 @@ float gYaw, gPitch; // where the aim points (world, radians)
 float gDistance;    // the aiming camera's distance from its pivot
 float gBlend;       // 0 = the vehicle camera, 1 = fully aiming
 Clock::time_point gLastFrame, gAimSince;
-Im2DCanvas gCanvas;
+// In the first-person seat, the shots spread as first person's on foot do
+// (fpfire: tight at first, wider through a burst and at speed), and the
+// crosshair shows it.
+fpfire::Spread gSpread;
+constexpr float kStillBelow = 1.0f, kWalkingBelow = 10.0f; // m/s: the car's speed, as his on foot
 
 struct Pose {
 	CVector source, front, up;
@@ -118,6 +127,30 @@ CVector Aim()
 	return {std::cos(gPitch) * std::cos(gYaw), std::cos(gPitch) * std::sin(gYaw), std::sin(gPitch)};
 }
 
+// The cone a shot from the seat spreads into now (radians; first person only).
+float SpreadAngle(uint8_t *ped)
+{
+	if (!camera::InSeat() || !ped || !PedInVehicle(ped))
+		return 0.0f;
+	const CVector v = EntitySpeed(PedVehicle(ped));
+	const float speed = std::sqrt(v.x * v.x + v.y * v.y) * 50.0f;
+	const fpfire::Moving moving = speed < kStillBelow     ? fpfire::Moving::kStill
+	                              : speed < kWalkingBelow ? fpfire::Moving::kWalking
+	                                                      : fpfire::Moving::kRunning;
+	const int32_t type = WeaponType(PedWeapon(ped, PedCurrentWeaponSlot(ped)));
+	return gSpread.Angle(fpfire::KindOf(type), moving, false, true);
+}
+
+// `dir` spread into a cone of `angle` about it, evenly over its area.
+CVector Spread(const CVector &dir, float angle)
+{
+	if (angle <= 0.0f)
+		return dir;
+	const float r = angle * std::sqrt(float(rand()) / float(RAND_MAX)), a = 6.2831853f * float(rand()) / float(RAND_MAX);
+	const CVector side = Normalised(Cross(dir, {0.0f, 0.0f, 1.0f})), lift = Normalised(Cross(side, dir));
+	return Normalised(Add(dir, Add(Scale(side, std::tan(r) * std::cos(a)), Scale(lift, std::tan(r) * std::sin(a)))));
+}
+
 // The point the aiming camera orbits: over the vehicle, at the driver's height.
 CVector Pivot(const uint8_t *vehicle, const uint8_t *ped)
 {
@@ -138,7 +171,7 @@ CVector CrosshairPoint(uint8_t *vehicle)
 {
 	uint8_t *cam = ActiveCam();
 	const CVector from = CamSource(cam), dir = CamFront(cam);
-	const CVector to = Add(from, Scale(dir, kAimRange));
+	const CVector to = Add(from, Scale(dir, ballistics::VisibleRange(kAimRange)));
 	alignas(16) uint8_t colPoint[64] = {}; // CColPoint: the point first
 	uint8_t *entity = nullptr;
 	uint8_t *const ignored = *api.ignoreEntity;
@@ -165,7 +198,8 @@ void DriveBy(uint8_t *vehicle, void (*orig)(uint8_t *), int which)
 	const CVector &r = VehicleRight(vehicle), aim = Aim();
 	const bool right = aim.x * r.x + aim.y * r.y > 0.0f;
 	const bool pistol = PedCurrentWeaponSlot(ped) == kPistolSlot;
-	const bool fire = pistol ? gShotPending && Clock::now() >= gNextPistolShot : gFireHeld;
+	// Only once the gun's in his hand (seatgun.h: taken up from the console).
+	const bool fire = (pistol ? gShotPending && Clock::now() >= gNextPistolShot : gFireHeld) && seatgun::InHand();
 	const uint8_t *weapon = PedWeapon(ped, PedCurrentWeaponSlot(ped));
 	const int32_t ammo = WeaponAmmoTotal(weapon);
 
@@ -187,6 +221,8 @@ void DriveBy(uint8_t *vehicle, void (*orig)(uint8_t *), int which)
 	PadNew(pad, kPadRT) = rt;
 	PadNew(pad, kPadCircle) = circle;
 
+	if (WeaponAmmoTotal(weapon) < ammo)
+		gSpread.Shot();
 	if (pistol && WeaponAmmoTotal(weapon) < ammo) { // one shot per press, at a pistol's pace
 		gShotPending = false;
 		gNextPistolShot = Clock::now() + kPistolInterval;
@@ -198,7 +234,8 @@ void Hook_BikeDriveBy(uint8_t *vehicle) { DriveBy(vehicle, orig_BikeDriveBy, 1);
 void Hook_BoatDriveBy(uint8_t *vehicle) { DriveBy(vehicle, orig_BoatDriveBy, 2); }
 
 // The shot keeps its source (the gun) and range but heads for the crosshair,
-// instead of the game's spread and snapping to the nearest target.
+// instead of the game's spread and snapping to the nearest target (in the
+// first-person seat, spread as first person's shots are).
 void Hook_AutoAim(uint8_t *shooter, uint8_t *vehicle, CVector *source, CVector *target)
 {
 	if (!AimingFrom(vehicle)) {
@@ -209,7 +246,7 @@ void Hook_AutoAim(uint8_t *shooter, uint8_t *vehicle, CVector *source, CVector *
 	const CVector aim = Sub(CrosshairPoint(vehicle), *source);
 	const float len = std::sqrt(Dot(aim, aim));
 	if (len > 0.01f)
-		*target = Add(*source, Scale(aim, std::sqrt(Dot(shot, shot)) / len));
+		*target = Add(*source, Scale(Spread(Scale(aim, 1.0f / len), SpreadAngle(shooter)), std::sqrt(Dot(shot, shot))));
 }
 
 // While aiming, the vehicle camera (cars, bikes, boats) is replaced by one
@@ -313,22 +350,12 @@ void AimArm(uint8_t *ped, uint8_t *vehicle, float weight)
 	gArmWritten = true;
 }
 
-void Ring(float cx, float cy, float r0, float r1, CRGBA col)
-{
-	constexpr int kSteps = 40;
-	for (int i = 0; i < kSteps; i++) {
-		const float a0 = 6.2831853f * i / kSteps, a1 = 6.2831853f * (i + 1) / kSteps;
-		const Vtx p0{cx + r0 * cosf(a0), cy + r0 * sinf(a0), 0, 0}, p1{cx + r1 * cosf(a0), cy + r1 * sinf(a0), 0, 0};
-		const Vtx p2{cx + r1 * cosf(a1), cy + r1 * sinf(a1), 0, 0}, p3{cx + r0 * cosf(a1), cy + r0 * sinf(a1), 0, 0};
-		gCanvas.Tri(p0, p1, p2, col);
-		gCanvas.Tri(p0, p2, p3, col);
-	}
-}
 
 } // namespace
 
 void SetInput(bool aim, bool fire, float yaw, float pitch)
 {
+	gSpread.Update(*api.timeStep / 50.0f);
 	const bool was = gAiming;
 	gAiming = false;
 	uint8_t *ped = api.FindPlayerPed();
@@ -418,17 +445,7 @@ void Draw()
 {
 	if (!gAiming || (gBlend < 0.5f && !camera::InSeat())) // its camera, or the first-person seat's
 		return;
-	const float cx = ScreenWidth() / 2.0f, cy = ScreenHeight() / 2.0f, h = float(ScreenHeight());
-	// As thick as first person's crosshair (fpcross.h), with its dark edge.
-	const float t = std::max(1.0f, std::round(fpcross::Thickness(h))), o = fpcross::Edge(h);
-	const float r = h * 0.016f, w = t / 2, dot = t;
-	SetHudRenderStates();
-	gCanvas.SetTexture(nullptr);
-	Ring(cx, cy, r - w - o, r + w + o, {0, 0, 0, 150});
-	Ring(cx, cy, r - w, r + w, {255, 255, 255, 230});
-	gCanvas.Pill(cx - dot - o, cy - dot - o, 2 * (dot + o), 2 * (dot + o), {0, 0, 0, 150});
-	gCanvas.Pill(cx - dot, cy - dot, 2 * dot, 2 * dot, {255, 255, 255, 230});
-	gCanvas.Flush();
+	reticle::Draw(ScreenWidth() / 2.0f, ScreenHeight() / 2.0f, SpreadAngle(api.FindPlayerPed()));
 }
 
 bool Install()

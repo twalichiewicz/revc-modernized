@@ -31,8 +31,9 @@ RECV = (0.0, 250.0, 60.0, 118.0, 17.0)  # the receiver: y0, y1, z0, z1, half wid
 BARREL_R, MUZZLE_Y = 11.0, 800.0
 TUBE_Z, TUBE_R, TUBE_END = 74.0, 12.0, 742.0  # the magazine tube
 PUMP_Y0, PUMP_Y1 = 340.0, 570.0  # the pump, forward; it racks back 84 mm (the mod's 70 at this scale)
-SHIELD_Y1 = 520.0  # the heat shield's front
-STOCK_TOP = 133.0  # the folded stock's top plate
+SHIELD_Y1 = 600.0  # the heat shield's front
+STOCK_TOP = 200.0  # raised, folded stock arch seen in the native shotgspa.dff
+SIGHT_HEIGHT = 133.0  # sights sit underneath the folded stock, not on top of it
 GRIP_HALF = 15.5
 RAKE = math.tan(math.radians(18))
 
@@ -52,8 +53,12 @@ GRIP = [(back_y(62), 62), (back_y(-36), -36), (front_y(-36), -36), (front_y(36),
 GUARD = [(50, 62), (128, 62), (126, 54), (114, 30), (70, 24), (56, 28), (50, 40)]
 GUARD_OPENING = [(60, 64), (118, 64), (116, 56), (106, 36), (72, 31), (62, 36), (60, 44)]
 TRIGGER = [(76, 62), (83, 62), (83.5, 52), (86, 43), (90, 38), (86, 37), (80, 43), (77, 52)]
-HOOK = [(316, STOCK_TOP - 7), (334, STOCK_TOP), (356, STOCK_TOP - 3), (372, 116), (368, 104), (356, 102), (358, 114),
-        (348, 124), (322, 121)]
+# Native model comparison: the folded stock rises from the rear hinge, leaving
+# daylight above the receiver. Its rectangular lightening holes face sideways.
+STOCK = [(-8, 111), (2, 132), (108, 197), (354, 200), (377, 184),
+         (367, 170), (345, 180), (112, 176), (8, 111)]
+HOOK = [(345, 200), (367, 200), (395, 182), (397, 162), (384, 150),
+        (369, 151), (374, 165), (379, 174), (360, 181)]
 
 
 def pump_section(inset=0.0):
@@ -67,19 +72,20 @@ def pump_section(inset=0.0):
     return out
 
 
-SHIELD = [(-13, 106), (13, 106), (15, 113), (10, 121), (-10, 121), (-15, 113)]
+SHIELD = [(-27, 89), (27, 89), (28, 113), (19, 133), (-19, 133), (-28, 113)]
+SHIELD_INNER = [(-23, 87), (23, 87), (24, 111), (17, 129), (-17, 129), (-24, 111)]
 
 # The atlas: (x0, y0, w, h) pixels from the top left, the camera's position, look and up (mm, gun frame), mm a pixel.
 # Side and top each in two halves: the grip, receiver and stock; the barrel, shield and pump.
 REAR_C, FRONT_C = (-50 + 400) / 2, (290 + 810) / 2
 REGIONS = {
-    "side_rear": ((0, 0, 256, 104), (-400, REAR_C, 49.5), (1, 0, 0), (0, 0, 1), 450 / 256),
-    "side_front": ((0, 104, 256, 48), (-400, FRONT_C, 86.5), (1, 0, 0), (0, 0, 1), 520 / 256),
-    "top_rear": ((0, 152, 256, 26), (0, REAR_C, 400), (0, 0, -1), (-1, 0, 0), 450 / 256),
-    "top_front": ((0, 178, 256, 26), (0, FRONT_C, 400), (0, 0, -1), (-1, 0, 0), 520 / 256),
-    "front": ((0, 204, 52, 52), (0, 900, 86), (0, -1, 0), (0, 0, 1), 1.8),
-    "pump_back": ((52, 204, 52, 52), (0, -400, 68), (0, 1, 0), (0, 0, 1), 1.2),
-    "back": ((104, 204, 52, 52), (0, -600, 96), (0, 1, 0), (0, 0, 1), 1.5),
+    "side_rear": ((0, 0, 256, 120), (-400, REAR_C, 85), (1, 0, 0), (0, 0, 1), 520 / 256),
+    "side_front": ((0, 120, 256, 64), (-400, FRONT_C, 86.5), (1, 0, 0), (0, 0, 1), 520 / 256),
+    "top_rear": ((0, 184, 256, 20), (0, REAR_C, 400), (0, 0, -1), (-1, 0, 0), 600 / 256),
+    "top_front": ((0, 204, 256, 20), (0, FRONT_C, 400), (0, 0, -1), (-1, 0, 0), 800 / 256),
+    "front": ((0, 224, 32, 32), (0, 900, 90), (0, -1, 0), (0, 0, 1), 3.0),
+    "pump_back": ((32, 224, 32, 32), (0, -400, 68), (0, 1, 0), (0, 0, 1), 2.0),
+    "back": ((64, 224, 32, 32), (0, -600, 82), (0, 1, 0), (0, 0, 1), 8.0),
 }
 
 FINGER_R = 8.0
@@ -115,7 +121,7 @@ PARTS = [  # name, pivot (mm), the way it moves
     ("trigger", (0, 0, 0), (0, -1, 0)),
 ]
 # Sighted over the folded stock to the tall front sight.
-MUZZLE, SIGHT_REAR, SIGHT_FRONT = (0, MUZZLE_Y, BORE), (0, 20, STOCK_TOP), (0, MUZZLE_Y - 18, STOCK_TOP - 1)
+MUZZLE, SIGHT_REAR, SIGHT_FRONT = (0, MUZZLE_Y, BORE), (0, 20, SIGHT_HEIGHT), (0, MUZZLE_Y - 18, SIGHT_HEIGHT - 1)
 FRAMING = ((-0.201, -0.268, 0.182), 2.0, 0.0, 0.25, 0.02)  # levelled: its barrel where he aims (vcmm-viewmodel --level)
 LEFT_FOREARM = (-0.45, -0.7, -0.6)  # kit's, turned with the levelled framing and steeper: his shoulder showed
 
@@ -166,6 +172,34 @@ def materials():
     return mats
 
 
+def folded_stock(mat=None):
+    stock = join("stock", [profile_yz("stock_left", STOCK, -15, -12, mat),
+                           profile_yz("stock_right", STOCK, 12, 15, mat),
+                           box("stock_top", -15, 15, 110, 354, 197, 200, mat)])
+    holes = [box("stock_hole", -18, 18, y, y + 27, 182, 194) for y in (148, 194, 240, 286)]
+    cut(stock, join("stock_holes", holes))
+    return stock
+
+
+def folded_hook(mat=None):
+    # Two sides of the folded butt. The channel through the stock remains
+    # open along the iron-sight line; a solid extrusion would cover ADS.
+    return join("stock_hook", [profile_yz("hook_left", HOOK, -22, -18, mat),
+                                profile_yz("hook_right", HOOK, 18, 22, mat),
+                                box("hook_top", -22, 22, 345, 367, 195, 200, mat)])
+
+
+def heat_shield(mat=None):
+    shield = profile_xz("shield", SHIELD, RECV[1], SHIELD_Y1, mat)
+    cut(shield, profile_xz("shield_inside", SHIELD_INNER, RECV[1] - 2, SHIELD_Y1 + 2))
+    vents = []
+    for y in range(270, 580, 31):
+        vents.append(box("side_vent", -32, 32, y, y + 17, 109, 120))
+        vents.append(box("top_vent", -8, 8, y, y + 17, 126, 137))
+    cut(shield, join("shield_vents", vents))
+    return shield
+
+
 def detailed(mats):
     """The photo shoot's SPAS-12: every part the texture shows. Returns (gun, pump)."""
     metal, poly, dark = mats["phosphate"], mats["polymer"], mats["dark"]
@@ -184,19 +218,12 @@ def detailed(mats):
     parts.append(profile_yz("release", fillet([(150, 66), (172, 66), (172, 74), (150, 74)], 2, 2), -hw - 1.5, -hw + 1, dark))
     for y, z in ((24, 98), (70, 66), (226, 66)):
         parts.append(cylinder_x("pin", y, z, 2.8, -hw - 0.6, hw + 0.6, 12, dark))
-    # The folded stock: hinge block, a pressed-steel arm with lightening holes, its butt hook over the shield.
-    parts.append(profile_yz("hinge", fillet([(-10, 108), (16, 108), (16, STOCK_TOP - 2), (-10, STOCK_TOP - 2)], [3, 0, 0, 6], 2),
-                            -12, 12, metal))
-    # The arm: a pressed-steel channel (open below), lightening holes in its top; dark inside, so the holes read.
-    arm = profile_xz("arm", [(-15, STOCK_TOP - 9), (15, STOCK_TOP - 9), (15, STOCK_TOP), (-15, STOCK_TOP)], -4, 330, metal)
-    cut(arm, profile_xz("channel", [(-12.5, STOCK_TOP - 12), (12.5, STOCK_TOP - 12), (12.5, STOCK_TOP - 3),
-                                    (-12.5, STOCK_TOP - 3)], 18, 318))
-    holes = [box("hole", -9, 9, 90 + 52 * k, 126 + 52 * k, STOCK_TOP - 5, STOCK_TOP + 2) for k in range(4)]
-    cut(arm, join("holes", holes))
-    bevel(arm, 0.8)
+    # The stock's elevated side rails and hook match the native silhouette.
+    parts.append(profile_yz("hinge", [(-10,108),(16,108),(16,131),(-10,131)], -12,12,metal))
+    arm = folded_stock(metal)
+    bevel(arm, .8)
     parts.append(arm)
-    parts.append(box("inside", -12, 12, 20, 316, STOCK_TOP - 9, STOCK_TOP - 5, dark))
-    hook = profile_yz("hook", fillet(HOOK, [2, 6, 6, 4, 3, 3, 3, 6, 2], 3), -22, 22, metal)
+    hook = folded_hook(metal)
     bevel(hook, 1.0)
     parts.append(hook)
     # Rear sight ears on the receiver (under the folded arm).
@@ -205,10 +232,7 @@ def detailed(mats):
     barrel = cylinder_y("barrel", 0, BORE, BARREL_R, y1, MUZZLE_Y, 24, mats["barrel"])
     cut(barrel, cylinder_y("bore", 0, BORE, 9.3, MUZZLE_Y - 40, MUZZLE_Y + 5, 20))
     parts.append(barrel)
-    shield = profile_xz("shield", SHIELD, y1, SHIELD_Y1, metal)
-    vents = [box("vent", -20, 20, y1 + 16 + 24 * k, y1 + 30 + 24 * k, 109, 116) for k in range(10)]
-    vents += [box("vent", -6, 6, y1 + 16 + 24 * k, y1 + 30 + 24 * k, 116, 125) for k in range(10)]
-    cut(shield, join("vents", vents))
+    shield = heat_shield(metal)
     bevel(shield, 0.6)
     parts.append(shield)
     parts.append(cylinder_y("tube", 0, TUBE_Z, TUBE_R, y1, TUBE_END, 24, metal))
@@ -220,11 +244,11 @@ def detailed(mats):
     parts.append(profile_yz("hanger", fillet([(TUBE_END + 2, TUBE_Z), (TUBE_END + 16, TUBE_Z), (TUBE_END + 16, BORE),
                                               (TUBE_END + 2, BORE)], 3, 2), -7, 7, metal))
     parts.append(cylinder_y("sight_band", 0, BORE, 13.5, MUZZLE_Y - 30, MUZZLE_Y - 8, 24, metal))
-    parts.append(profile_yz("sight_post", [(MUZZLE_Y - 26, 110), (MUZZLE_Y - 10, 110), (MUZZLE_Y - 14, STOCK_TOP - 1),
-                                           (MUZZLE_Y - 21, STOCK_TOP - 1)], -1.6, 1.6, dark))
+    parts.append(profile_yz("sight_post", [(MUZZLE_Y - 26, 110), (MUZZLE_Y - 10, 110), (MUZZLE_Y - 14, SIGHT_HEIGHT - 1),
+                                           (MUZZLE_Y - 21, SIGHT_HEIGHT - 1)], -1.6, 1.6, dark))
     for s in (-1, 1):
-        parts.append(profile_yz("sight_ear", [(MUZZLE_Y - 28, 108), (MUZZLE_Y - 8, 108), (MUZZLE_Y - 12, STOCK_TOP - 4),
-                                              (MUZZLE_Y - 24, STOCK_TOP - 4)], s * 7, s * 9.5, metal))
+        parts.append(profile_yz("sight_ear", [(MUZZLE_Y - 28, 108), (MUZZLE_Y - 8, 108), (MUZZLE_Y - 12, SIGHT_HEIGHT - 4),
+                                              (MUZZLE_Y - 24, SIGHT_HEIGHT - 4)], s * 7, s * 9.5, metal))
     # Pistol grip (polymer, finger grooves), trigger guard, trigger, safety.
     grip = profile_yz("grip", fillet(GRIP, [0, 6, 6, 3, 4, 0], 3), -GRIP_HALF, GRIP_HALF, poly)
     grooves = [cylinder_x("groove", front_y(z) + 3, z, 5.0, -20, 20, 12) for z in (24, 6, -12)]
@@ -262,17 +286,17 @@ def low():
     guard = profile_yz("guard", fillet(GUARD, [0, 0, 3, 6, 4, 3, 0], 1), -6, 6)
     cut(guard, profile_yz("opening", fillet(GUARD_OPENING, [0, 0, 3, 5, 3, 3, 0], 1), -10, 10), solver="EXACT")
     body = [profile_yz("receiver", [(y0, z0), (y1, z0), (y1, z1), (y0 + 12, z1), (y0, z1 - 8)], -hw, hw),
-            profile_yz("hinge", [(-10, 108), (16, 108), (16, STOCK_TOP - 2), (-10, STOCK_TOP - 2)], -12, 12),
-            profile_xz("arm", [(-15, STOCK_TOP - 9), (15, STOCK_TOP - 9), (15, STOCK_TOP), (-15, STOCK_TOP)], -4, 330),
-            profile_yz("hook", HOOK, -22, 22),
+            profile_yz("hinge", [(-10, 108), (16, 108), (16, 131), (-10, 131)], -12, 12),
+            folded_stock(),
+            folded_hook(),
             cylinder_y("barrel", 0, BORE, BARREL_R, y1, MUZZLE_Y, 8),
-            profile_xz("shield", SHIELD, y1, SHIELD_Y1),
+            heat_shield(),
             cylinder_y("tube", 0, TUBE_Z, TUBE_R, y1, TUBE_END, 8),
             cylinder_y("cap", 0, TUBE_Z, 13.0, TUBE_END, TUBE_END + 22, 8),
             box("hanger", -7, 7, TUBE_END + 2, TUBE_END + 16, TUBE_Z, BORE),
             cylinder_y("sight_band", 0, BORE, 13.5, MUZZLE_Y - 30, MUZZLE_Y - 8, 8),
-            profile_yz("sight_post", [(MUZZLE_Y - 26, 110), (MUZZLE_Y - 10, 110), (MUZZLE_Y - 14, STOCK_TOP - 1),
-                                      (MUZZLE_Y - 21, STOCK_TOP - 1)], -1.8, 1.8),
+            profile_yz("sight_post", [(MUZZLE_Y - 26, 110), (MUZZLE_Y - 10, 110), (MUZZLE_Y - 14, SIGHT_HEIGHT - 1),
+                                      (MUZZLE_Y - 21, SIGHT_HEIGHT - 1)], -1.8, 1.8),
             profile_yz("grip", fillet(GRIP, [0, 5, 5, 0, 3, 0], 1), -GRIP_HALF, GRIP_HALF),
             guard]
     pump = [profile_xz("pump", pump_section(), PUMP_Y0, PUMP_Y1)]

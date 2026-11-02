@@ -57,5 +57,8 @@ inline void Pick(int frame, int &x, int &y)
 
 // How much sunlight gets through the clouds from `from` along `dir` (unit), 0..1.
 float Transmittance(const Noise &noise, const Weather &weather, const float from[3], const float dir[3]);
+// How much of what's at `to` shows through the clouds from `from` (the part
+// of the line in the layer), 0..1: an airliner in or beyond them.
+float Between(const Noise &noise, const Weather &weather, const float from[3], const float to[3]);
 
 } // namespace clouds

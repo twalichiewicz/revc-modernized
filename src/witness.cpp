@@ -318,11 +318,13 @@ void Intercept(uint8_t *player, uint8_t *wanted, uint32_t now)
 		if (gPolicePresence(at, 14.0f)) { // (filed by the game; gun violence two stars)
 			if (least)
 				wanted::CopSees(at, least);
+			sight::Spotted({at.x, at.y, at.z + 0.5f});
 			continue;
 		}
 		if (sight::CanSee({at.x, at.y, at.z + 0.5f})) {
 			gReportCrimeNow(wanted, type, at, doesntCare);
 			wanted::CopSees(at, least);
+			sight::Spotted({at.x, at.y, at.z + 0.5f});
 			continue;
 		}
 		const heat::State state = wanted::Model().state();

@@ -15,11 +15,15 @@
 // coronas (CCoronas::RegisterCorona from CAutomobile::PreRender) go, as long
 // as the car is close enough for its detailed model, which is what glows.
 // The hook on CAutomobile::Render also draws the steering wheels (steering.h).
+// In the seat view, the own car's external tail coronas/point lights cannot
+// light the cabin; translucent glass is adjusted only during its atomic draw.
 #include <cstdint>
 
 namespace carlights {
 
 bool Install();
+// CAutomobile::Render's hook is in (what draws the steering wheels and the gun on the console).
+bool DrawsCars();
 // In the seat view, the dash's blinker: a green arrow while it flashes (from the HUD).
 void DrawDash();
 // The side `car` signals (turns::kLeft, kRight; 0: none). Only the player's car does.

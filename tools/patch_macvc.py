@@ -56,6 +56,20 @@ def name_hash(name):
 
 # Hooks used by the minimap plugin (mangled names, without the leading '_').
 DEFAULT_HOOKS = [
+    # Supplement verified missing upper-tower surfaces through native collision.
+    "_ZN9CPhysical22ProcessEntityCollisionEP7CEntityP9CColPoint",
+    "_ZN11CAutomobile22ProcessEntityCollisionEP7CEntityP9CColPoint",
+    "_ZN10CCollision16ProcessColModelsERK7CMatrixR9CColModelS2_S4_P9CColPointS6_Pf",
+    # Preserve ordinary building detail admission at aircraft altitude.
+    "_ZN16CSimpleModelInfo21GetAtomicFromDistanceEf",
+    # Bound the native traffic scan shared by cars and ambient boats.
+    "_ZN8CCarCtrl30FindAngleToWeaveThroughTrafficEP8CVehicleP9CPhysicalff",
+    # Cocoa fullscreen Space state is separate from the renderer's video mode.
+    "_Z15LoadINISettingsv",
+    "_Z15SaveINISettingsv",
+    "_psSetVideoMode",
+    # This exact native build specializes the local RT light-candidate emitter.
+    "_ZNSt3__16vectorIZN10CRTShadows6RenderEvE9CandidateNS_9allocatorIS2_EEE9push_backB9nqe210106ERKS2_",
     "_ZN6CRadar12DrawRadarMapEv",
     "_ZN6CRadar32TransformRadarPointToScreenSpaceER9CVector2DRKS0_",
     "_ZN6CRadar9DrawBlipsEv",
@@ -70,6 +84,8 @@ DEFAULT_HOOKS = [
     # pause menu: tabs, compact map legend
     "_ZN12CMenuManager14DrawBackgroundEb",
     "_ZN12CMenuManager9UserInputEv",
+    # the Stats page's own list, under the redrawn one (statspage.h)
+    "_ZN12CMenuManager10PrintStatsEv",
     "_ZN9CSprite2d8DrawRectERK5CRectRK5CRGBA",
     "_ZN9CSprite2d13Draw2DPolygonEffffffffRK5CRGBA",
     "_ZN6CRadar10DrawLegendEiii",
@@ -88,6 +104,14 @@ DEFAULT_HOOKS = [
     "_ZN7CWeapon19DoDriveByAutoAimingEP7CEntityP8CVehicleP7CVectorS5_",
     "_ZN4CCam20Process_FollowCar_SAERK7CVectorfff",
     "_ZN4CPed9PreRenderEv",
+    # Physical NPC reactions: base control and native contact ownership during a fall.
+    "_ZN4CPed14ProcessControlEv",
+    "_ZN4CPed4SeekEv",                       # police foot-chase pace (police.cpp)
+    "_ZN6CCarAI19MellowOutChaseSpeedEP8CVehicle",  # police arrival speed (police.cpp)
+    "_ZN4CPed22ProcessEntityCollisionEP7CEntityP9CColPoint",
+    "_ZN9CPhysical16ProcessCollisionEv",
+    # Resolve articulated NPC contacts after native world collision completes.
+    "_ZN6CWorld7ProcessEv",
     # phone calls in vehicles, the brick phone
     "_ZN11CTheScripts7ProcessEv",
     "_ZN4CPed15SetAnswerMobileEv",
@@ -96,6 +120,8 @@ DEFAULT_HOOKS = [
     "_ZN4CPad10StartShakeEsh",
     "_ZN4CPad19StartShake_DistanceEshfff",
     "_ZN4CPed13InflictDamageEP7CEntity11eWeaponTypef14ePedPieceTypesh",
+    "_ZN4CPed14CollideWithPedEPS_",
+    "_ZN4CPed7SetFallEi11AnimationIdh",
     # car radios heard from outside
     "_ZN13cAudioManager19FindVehicleOfPlayerEv",
     "_ZN14cSampleManager23SetStreamedVolumeAndPanEhhhh",
@@ -126,6 +152,30 @@ DEFAULT_HOOKS = [
     "_ZN8CCarCtrl14ChooseCarModelEi",
     "_ZN9CRenderer21SetupEntityVisibilityEP7CEntity",
     "_ZN7CWeapon4FireEP7CEntityP7CVector",
+    "_ZN7CWeapon14FireInstantHitEP7CEntityP7CVector",
+    "_ZN11CWeaponInfo13GetWeaponInfoE11eWeaponType",
+    "_ZN7CWeapon21FireInstantHitFromCarEP8CVehiclebb",
+    "_ZN11CBulletInfo9AddBulletEP7CEntity11eWeaponType7CVectorS3_",
+    "_ZN11CBulletInfo6UpdateEv",
+    "_Z22FireOneInstantHitRoundP7CVectorS0_i",
+    "_ZN10CCollision18ProcessLineOfSightERK8CColLineRK7CMatrixR9CColModelR9CColPointRfbb",
+    "_ZN7CWeapon31CheckForShootingVehicleOccupantEPP7CEntityP9CColPoint11eWeaponTypeRK7CVectorS8_",
+    # Player aircraft forces, rotor world contacts/repair, and scoped native Dodo ownership.
+    "_ZN8CVehicle13FlyingControlE12eFlightModel",
+    "_ZN11CAutomobile14ProcessControlEv",
+    "_ZN11CAutomobile13VehicleDamageEft",
+    "_ZN13cAudioManager14ProcessVehicleEP8CVehicle",
+    "_ZN5CBoat14ProcessControlEv",
+    "_ZN10CModelInfo8ShutDownEv",
+    "_ZN6CWorld15ClearForRestartEv",
+    "_ZN6CWorld8ShutDownEv",
+    "_ZN8CVehicle16DoBladeCollisionE7CVectorR7CMatrixsff",
+    "_ZN11CAutomobile3FixEv",
+    "_ZN6CPlane14ProcessControlEv",
+    "_ZN4CPed19SetPedPositionInCarEv",
+    "_ZN4CPed11SetEnterCarEP8CVehiclej",
+    "_ZN4CPed10SetExitCarEP8CVehiclej",
+    "_ZN8CVehicle13InflictDamageEP7CEntity11eWeaponTypef7CVector",
     # gunmen: cover and moving
     "_ZN4CPed19KillCharOnFootArmedER7CVectorS1_S1_",
     # the police helicopter: hits where it is, smoke, less health
@@ -134,8 +184,38 @@ DEFAULT_HOOKS = [
     "_ZN5CHeli15PreRenderAlwaysEv",
     # ... no belly gun, SWAT in its doors, searching where he was seen (the wanted overhaul)
     "_ZN5CHeli14ProcessControlEv",
+    # ... its searchlight under its chin
+    "_ZN5CHeli6RenderEv",
+    "_ZN5CHeli11UpdateHelisEv",
+    # Vehicle interior material/light scope and directional race markers.
+    "_Z27AtomicDefaultRenderCallBackPN2rw6AtomicE",
+    "_ZN12CPointLights8AddLightEh7CVectorS0_ffffhb",
+    "_ZN7CEntity22ProcessLightsForEntityEv",
+    "_ZN10C3dMarkers6RenderEv",
     # police come by car, not made on foot near a wanted player
     "_ZN11CPopulation15AddToPopulationEffff",
+    # his car's door: opened only at a crawl; faster, they hang on to it
+    "_ZN4CPed7SeekCarEv",
+    "_ZN8CVehicle14CanPedEnterCarEv",
+    # lines of sight kept on the world's grid of sectors (the game reads past it for a point off it)
+    "_ZN6CWorld21GetIsLineOfSightClearERK7CVectorS2_bbbbbbb",
+    "_ZN6CWorld18ProcessLineOfSightERK7CVectorS2_R9CColPointRP7CEntitybbbbbbbb",
+    # BuildPedLists lacks a lower world-sector bound. Clip its local rectangle.
+    "_ZN5CRectC1Effff",
+    # Keep physical Add/RemoveAndAdd sector membership inside the native grid.
+    "_ZN9CPhysical12GetBoundRectEv",
+    # High-altitude BIG terrain coverage, camera slant range and horizon.
+    "_ZN9CRenderer19ConstructRenderListEv",
+    "_ZN9CRenderer26SetupBigBuildingVisibilityEP7CEntity",
+    "_ZN16CSimpleModelInfo26GetFirstAtomicFromDistanceEf",
+    "_ZN18CVisibilityPlugins18RenderFadingAtomicEPN2rw6AtomicEf",
+    "_ZN9CRenderer17RenderOneBuildingEP7CEntityf",
+    "_Z23RwCameraSetFarClipPlanePN2rw6CameraEf",
+    "_Z22RwCameraSetFogDistancePN2rw6CameraEf",
+    "_ZN7CClouds13RenderHorizonEv",
+    # the airliners: up in the clouds, lit by the sky, their lights
+    "_ZN6CPlane6RenderEv",
+    "_ZN6CPlane9PreRenderEv",
     # clouds and lighting; the port's ray-traced shadows' reports
     "_Z9re3_debugPKcz",
     "_ZN7CClouds6RenderEv",
@@ -307,6 +387,58 @@ def add_weak_dylib(m, path):
     struct.pack_into("<II", m.data, 16, m.ncmds, m.sizeofcmds)
 
 
+def reserve_slots(m, count):
+    """Use zero-fill tail; the exact supported image may reserve one more page.
+
+    LINKEDIT is address-independent metadata reached through its file offsets.
+    Moving its terminal mapping preserves every game section/symbol and chained
+    fixup target. This layout and its 5818 rebases were audited for this SHA only.
+    """
+    data_vm, data_size, data_file, data_bytes = m.segments["__DATA"]
+    end = max(a + s for g, _, a, s, _ in m.sections if g == "__DATA")
+    base = (end + 7) & ~7
+    if base + 8 * count <= data_vm + data_size:
+        return base
+    page = 0x4000
+    if hashlib.sha256(m.data).hexdigest() != VANILLA_SHA256:
+        raise PatchError("extra hook storage requires the pristine supported macVC image")
+    segments, commands = [], []
+    at = 32
+    for _ in range(m.ncmds):
+        cmd, size = struct.unpack_from("<II", m.data, at)
+        commands.append((cmd, at))
+        if cmd == LC_SEGMENT_64:
+            name = m.data[at + 8:at + 24].rstrip(b"\0").decode()
+            segments.append((name, at))
+        at += size
+    offsets = dict(segments)
+    link_vm, link_size, link_file, link_bytes = m.segments["__LINKEDIT"]
+    if (segments[-1][0] != "__LINKEDIT" or link_vm != data_vm + data_size or
+            any(x % page for x in (data_vm, data_size, link_vm, link_size)) or
+            base < data_vm + data_bytes or base + 8 * count > link_vm + page or
+            any(g == "__LINKEDIT" for g, _, _, _, _ in m.sections) or
+            any(link_vm <= value < link_vm + link_size for value in m.symbols().values())):
+        raise PatchError("unsupported writable-tail/LINKEDIT layout for extra hook storage")
+    if (struct.unpack_from("<III", m.data, offsets["__DATA"] + 56) != (3, 3, 4) or
+            struct.unpack_from("<III", m.data, offsets["__LINKEDIT"] + 56) != (1, 1, 0) or
+            any(cmd in (0x22, 0x80000022, 0x1E) for cmd, _ in commands)):
+        raise PatchError("unsupported protections or legacy fixups for extra hook storage")
+    fixups = [off for cmd, off in commands if cmd == 0x80000034]
+    if len(fixups) != 1:
+        raise PatchError("supported chained fixups missing")
+    fixup_file, fixup_size = struct.unpack_from("<II", m.data, fixups[0] + 8)
+    starts = fixup_file + struct.unpack_from("<I", m.data, fixup_file + 4)[0]
+    if (starts < fixup_file or starts + 4 + 4 * len(segments) > fixup_file + fixup_size or
+            struct.unpack_from("<I", m.data, starts)[0] != len(segments) or
+            struct.unpack_from("<I", m.data, starts + 4 + 4 * (len(segments) - 1))[0] != 0):
+        raise PatchError("LINKEDIT has unsupported chained fixups")
+    struct.pack_into("<Q", m.data, offsets["__DATA"] + 32, data_size + page)
+    struct.pack_into("<Q", m.data, offsets["__LINKEDIT"] + 24, link_vm + page)
+    m.segments["__DATA"] = (data_vm, data_size + page, data_file, data_bytes)
+    m.segments["__LINKEDIT"] = (link_vm + page, link_size, link_file, link_bytes)
+    return base
+
+
 def patch(data, hooks, dylib_path, skips=()):
     m = MachO(data)
     if m.find_table() is not None:
@@ -330,12 +462,7 @@ def patch(data, hooks, dylib_path, skips=()):
     if len(set(hashes)) != count:
         raise PatchError("two hook names share a hash")
 
-    # Slots: zero-filled slack after the last __DATA section.
-    seg_vm, seg_size = m.segments["__DATA"][:2]
-    data_end = max(a + s for g, _, a, s, _ in m.sections if g == "__DATA")
-    slot_base = (data_end + 7) & ~7
-    if slot_base + 8 * count > seg_vm + seg_size:
-        raise PatchError("not enough slack at the end of __DATA")
+    slot_base = reserve_slots(m, count)
 
     # Stubs + table: the tail of the header padding, right before __text.
     text_off = m.section("__TEXT", "__text")[4]

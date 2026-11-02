@@ -1,24 +1,29 @@
 #pragma once
 // The viewmodel's animations, done in code as the old viewmodel's kicks and
 // dips were: the gun drawn (rising in from below), holstered (dropping
-// away), kicking back and up as it fires with its slide or bolt cycling, a
-// pump racked, a revolver's cylinder turning a chamber on, a minigun's
-// barrels spinning, and a flash at the muzzle; its slide held back when it's
+// away), kicking as it fires (vmkick: each class of gun its own) with its
+// slide or bolt cycling, a pump racked (the whole gun and his left hand with
+// it), a revolver's cylinder turning a chamber on, a minigun's barrels
+// spinning, and a flash at the muzzle, turned and sized afresh each shot; its slide held back when it's
 // empty, reloaded (lifted in and tilted, his left hand pulling the magazine
 // out and away and bringing a new one up and in, the slide let go), and
 // carried as a runner carries it while he sprints, swinging with his
 // stride. A gun's moving parts are known by name (PartMove). No idle sway or
 // lag: standing, the gun stays crisp; it bobs with his steps (GunBob), not
-// aimed. Times are game time (bullet time slows them).
+// aimed. A melee weapon is held up ready and swung in time with the game's
+// attack (vmmelee); switching away from one, it's gone at once (the game
+// takes its model from his hand). Times are game time (bullet time slows them).
 // Unit-tested (tests/test_vmanim.cpp).
 #include "vmgun.h"
+#include "vmkick.h"
+#include "vmmelee.h"
 
 namespace vm {
 
 // How he carries a gun running (as Vice City holds it): a pistol or SMG in
 // one hand, up by his ear; a long gun in two, across his chest; a heavy one
-// at the hip.
-enum class Carry { kOneHanded, kTwoHanded, kHeavy };
+// at the hip; a melee weapon lowered a little, swinging with his arm.
+enum class Carry { kOneHanded, kTwoHanded, kHeavy, kMelee };
 Carry CarryFor(int weapon);
 
 // A move of the gun about his grip: m in the view's frame (x right, y ahead,
@@ -37,10 +42,12 @@ struct AnimInput {
 	bool sprinting;
 	bool shot;            // it fired this frame
 	bool triggerHeld;
+	float interval;       // s between its shots (its attack's loop; 0: not known)
 	float dt;             // s
 	float stepPhase;      // 0..2 through his stride, a step each 1
 	float stepSpeed;      // m/s on the ground
 	float aimed;          // 0..1 (LT)
+	Attack attack;        // a melee weapon's swing, as the game has it this frame
 };
 
 struct AnimOutput {
@@ -51,6 +58,7 @@ struct AnimOutput {
 	float pitch, roll;    // degrees: up, and over to the right
 	float yaw;            // degrees, its muzzle to the left
 	Move carry;           // carried sprinting: his arms follow it (the moves above, they don't)
+	KickMove kick;        // firing: the gun and his forearm turned by it about his forearm (aimed, less)
 	float slideBack;      // m, along each part's own axis
 	float boltBack;
 	float pumpBack;
@@ -60,6 +68,10 @@ struct AnimOutput {
 	float cylinderTurn;   // degrees about its axis
 	float barrelsTurn;
 	float flash;          // 0..1
+	float flashTurn;      // rad, this shot's
+	float flashSize;      // of the usual (a shotgun's bigger, a flamethrower's none)
+	float light;          // 0..1: the shot's light on his hands and the gun (a flamethrower's while it burns)
+	Grip grip;            // a melee weapon: his hand in the view, ready or swinging (the moves above about its wrist)
 };
 
 // The gun's figure-eight with his steps (`phase` 0..2 through his stride, a
@@ -96,13 +108,16 @@ private:
 	int shown_ = -1;     // the gun on screen
 	float draw_ = 1.0f;  // 0 (below) .. 1 (up), drawing
 	float holster_ = -1.0f; // s into holstering (< 0: not)
-	float kick_ = 0.0f;
+	Recoil recoil_;
+	uint32_t seed_ = 0x9e3779b9u; // each shot's randomness (its own, so a test sees the same)
+	float flashTurn_ = 0.0f, flashJitter_ = 1.0f;
 	float sinceShot_ = 1e9f;
 	float sprint_ = 0.0f;
 	bool empty_ = false, emptyAtReload_ = false, wasReloading_ = false;
 	float trigger_ = 0.0f;
 	float cylinder_ = 0.0f, cylinderTo_ = 0.0f;
 	float barrels_ = 0.0f, spin_ = 0.0f;
+	MeleeHand melee_;
 };
 
 } // namespace vm

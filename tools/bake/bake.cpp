@@ -13,15 +13,20 @@
 #include "../../src/mapdata.h"
 #include "../../src/radiologos.h"
 #include "gamefiles.h"
+#include "roofgeometry.h"
+#include "visualmodel.h"
 
 #include <algorithm>
 #include <array>
 #include <cmath>
 #include <cstdio>
 #include <deque>
+#include <fstream>
 #include <numeric>
 #include <string>
 #include <tuple>
+#include <set>
+#include <sstream>
 
 using mapdata::Building;
 
@@ -222,16 +227,8 @@ void ForEachFace(const std::vector<Instance> &insts, const std::map<std::string,
 		auto it = cols.find(in.model);
 		if (it == cols.end())
 			continue;
-		// IPL quaternions are applied inverted (reVC rotates by -2 acos(w)).
-		const float x = -in.qx, y = -in.qy, z = -in.qz, w = in.qw;
-		const float m[3][3] = {{1 - 2 * (y * y + z * z), 2 * (x * y - z * w), 2 * (x * z + y * w)},
-		                       {2 * (x * y + z * w), 1 - 2 * (x * x + z * z), 2 * (y * z - x * w)},
-		                       {2 * (x * z - y * w), 2 * (y * z + x * w), 1 - 2 * (x * x + y * y)}};
-		auto xf = [&](Vec3f v) {
-			return Vec3f{in.pos.x + m[0][0] * v.x + m[0][1] * v.y + m[0][2] * v.z,
-			             in.pos.y + m[1][0] * v.x + m[1][1] * v.y + m[1][2] * v.z,
-			             in.pos.z + m[2][0] * v.x + m[2][1] * v.y + m[2][2] * v.z};
-		};
+		// Ground and visual geometry use the same verified native placement.
+		auto xf = [&](Vec3f v) { return visualmodel::Place(v, in); };
 		const ColModel &col = it->second;
 		for (const ColFace &fc : col.faces)
 			if (fc.a < col.verts.size() && fc.b < col.verts.size() && fc.c < col.verts.size())
@@ -282,28 +279,12 @@ float GroundAt(const std::vector<float> &g, float x, float y)
 	return g[size_t(cy) * kGrid + cx];
 }
 
-struct Face {
-	Vec3f v[3];
-};
-
-float Cross2D(Vec3f o, Vec3f a, Vec3f b) { return (a.x - o.x) * (b.y - o.y) - (a.y - o.y) * (b.x - o.x); }
-
-// Height of a face's plane at (x, y) if the point lies inside it from above.
-bool HeightAt(const Face &f, float x, float y, float &z)
-{
-	const float area = Cross2D(f.v[0], f.v[1], f.v[2]);
-	if (fabsf(area) < 1e-6f)
-		return false;
-	const Vec3f p{x, y, 0};
-	const float w0 = Cross2D(f.v[1], f.v[2], p) / area, w1 = Cross2D(f.v[2], f.v[0], p) / area, w2 = 1 - w0 - w1;
-	if (w0 < -1e-4f || w1 < -1e-4f || w2 < -1e-4f)
-		return false;
-	z = w0 * f.v[0].z + w1 * f.v[1].z + w2 * f.v[2].z;
-	return true;
-}
+using roofgeometry::Cross2D;
+using roofgeometry::Face;
 
 struct Extracted {
 	std::vector<Building> buildings;
+	std::vector<size_t> sources;
 	std::vector<size_t> roofless; // tall instances without any roof surface
 };
 
@@ -341,12 +322,7 @@ Extracted ExtractBuildings(const std::vector<Instance> &insts, const std::map<st
 			tallest = std::max(tallest, std::max({f.v[0].z, f.v[1].z, f.v[2].z}) - GroundAt(ground, c.x, c.y));
 			if (!flat[k] || c.z - GroundAt(ground, c.x, c.y) < kMinRoofHeight)
 				continue;
-			bool covered = false;
-			for (size_t j = 0; j < faces.size() && !covered; j++) {
-				float z;
-				covered = j != k && flat[j] && HeightAt(faces[j], c.x, c.y, z) && z > c.z + 0.5f;
-			}
-			if (!covered)
+			if (!roofgeometry::Covered(faces, flat, k))
 				roofs.push_back(k);
 		}
 		if (roofs.empty()) {
@@ -433,10 +409,100 @@ Extracted ExtractBuildings(const std::vector<Instance> &insts, const std::map<st
 			if (perimeter > 0 && 2.0f * area / perimeter < kMinRoofWidth)
 				continue;
 			out.buildings.push_back(std::move(b));
+			out.sources.push_back(inst);
 		}
 	}
 	printf("buildings: %zu roofs; %zu tall models have no roof surface\n", out.buildings.size(), out.roofless.size());
 	return out;
+}
+
+// Collision supplies street levels and a conservative structural candidate
+// set. The visible DFF supplies roofs, eaves, walls and bridge spans themselves.
+std::vector<Building> VisualBuildings(const std::vector<Instance> &insts,
+                                    const std::map<std::string, ColModel> &cols,
+                                    const std::vector<float> &ground, const Extracted &fallback, ImgArchive &img,
+                                    float water = 0)
+{
+	std::set<size_t> candidates(fallback.sources.begin(), fallback.sources.end());
+	candidates.insert(fallback.roofless.begin(), fallback.roofless.end());
+	std::vector<bool> bridge(insts.size());
+	for (size_t i = 0; i < insts.size(); i++) {
+		bridge[i] = insts[i].model.find("bridg") != std::string::npos;
+		if (bridge[i] && insts[i].model.rfind("lod", 0) != 0 && (insts[i].interior == 0 || insts[i].interior == 13))
+			candidates.insert(i);
+	}
+	std::vector<float> deck(insts.size(), 1e9f);
+	ForEachFace(insts, cols, [&](size_t i, Vec3f a, Vec3f b, Vec3f c, uint8_t surface) {
+		if (!bridge[i] || Kind(surface) != kGround || surface == 26) return;
+		const float ux=b.x-a.x, uy=b.y-a.y, uz=b.z-a.z, vx=c.x-a.x, vy=c.y-a.y, vz=c.z-a.z;
+		const float nx=uy*vz-uz*vy, ny=uz*vx-ux*vz, nz=ux*vy-uy*vx;
+		if (std::fabs(nz) < .45f*std::sqrt(nx*nx+ny*ny+nz*nz)) return;
+		const float low = std::min({a.z,b.z,c.z});
+		if (low > .1f) deck[i] = std::min(deck[i], low);
+	});
+	std::map<std::string, visualmodel::Mesh> cache;
+	std::set<std::string> failed;
+	std::map<size_t, Building> visual;
+	struct Prepared {size_t instance;const visualmodel::Mesh *mesh;float street;int bridgePart;};
+	std::vector<Prepared> prepared;
+	std::vector<visualmodel::BridgePart> parts;
+	size_t triangles = 0, bridges = 0;
+	for (size_t i : candidates) {
+		const Instance &instance = insts[i];
+		if (instance.model.rfind("lod", 0) == 0 || failed.count(instance.model) || !visualmodel::ActiveAt(instance,12)) continue;
+		auto found = cache.find(instance.model);
+		if (found == cache.end()) {
+			std::vector<uint8_t> bytes;visualmodel::Mesh mesh;std::string why;
+			if (!img.Read(instance.model+".dff", bytes) || !visualmodel::Read(bytes, mesh, why)) {
+				failed.insert(instance.model);continue;
+			}
+			found = cache.emplace(instance.model, std::move(mesh)).first;
+		}
+		std::vector<float> levels;
+		for (size_t v=0;v<found->second.vertices.size();v+=16) {
+			const Vec3f point=visualmodel::Place(found->second.vertices[v],instance);
+			levels.push_back(GroundAt(ground,point.x,point.y));
+		}
+		if(levels.empty())continue;
+		std::nth_element(levels.begin(),levels.begin()+long(levels.size()/2),levels.end());
+		const float street = bridge[i] && deck[i] < 1e8f ? deck[i]-.02f : levels[levels.size()/2];
+		int part=-1;
+		if(bridge[i]) {
+			Vec2 lo{1e9f,1e9f},hi{-1e9f,-1e9f};
+			for(Vec3f p:found->second.vertices) {p=visualmodel::Place(p,instance);lo={std::min(lo.x,p.x),std::min(lo.y,p.y)};hi={std::max(hi.x,p.x),std::max(hi.y,p.y)};}
+			part=int(parts.size());parts.push_back({lo,hi,street,deck[i]<1e8f});
+		}
+		prepared.push_back({i,&found->second,street,part});
+	}
+	visualmodel::AlignBridges(parts);
+	for(const Prepared &p:prepared) {
+		const size_t i=p.instance;
+		const float street=p.bridgePart>=0?parts[size_t(p.bridgePart)].ground:p.street;
+		Building building;
+		if(!visualmodel::Build(*p.mesh,insts[i],street,building,bridge[i],water))continue;
+		if(bridge[i]) {building.flags|=mapdata::kBridge;++bridges;}
+		triangles+=building.tris.size()/3;visual.emplace(i,std::move(building));
+	}
+	std::vector<Building> result;
+	for (const auto &[i, building] : visual) result.push_back(building);
+	size_t retained=0;
+	for(size_t i=0;i<fallback.buildings.size();i++)
+		if(!visual.count(fallback.sources[i])&&visualmodel::ActiveAt(insts[fallback.sources[i]],12)) {result.push_back(fallback.buildings[i]);++retained;}
+	printf("visual map: %zu placed models (%zu bridge pieces), %zu triangles; %zu collision roofs retained\n",
+	       visual.size(),bridges,triangles,retained);
+	return result;
+}
+
+float SeaLevel(const std::string &gameData)
+{
+	std::ifstream file(gameData+"/data/water.dat");std::string row;
+	while(std::getline(file,row)) {
+		std::replace(row.begin(),row.end(),',',' ');std::istringstream values(row);
+		float level,left,bottom,right,top;
+		if(values>>level>>left>>bottom>>right>>top)
+			if(left<=0&&right>=0&&bottom<=0&&top>=0&&std::isfinite(level))return level;
+	}
+	return 0;
 }
 
 // Each end gets a round joint so bends close up. Where roads of different
@@ -651,7 +717,7 @@ int main(int argc, char **argv)
 	       segments.size());
 	const std::vector<float> ground = GroundGrid(insts, cols);
 	const Extracted ex = ExtractBuildings(insts, cols, ground);
-	map.buildings = ex.buildings;
+	map.buildings = VisualBuildings(insts, cols, ground, ex, img, SeaLevel(gameData));
 	map.roads = Roads(segments);
 
 	if (!map.Save(argv[2])) {

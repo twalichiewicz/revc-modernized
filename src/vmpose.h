@@ -30,6 +30,12 @@ void Pose(const Arm &arm, const Frame &handWorld, const Vec3 anchors[kDigits], c
 // the gun as framed while its hand follows the gun's animation.
 void ArmDirections(const Frame &hand, const ArmAngles &angles, bool left, Vec3 &forearm, Vec3 &upper);
 
+// His arm reaching `hand` from the shoulder it has with its hand at `restHand`
+// (its ways `rest` there): the upper arm and forearm as two bones, the elbow
+// bending the way it was. For a hand the gun's kick moves, so his shoulder
+// stays put (never rising into view) and his elbow takes it.
+ArmAngles KeepShoulder(const Arm &arm, const Frame &restHand, const ArmAngles &rest, Vec3 hand, bool left);
+
 // Where his hand is for the gun to be at `gunWorld`.
 inline Frame HandFor(const Gun &gun, const Frame &gunWorld) { return Compose(gunWorld, Inverse(gun.hold)); }
 

@@ -187,8 +187,27 @@ static void TestJoltShakesAndSettles()
 	CHECK(std::fabs(j.yaw) < 0.03f && std::fabs(j.pitch) < 0.03f && std::fabs(j.roll) < 0.03f);
 }
 
+// Third person, aimed: standing stays exact (the game's own aim); moving
+// adds a slight spread from the first shot, first person's base accuracy as
+// aimed, growing as first person's does for running and the air (#20).
+static void TestThirdPersonAimedMovingSpread()
+{
+	for (Kind kind : {Kind::kPistol, Kind::kShotgun, Kind::kSmg, Kind::kRifle, Kind::kHeavy})
+		CHECK(AimedMoving(kind, Moving::kStill) == 0.0f);
+	Spread fresh;
+	// Walking: exactly first person's moving first-shot base, as aimed (x0.6).
+	const float walking = AimedMoving(Kind::kRifle, Moving::kWalking);
+	CHECK(walking > 0.0f);
+	CHECK(std::fabs(walking - fresh.Angle(Kind::kRifle, Moving::kRunning, false, true) / 1.8f) < 1e-6f);
+	CHECK(walking < 0.0105f); // slight: under 0.6 degrees for a rifle
+	CHECK(AimedMoving(Kind::kSmg, Moving::kWalking) > AimedMoving(Kind::kPistol, Moving::kWalking));
+	CHECK(AimedMoving(Kind::kRifle, Moving::kRunning) > walking);
+	CHECK(AimedMoving(Kind::kRifle, Moving::kAir) > AimedMoving(Kind::kRifle, Moving::kRunning));
+}
+
 int main()
 {
+	TestThirdPersonAimedMovingSpread();
 	TestJoltShakesAndSettles();
 	TestSwitchWithTheTriggerHeld();
 	TestReleaseWhileNotReadyRearms();

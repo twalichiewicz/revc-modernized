@@ -27,6 +27,8 @@ void Punch(float &up, float &right);
 // The shot's jolt this frame (degrees: left, up, over to the right): the force
 // his body takes, a quick shake; the gun itself kicks little.
 void Jolt(float &left, float &up, float &roll);
+// Seconds between a gun's shots: its attack animation's loop (weapon.dat's columns R-S).
+float Interval(int32_t type);
 // The cone a shot leaving now spreads into (radians; 0 when it's exact), for CWeapon::Fire's hook.
 float SpreadNow();
 // Whether the mod is firing in first person, and the spread the next shot would have: the crosshair.

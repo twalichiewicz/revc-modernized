@@ -159,10 +159,11 @@ bool Needed(const Business &b)
 	return gConfig.storyHints && !Done(b) && Waiting() && (&b == &kPrintWorks || OthersNeeded() > 0);
 }
 
+bool ScriptKnown() { return api.scriptSpace && memcmp(api.scriptSpace + kCheckAt, kCheck, sizeof kCheck) == 0; }
 bool Install()
 {
 	gOnAMission = reinterpret_cast<bool (*)()>(dlsym(RTLD_MAIN_ONLY, "_ZN11CTheScripts18IsPlayerOnAMissionEv"));
-	gInstalled = api.scriptSpace && gOnAMission && memcmp(api.scriptSpace + kCheckAt, kCheck, sizeof kCheck) == 0;
+	gInstalled = gOnAMission && ScriptKnown();
 	if (!gInstalled)
 		Log("story: not the main.scm this was made for; no business hints or credit");
 	return gInstalled;

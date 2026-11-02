@@ -34,6 +34,8 @@ bool Waiting();
 bool Needed(const Business &b);
 
 bool Install();
+// main.scm is the one this mod's script globals are for (achievements share them).
+bool ScriptKnown();
 // Every frame from CHud::Draw: Ken's texts, when there's news or it's been a while.
 void Update();
 

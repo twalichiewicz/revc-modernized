@@ -88,6 +88,15 @@ bool Model::Matches(const Looks &looks) const
 	       looks.colour2 == d.colour2;
 }
 
+float Model::RecognitionRate(const Looks &looks, float distance, bool helicopter) const
+{
+	const bool matches = Matches(looks);
+	// The APB remembers a description, not a face known to every officer.
+	if (state_ == State::Apb && !matches)
+		return 0.0f;
+	return FillRate(distance, matches, helicopter);
+}
+
 bool Model::OutfitStruck(const Looks &looks) const
 {
 	return description_.haveOutfit && description_.outfit != looks.outfit;
@@ -98,6 +107,17 @@ bool Model::VehicleStruck(const Looks &looks) const
 	const Description &d = description_;
 	return d.haveVehicle && looks.vehicleModel >= 0 &&
 	       (looks.vehicleModel != d.vehicleModel || looks.colour1 != d.colour1 || looks.colour2 != d.colour2);
+}
+
+bool Model::VehicleLeft(const Looks &looks) const { return description_.haveVehicle && looks.vehicleModel < 0; }
+
+void Model::VehicleGone(int vehicle)
+{
+	Description &d = description_;
+	if (!d.haveVehicle || d.vehicle < 0 || d.vehicle != vehicle)
+		return;
+	d.haveVehicle = false;
+	d.vehicleModel = d.colour1 = d.colour2 = d.vehicle = -1;
 }
 
 void Model::CopSees(const Looks &looks, Vec3 at, uint32_t now, int gameStars)
@@ -119,6 +139,7 @@ void Model::Identified(const Looks &looks, int stars)
 		description_.vehicleModel = looks.vehicleModel;
 		description_.colour1 = looks.colour1;
 		description_.colour2 = looks.colour2;
+		description_.vehicle = looks.vehicle;
 		description_.haveVehicle = true;
 	}
 }

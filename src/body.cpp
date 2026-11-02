@@ -4,6 +4,7 @@
 #include <algorithm>
 #include <cmath>
 #include <dlfcn.h>
+#include <cstring>
 #include <string>
 
 using namespace game;
@@ -125,6 +126,8 @@ struct Skeleton {
 	uint8_t *clump = nullptr;
 	bool ok = false;
 	uint8_t *frame[kBones] = {};
+	uint8_t *key[kBones] = {};
+	uint8_t *hierarchy = nullptr;
 	int parent[kBones] = {};
 	Quat rest[kBones];       // standing orientation, ped frame
 	CVector restPos[kBones]; // joint, ped frame
@@ -133,6 +136,35 @@ struct Skeleton {
 
 uint8_t *(*gFindBone)(uint8_t *clump, uint32_t tag); // RpAnimBlendClumpFindBone
 int gFailures;
+uint64_t gSkeletonVersion;
+
+enum class Bindings { Current, Unavailable, Changed };
+// A clump can survive an animation handoff while its frames or keys do not.
+// Resolve from the live clump before reading a frame, never through the old
+// cached pointer. No procedural writes are safe until the whole rig is ready.
+Bindings CurrentBindings(uint8_t *ped)
+{
+	if (!ped || !gSkel.ok || EntityClump(ped) != gSkel.clump || !gFindBone ||
+	    !api.GetAnimHierarchyFromSkinClump)
+		return Bindings::Unavailable;
+	const uint64_t version = gSkeletonVersion;
+	uint8_t *clump = gSkel.clump;
+	auto current = [&]() { return version == gSkeletonVersion && EntityClump(ped) == clump; };
+	uint8_t *hierarchy = api.GetAnimHierarchyFromSkinClump(clump);
+	if (!current() || !hierarchy)
+		return Bindings::Unavailable;
+	bool changed = hierarchy != gSkel.hierarchy;
+	for (int bone = 0; bone < kBones; ++bone) {
+		uint8_t *frame = gFindBone(clump, kTags[bone]);
+		if (!current() || !frame)
+			return Bindings::Unavailable;
+		uint8_t *key = Key(frame);
+		if (!key)
+			return Bindings::Unavailable;
+		changed = changed || frame != gSkel.frame[bone] || key != gSkel.key[bone];
+	}
+	return changed ? Bindings::Changed : Bindings::Current;
+}
 
 bool Fail(const char *why)
 {
@@ -141,93 +173,226 @@ bool Fail(const char *why)
 	return false;
 }
 
-bool Measure(uint8_t *ped)
+bool Measure(uint8_t *ped, const PreparationOwner &owner)
 {
+	auto live = [&]() { return owner.live && owner.live(ped, owner.context); };
+	auto active = [&]() {
+		return live() && owner.active && owner.active(ped, owner.context) && live();
+	};
+	if (!active())
+		return false;
 	uint8_t *clump = EntityClump(ped);
-	if (clump == gSkel.clump)
-		return gSkel.ok;
-	gSkel = Skeleton{};
-	gSkel.clump = clump;
+	if (clump == gSkel.clump && !gSkel.ok)
+		return false;
+	// Publish only a complete measured rig, including for ordinary callers.
+	const uint64_t version = gSkeletonVersion;
 	if (!gFindBone)
 		gFindBone = reinterpret_cast<uint8_t *(*)(uint8_t *, uint32_t)>(
 		    dlsym(RTLD_MAIN_ONLY, "_Z24RpAnimBlendClumpFindBonePN2rw5ClumpEj"));
+	if (!active())
+		return false;
 	uint8_t *hier = clump ? api.GetAnimHierarchyFromSkinClump(clump) : nullptr;
+	if (!active())
+		return false;
+	auto unsupported = [&](const char *why) {
+		if (active() && version == gSkeletonVersion) {
+			gSkel = Skeleton{};
+			gSkel.clump = clump;
+			++gSkeletonVersion;
+		}
+		return Fail(why);
+	};
 	if (!hier || !gFindBone)
-		return Fail("no skeleton to pose");
+		return unsupported("no skeleton to pose");
+	Skeleton measured;
+	measured.clump = clump;
+	measured.hierarchy = hier;
 	int index[kBones];
+	bool cached = gSkel.ok && gSkel.clump == clump && gSkel.hierarchy == hier;
 	for (int b = 0; b < kBones; b++) {
-		gSkel.frame[b] = gFindBone(clump, kTags[b]);
+		measured.frame[b] = gFindBone(clump, kTags[b]);
+		if (!active())
+			return false;
 		index[b] = api.HAnimIDGetIndex(hier, kTags[b]);
-		if (!gSkel.frame[b] || !Key(gSkel.frame[b]) || index[b] < 0)
-			return Fail("a bone is missing from his skeleton");
+		if (!active())
+			return false;
+		// The index lookup is also a native boundary. Reacquire the frame
+		// before its first key access, since a live clump may replace a key.
+		measured.frame[b] = gFindBone(clump, kTags[b]);
+		if (!active())
+			return false;
+		if (!measured.frame[b] || index[b] < 0)
+			return unsupported("a bone is missing from his skeleton");
+		measured.key[b] = Key(measured.frame[b]);
+		if (!measured.key[b]) {
+			// Unlike an unsupported skeleton, an unbound animation key is
+			// transient (including first use during a death/respawn handoff).
+			return Fail("animation keys are not ready to pose");
+		}
+		cached = cached && measured.frame[b] == gSkel.frame[b] && measured.key[b] == gSkel.key[b];
 	}
+	if (version != gSkeletonVersion)
+		return false;
+	if (cached)
+		return active();
 
-	// Stand him up, read the bones back, and put his animation back.
-	Quat saved[kBones], written[kBones];
-	for (int b = 0; b < kBones; b++) {
-		Quat &q = KeyRotation(Key(gSkel.frame[b]));
-		saved[b] = q;
-		written[b] = q = Normalise({-kStanding[b][0], -kStanding[b][1], -kStanding[b][2], kStanding[b][3]});
-	}
-	CVector &rootT = KeyTranslation(Key(gSkel.frame[kRoot]));
-	const CVector savedRoot = rootT;
-	rootT = kStandingRoot;
-	api.UpdateRpHAnim(ped);
-	const float *mats = api.HAnimMatrixArray(hier);
-	Mat3 world[kBones];
-	CVector pos[kBones];
-	for (int b = 0; b < kBones; b++) {
-		const float *m = mats + index[b] * 16;
-		world[b] = FromRw(m);
-		pos[b] = {m[12], m[13], m[14]};
-	}
-	for (int b = 0; b < kBones; b++)
-		KeyRotation(Key(gSkel.frame[b])) = saved[b];
-	rootT = savedRoot;
-	api.UpdateRpHAnim(ped);
-
-	// Each bone's parent: the one its joint sits on at its own offset.
-	for (int b = 1; b < kBones; b++) {
-		const CVector offset = KeyTranslation(Key(gSkel.frame[b]));
-		float best = 1e9f;
-		for (int c = 0; c < kBones; c++) {
-			if (c == b)
+	// Reacquire through the native clump before every guarded key access.
+	// Cleanup needs memory identity, while new writes also need the lease.
+	auto currentKey = [&](int bone, bool restoring) -> uint8_t * {
+		auto permitted = [&]() { return restoring ? live() : active(); };
+		if (!permitted())
+			return nullptr;
+		auto *frame = gFindBone(clump, kTags[bone]);
+		if (!permitted() || frame != measured.frame[bone] || !frame)
+			return nullptr;
+		auto *key = Key(frame);
+		return key == measured.key[bone] ? key : nullptr;
+	};
+	Quat saved[kBones]{}, written[kBones]{};
+	bool changed[kBones]{}, rootChanged = false;
+	CVector savedRoot{};
+	auto restore = [&]() {
+		bool intact = true, any = rootChanged;
+		for (int bone = 0; bone < kBones; ++bone) {
+			if (!changed[bone])
 				continue;
-			const CVector d = Sub(Sub(pos[b], pos[c]), Mul(world[c], offset));
-			const float e = std::sqrt(Dot(d, d));
-			if (e < best) {
-				best = e;
-				gSkel.parent[b] = c;
+			any = true;
+			auto *key = currentKey(bone, true);
+			if (!key) {
+				intact = false;
+				continue;
+			}
+			auto &rotation = KeyRotation(key);
+			if (!std::memcmp(&rotation, &written[bone], sizeof rotation))
+				rotation = saved[bone];
+			else
+				intact = false;
+		}
+		if (rootChanged) {
+			auto *key = currentKey(kRoot, true);
+			if (!key)
+				intact = false;
+			else {
+				auto &translation = KeyTranslation(key);
+				if (!std::memcmp(&translation, &kStandingRoot, sizeof translation))
+					translation = savedRoot;
+				else
+					intact = false;
 			}
 		}
-		if (best > 0.01f || gSkel.parent[b] >= b)
-			return Fail("his skeleton isn't the one expected");
+		if (any && live()) {
+			api.UpdateRpHAnim(ped);
+			if (!live())
+				return false;
+		}
+		{
+			// The rebuild may hand a key to another native owner. Do not
+			// publish a cache or begin a new procedural pose over that write.
+			for (int bone = 0; bone < kBones; ++bone) {
+				if (!changed[bone])
+					continue;
+				auto *key = currentKey(bone, true);
+				if (!key || std::memcmp(&KeyRotation(key), &saved[bone], sizeof saved[bone]))
+					intact = false;
+			}
+			if (rootChanged) {
+				auto *key = currentKey(kRoot, true);
+				if (!key || std::memcmp(&KeyTranslation(key), &savedRoot, sizeof savedRoot))
+					intact = false;
+			}
+		}
+		return intact;
+	};
+	for (int bone = 0; bone < kBones; ++bone) {
+		auto *key = currentKey(bone, false);
+		if (!key) {
+			restore();
+			return false;
+		}
+		auto &rotation = KeyRotation(key);
+		saved[bone] = rotation;
+		written[bone] = rotation = Normalise({-kStanding[bone][0], -kStanding[bone][1], -kStanding[bone][2], kStanding[bone][3]});
+		changed[bone] = true;
 	}
-	// Which way round the keyframes hold rotations.
+	auto *root = currentKey(kRoot, false);
+	if (!root) {
+		restore();
+		return false;
+	}
+	savedRoot = KeyTranslation(root);
+	KeyTranslation(root) = kStandingRoot;
+	rootChanged = true;
+	api.UpdateRpHAnim(ped);
+	if (!active()) {
+		restore();
+		return false;
+	}
+	const float *mats = api.HAnimMatrixArray(hier);
+	if (!active()) {
+		restore();
+		return false;
+	}
+	if (!mats) {
+		restore();
+		return unsupported("no skeleton matrices to read");
+	}
+	Mat3 world[kBones];
+	CVector pos[kBones];
+	for (int bone = 0; bone < kBones; ++bone) {
+		const float *matrix = mats + index[bone] * 16;
+		world[bone] = FromRw(matrix);
+		pos[bone] = {matrix[12], matrix[13], matrix[14]};
+	}
+	if (!restore() || !active() || version != gSkeletonVersion)
+		return false;
+
+	// Each bone's parent: the one its joint sits on at its own offset.
+	for (int bone = 1; bone < kBones; bone++) {
+		auto *key = currentKey(bone, false);
+		if (!key)
+			return false;
+		const CVector offset = KeyTranslation(key);
+		float best = 1e9f;
+		for (int parent = 0; parent < kBones; parent++) {
+			if (parent == bone)
+				continue;
+			const CVector d = Sub(Sub(pos[bone], pos[parent]), Mul(world[parent], offset));
+			const float error = std::sqrt(Dot(d, d));
+			if (error < best) {
+				best = error;
+				measured.parent[bone] = parent;
+			}
+		}
+		if (best > 0.01f || measured.parent[bone] >= bone)
+			return unsupported("his skeleton isn't the one expected");
+	}
 	float straight = 0, inverse = 0;
-	for (int b = 1; b < kBones; b++) {
-		const Quat local = ToQuat(Mul(Transpose(world[gSkel.parent[b]]), world[b]));
-		straight += 1 - Alike(local, written[b]);
-		inverse += 1 - Alike(local, Conjugate(written[b]));
+	for (int bone = 1; bone < kBones; bone++) {
+		const Quat local = ToQuat(Mul(Transpose(world[measured.parent[bone]]), world[bone]));
+		straight += 1 - Alike(local, written[bone]);
+		inverse += 1 - Alike(local, Conjugate(written[bone]));
 	}
-	gSkel.inverted = inverse < straight;
+	measured.inverted = inverse < straight;
 	if (std::min(straight, inverse) > 0.002f * kBones)
-		return Fail("his bones don't follow their keyframes as expected");
-	// The ped's frame, the root's parent: world(root) = frame * local(root).
-	const Quat rootLocal = gSkel.inverted ? Conjugate(written[kRoot]) : written[kRoot];
+		return unsupported("his bones don't follow their keyframes as expected");
+	const Quat rootLocal = measured.inverted ? Conjugate(written[kRoot]) : written[kRoot];
 	const Mat3 frame = Mul(world[kRoot], Transpose(ToMat(rootLocal)));
 	const CVector origin = Sub(pos[kRoot], Mul(frame, kStandingRoot));
 	const Mat3 toPed = Transpose(frame);
-	for (int b = 0; b < kBones; b++) {
-		gSkel.rest[b] = ToQuat(Mul(toPed, world[b]));
-		gSkel.restPos[b] = Mul(toPed, Sub(pos[b], origin));
+	for (int bone = 0; bone < kBones; bone++) {
+		measured.rest[bone] = ToQuat(Mul(toPed, world[bone]));
+		measured.restPos[bone] = Mul(toPed, Sub(pos[bone], origin));
 	}
 	std::string parents;
-	for (int b = 1; b < kBones; b++)
-		parents += std::string(b > 1 ? ", " : "") + kNames[b] + "<" + kNames[gSkel.parent[b]];
-	Log("body: skeleton measured (head %.2f m above the root, keyframes %s): %s", gSkel.restPos[kHead].z,
-	    gSkel.inverted ? "inverted" : "as is", parents.c_str());
-	gSkel.ok = true;
+	for (int bone = 1; bone < kBones; bone++)
+		parents += std::string(bone > 1 ? ", " : "") + kNames[bone] + "<" + kNames[measured.parent[bone]];
+	if (!active() || version != gSkeletonVersion)
+		return false;
+	Log("body: skeleton measured (head %.2f m above the root, keyframes %s): %s", measured.restPos[kHead].z,
+	    measured.inverted ? "inverted" : "as is", parents.c_str());
+	measured.ok = true;
+	gSkel = measured;
+	++gSkeletonVersion;
 	return true;
 }
 
@@ -315,7 +480,20 @@ float Smooth(float t)
 	return t * t * (3 - 2 * t);
 }
 
-bool Prepare(uint8_t *ped) { return ped && Measure(ped); }
+bool Prepare(uint8_t *ped)
+{
+	if (!ped)
+		return false;
+	uint8_t *clump = EntityClump(ped);
+	if (gSkel.ok && clump == gSkel.clump) {
+		const auto bindings = CurrentBindings(ped);
+		if (bindings != Bindings::Changed)
+			return bindings == Bindings::Current;
+	}
+	const auto sameClump = [](uint8_t *actor, void *context) { return EntityClump(actor) == context; };
+	return Measure(ped, {sameClump, sameClump, clump});
+}
+bool Prepare(uint8_t *ped, const PreparationOwner &owner) { return ped && Measure(ped, owner); }
 
 CVector Joint(const Pose &pose, Bone b)
 {
@@ -360,9 +538,19 @@ Pose Mix(const Pose &a, const Pose &b, float t)
 	return r;
 }
 
+bool CurrentKeys(uint8_t *ped, uint8_t *const (&frames)[kBones])
+{
+	if (!gSkel.ok || EntityClump(ped) != gSkel.clump)
+		return false;
+	for (int bone = 0; bone < kBones; ++bone)
+		if (!frames[bone] || frames[bone] != gSkel.frame[bone] || Key(frames[bone]) != gSkel.key[bone])
+			return false;
+	return true;
+}
+
 void Apply(uint8_t *ped, const Pose &pose, float weight)
 {
-	if (!gSkel.ok || EntityClump(ped) != gSkel.clump || weight <= 0.0f)
+	if (weight <= 0.0f || CurrentBindings(ped) != Bindings::Current)
 		return;
 	weight = std::min(weight, 1.0f);
 	Quat s[kBones], d[kBones];
@@ -395,7 +583,7 @@ void Over(const Pose &pose, Quat (&d)[kBones])
 
 CVector JointOver(uint8_t *ped, const Pose &pose, Bone b)
 {
-	if (!gSkel.ok || EntityClump(ped) != gSkel.clump)
+	if (CurrentBindings(ped) != Bindings::Current)
 		return {};
 	Quat d[kBones];
 	Over(pose, d);
@@ -410,7 +598,7 @@ CVector JointOver(uint8_t *ped, const Pose &pose, Bone b)
 
 void TurnOver(uint8_t *ped, Pose &pose, Bone b, const Quat &by)
 {
-	if (!gSkel.ok || EntityClump(ped) != gSkel.clump)
+	if (CurrentBindings(ped) != Bindings::Current)
 		return;
 	Quat d[kBones];
 	Over(pose, d);
@@ -419,7 +607,7 @@ void TurnOver(uint8_t *ped, Pose &pose, Bone b, const Quat &by)
 
 void ApplyOver(uint8_t *ped, const Pose &pose, float weight)
 {
-	if (!gSkel.ok || EntityClump(ped) != gSkel.clump || weight <= 0.0f)
+	if (weight <= 0.0f || CurrentBindings(ped) != Bindings::Current)
 		return;
 	weight = std::min(weight, 1.0f);
 	Quat d[kBones];
@@ -442,7 +630,7 @@ namespace {
 // The bones held, relative to `frame` (a turn in the ped's frame).
 bool HoldAbout(uint8_t *ped, Held &held, const Quat *frame, Bone base, const Bone *bones, int count)
 {
-	if (!gSkel.ok || EntityClump(ped) != gSkel.clump)
+	if (CurrentBindings(ped) != Bindings::Current)
 		return false;
 	Quat d[kBones];
 	Over(Pose{}, d);
@@ -458,7 +646,7 @@ bool HoldAbout(uint8_t *ped, Held &held, const Quat *frame, Bone base, const Bon
 
 void RestoreAbout(uint8_t *ped, const Held &held, const Quat *frame, float weight)
 {
-	if (!gSkel.ok || EntityClump(ped) != gSkel.clump || weight <= 0.0f)
+	if (weight <= 0.0f || CurrentBindings(ped) != Bindings::Current)
 		return;
 	weight = std::min(weight, 1.0f);
 	Quat d[kBones]; // each as it ends up, for its children

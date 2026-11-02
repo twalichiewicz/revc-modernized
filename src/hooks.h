@@ -13,6 +13,10 @@ bool Init(const uint8_t expectedUuid[16]);
 // entry point that runs the original function, otherwise nullptr.
 void *Install(const char *mangledName, void *replacement);
 
+// Wrap the current target (or native trampoline when unclaimed), rather than
+// replacing another feature's hook. Rejects chaining a function to itself.
+void *Chain(const char *mangledName, void *replacement);
+
 // The slot of a skip patch: non-zero jumps over its block of game code.
 // nullptr if the patch is missing.
 volatile uint64_t *Flag(const char *name);

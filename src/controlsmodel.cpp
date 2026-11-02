@@ -55,8 +55,8 @@ const std::vector<RowSpec> &Rows(PageSituation s)
 	    {kNo, kNo, Pad::kRightStick, "LOOK", "CLICK: LOOK BEHIND"},
 	};
 	static const std::vector<RowSpec> flying = {
-	    {Action::kVehicleBrake, kNo, Pad::kNone, "DESCEND", ""},
-	    {Action::kVehicleAccelerate, kNo, Pad::kNone, "CLIMB", ""},
+	    {Action::kVehicleBrake, kNo, Pad::kNone, "DESCEND / WHEEL BRAKE", ""},
+	    {Action::kVehicleAccelerate, kNo, Pad::kNone, "CLIMB / THROTTLE", ""},
 	    {Action::kVehicleLookleft, kNo, Pad::kNone, "TURN LEFT", ""},
 	    {Action::kVehicleLookright, kNo, Pad::kNone, "TURN RIGHT", ""},
 	    {Action::kToggleSubmissions, kNo, Pad::kNone, "SIDE MISSION / ANSWER PHONE", ""},
@@ -66,6 +66,7 @@ const std::vector<RowSpec> &Rows(PageSituation s)
 	    {Action::kVehicleEnterExit, kNo, Pad::kNone, "EXIT", ""},
 	    {Action::kCinematicCamera, kNo, Pad::kNone, "CINEMATIC CAMERA (HOLD)", ""},
 	    {Action::kPedFireweapon, kNo, Pad::kNone, "GUN / BOMBS", ""},
+	    {Action::kVehicleHorn, kNo, Pad::kNone, "LANDING GEAR (LEARJET)", "AUTOMATIC ON TAKEOFF AND APPROACH"},
 	    {kNo, kNo, Pad::kX, "ROCKETS (HUNTER)", ""},
 	};
 	// menu.cpp's pause map
@@ -144,7 +145,7 @@ const std::vector<NamedSection> &Labelled()
 	    {Action::kVehicleAccelerate, "ACCELERATE"},
 	    {Action::kVehicleBrake, "BRAKE / REVERSE"},
 	    {Action::kVehicleHandbrake, "HANDBRAKE"},
-	    {Action::kVehicleHorn, "HORN"},
+	    {Action::kVehicleHorn, "HORN / LEARJET GEAR"},
 	    {Action::kVehicleFireweapon, "VEHICLE FIRE"},
 	    {Action::kVehicleChangeRadioStation, "NEXT STATION"},
 	    {Action::kVehicleLookleft, "LOOK LEFT"},

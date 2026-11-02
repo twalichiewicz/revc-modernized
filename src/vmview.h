@@ -6,6 +6,7 @@
 // pushed out from the eye (scaled about it, so it looks the same) where the
 // game's near plane can't cut it. Unit-tested (tests/test_vmview.cpp).
 #include "vmgun.h"
+#include "vmarms.h"
 
 namespace vm {
 
@@ -24,6 +25,11 @@ inline float FovSquash(float gameTanHalfV, float viewmodelFovV)
 }
 
 constexpr float kPushOut = 4.0f;
+
+// The proximal arm can cross the near plane during a reload. Keep those
+// crossings below the visible frustum by deforming only fore/upper-arm
+// vertices. The hand/fingers retain their exact grip and contact points.
+void ClearArmNearPlane(const Arm &arm, std::vector<Vec3> &positions, float nearPlane, float tanHalfV);
 
 // A point in the viewmodel's view space, where it's drawn in the world (`view`: the eye's frame).
 inline Vec3 ToWorld(const Frame &view, Vec3 p, float squash)

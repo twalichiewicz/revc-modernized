@@ -2,6 +2,7 @@
 #include "config.h"
 #include "draw.h"
 #include "game.h"
+#include "greeting.h"
 #include "log.h"
 #include "phone.h"
 #include "prompt.h"
@@ -11,6 +12,7 @@
 #include <chrono>
 #include <cmath>
 #include <cstdlib>
+#include <dlfcn.h>
 
 using namespace game;
 
@@ -172,8 +174,14 @@ void Respond(bool positive, bool spoken)
 				api.Say(player, kLineRoadRage);
 		}
 	} else if (positive) {
+		const bool hello = greeting::Play();
 		api.SetChat(ped, player, kChatMs);
-		api.Say(ped, kLineChat);
+		static auto delayed = reinterpret_cast<void (*)(uint8_t *, uint16_t, int)>(
+		    dlsym(RTLD_MAIN_ONLY, "_ZN4CPed3SayEti"));
+		if (hello && delayed)
+			delayed(ped, kLineChat, 1000);
+		else
+			api.Say(ped, kLineChat);
 	} else {
 		api.Say(player, rand() % 2 ? kLineRoadRage : kLineTaunt);
 		React(ped, player);

@@ -32,5 +32,12 @@ void Lower(uint8_t *ped);
 void PoseArms(uint8_t *ped);
 bool BeforeControl();
 void AfterControl(uint8_t *ped, bool strafed);
+// Third person aimed: the next shot's spread (radians, the cone's half angle),
+// for the shot (camera.cpp) and the crosshair (hud.cpp). Standing it's the
+// game's exact aim (0); moving, slight (fpfire::AimedMoving).
+float Spread();
+// The pad field native CPad::GetSprint reads (an offset into CPad), or -1 for
+// none: Cross, except a controller in mode 2 (Circle) or above 3 (none).
+int SprintField(uint16_t mode, bool controller);
 
 } // namespace aimcam

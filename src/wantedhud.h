@@ -2,9 +2,10 @@
 // What the police know, on screen (RDR2 / GTA VI style): a row of round icons
 // right of the minimap (a witness's call going through, with its ring; the
 // search; the APB; the outfit and car on the description, struck through
-// once he's changed them), an eye with a filling ring over each cop who's
-// looking at him (at the screen's edge when the cop is off it), and the
-// area they're searching on the minimap.
+// once he's changed them, the car greyed while he's out of it), an eye with
+// a filling ring over each cop who's looking at him (at the screen's edge
+// when the cop is off it), red over one who's spotted him while he comes for
+// him, and the area they're searching on the minimap.
 #include "canvas.h"
 #include "types.h"
 

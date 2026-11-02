@@ -43,6 +43,7 @@ struct View {
 	const Projector &proj;
 	const SceneInput &in;
 	Vec2 lo, hi;            // world bounds of the visible area, with a margin
+	float heightScale = 0;  // one scale for all visible buildings
 	float invNear, invSpan; // depth buffer mapping (1/z is linear on screen)
 
 	Vec2 ToGround(Vec2 w) const
@@ -65,7 +66,7 @@ struct View {
 
 View MakeView(const Projector &proj, const SceneInput &in)
 {
-	View v{proj, in, {}, {}, 1, 1};
+	View v{proj, in, {}, {}, 0, 1, 1};
 	v.lo = v.hi = in.origin;
 	float nearest = 1e9f, farthest = 0;
 	for (int i = 0; i < 4; i++) {
@@ -79,6 +80,25 @@ View MakeView(const Projector &proj, const SceneInput &in)
 	const float margin = 0.25f * in.range;
 	v.lo = {v.lo.x - margin, v.lo.y - margin};
 	v.hi = {v.hi.x + margin, v.hi.y + margin};
+	float tallest = 0.0f;
+	if (in.buildings) {
+		const float roofMargin = kMaxRoofHeight * in.range;
+		for (const mapdata::Building &b : *in.buildings)
+			if (v.Overlaps({b.lo.x - roofMargin, b.lo.y - roofMargin}, {b.hi.x + roofMargin, b.hi.y + roofMargin}))
+				tallest = std::max(tallest, b.top);
+	}
+	v.heightScale = mapdata::BuildingHeightScale(in.buildingScale / in.range, tallest, kMaxRoofHeight);
+	if (in.buildings) {
+		const float meshMargin = kMaxRoofHeight * in.range;
+		for (const mapdata::Building &b : *in.buildings)
+			if ((b.flags & mapdata::kVisualMesh) &&
+			    v.Overlaps({b.lo.x-meshMargin,b.lo.y-meshMargin},{b.hi.x+meshMargin,b.hi.y+meshMargin}))
+				for (const Vec3 &point : b.verts) {
+					const float depth=proj.Depth(v.ToGround({point.x,point.y}),point.z*v.heightScale);
+					nearest=std::min(nearest,depth);
+					farthest=std::max(farthest,depth);
+				}
+	}
 	nearest = std::max(0.05f, nearest * 0.9f);
 	farthest *= 1.05f;
 	v.invNear = 1.0f / nearest;
@@ -221,16 +241,62 @@ CRGBA Shade(CRGBA c, float k)
 
 // The roof mesh at its real heights, and walls from its outline down to the
 // street. The depth buffer sorts out what is in front.
+void DrawVisualMesh(Canvas &canvas, const View &view, const mapdata::Building &b)
+{
+	for (size_t t = 0; t + 2 < b.tris.size(); t += 3) {
+		Vec3 triangle[3];
+		for (int i = 0; i < 3; i++) {
+			const Vec3 &world = b.verts[b.tris[t + size_t(i)]];
+			const Vec2 ground = view.ToGround({world.x, world.y});
+			triangle[i] = {ground.x, ground.y, world.z * view.heightScale};
+		}
+		// A bridge can cross the camera plane. Clip each triangle instead of
+		// discarding its entire visible span because one vertex lies behind it.
+		Vec3 clipped[4]; int count = 0;
+		for (int i = 0; i < 3; i++) {
+			const Vec3 &a = triangle[(i + 2) % 3], &c = triangle[i];
+			const float da = view.proj.Depth({a.x, a.y}, a.z) - .05f;
+			const float dc = view.proj.Depth({c.x, c.y}, c.z) - .05f;
+			if ((da >= 0) != (dc >= 0)) {
+				const float u = da / (da - dc);
+				clipped[count++] = {a.x + (c.x - a.x) * u, a.y + (c.y - a.y) * u, a.z + (c.z - a.z) * u};
+			}
+			if (dc >= 0) clipped[count++] = c;
+		}
+		if (count < 3) continue;
+		Vtx projected[4]; bool valid = true;
+		for (int i = 0; i < count; i++) {
+			Vec2 pixel;
+			if (!view.proj.Project({clipped[i].x, clipped[i].y}, clipped[i].z, pixel)) { valid = false; break; }
+			projected[i] = {pixel.x, pixel.y, 0, 0, view.Depth01({clipped[i].x, clipped[i].y}, clipped[i].z)};
+		}
+		if (!valid) continue;
+		const Vec3 &a = triangle[0], &c = triangle[1], &d = triangle[2];
+		const float ux = c.x-a.x, uy = c.y-a.y, uz = c.z-a.z;
+		const float vx = d.x-a.x, vy = d.y-a.y, vz = d.z-a.z;
+		const float nx = uy*vz-uz*vy, ny = uz*vx-ux*vz, nz = ux*vy-uy*vx;
+		const float length = std::max(1e-8f, std::sqrt(nx*nx+ny*ny+nz*nz));
+		const float flat = std::fabs(nz)/length;
+		const CRGBA colour = flat > .45f ? Shade((b.flags & mapdata::kBridge) ? kRoad : kRoof, .82f+.18f*flat)
+		                                   : Shade(kWall, .68f+.22f*std::fabs((-.83f*nx-.55f*ny)/length));
+		FillScreen(canvas, view.proj, projected, count, colour);
+	}
+}
+
 void DrawBuilding(Canvas &canvas, const View &view, const mapdata::Building &b)
 {
+	if (b.flags & mapdata::kVisualMesh) {
+		DrawVisualMesh(canvas, view, b);
+		return;
+	}
 	const Projector &proj = view.proj;
-	const float scale = view.in.buildingScale / view.in.range;
+	const float scale = view.heightScale;
 	const size_t n = b.verts.size();
 	std::vector<Vec2> g(n);
 	std::vector<Vtx> base(n), top(n);
 	for (size_t i = 0; i < n; i++) {
 		g[i] = view.ToGround({b.verts[i].x, b.verts[i].y});
-		const float h = std::min(b.verts[i].z * scale, kMaxRoofHeight);
+		const float h = b.verts[i].z * scale;
 		Vec2 p0, p1;
 		if (proj.Depth(g[i], h) < 0.05f || !proj.Project(g[i], 0, p0) || !proj.Project(g[i], h, p1))
 			return; // too close to the camera to draw sensibly
@@ -251,8 +317,8 @@ void DrawBuilding(Canvas &canvas, const View &view, const mapdata::Building &b)
 	for (size_t t = 0; t + 2 < b.tris.size(); t += 3) {
 		const Vec3 &a = b.verts[b.tris[t]], &c = b.verts[b.tris[t + 1]], &d = b.verts[b.tris[t + 2]];
 		// Flatter roofs read lighter.
-		const float ux = c.x - a.x, uy = c.y - a.y, uz = (c.z - a.z) * view.in.buildingScale;
-		const float vx = d.x - a.x, vy = d.y - a.y, vz = (d.z - a.z) * view.in.buildingScale;
+		const float ux = c.x - a.x, uy = c.y - a.y, uz = (c.z - a.z) * view.heightScale * view.in.range;
+		const float vx = d.x - a.x, vy = d.y - a.y, vz = (d.z - a.z) * view.heightScale * view.in.range;
 		const float nx = uy * vz - uz * vy, ny = uz * vx - ux * vz, nz = ux * vy - uy * vx;
 		const float flat = fabsf(nz) / std::max(1e-6f, sqrtf(nx * nx + ny * ny + nz * nz));
 		const Vtx tri[3] = {top[b.tris[t]], top[b.tris[t + 1]], top[b.tris[t + 2]]};

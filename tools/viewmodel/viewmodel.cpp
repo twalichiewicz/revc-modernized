@@ -4,9 +4,13 @@
 // ends up inside it) and written out as OBJs to render (tools/viewmodel/render.py).
 //
 //   vcmm-viewmodel <GameData> <out dir> [--gun <name>] [--level] [outfit ...]
+//   vcmm-viewmodel <GameData> <out dir> --melee <model> [outfit ...]
 //
 // The gun is assets/guns/<name>.vmg (colt45 unless named), read from the file
-// so one being built needn't be built into the mod yet.
+// so one being built needn't be built into the mod yet. A melee weapon is the
+// game's own model (nitestick, bat, ...), held as vmmelee holds it: ready, or
+// `VM_SWING` "which,time,strike" into a swing; `VM_GRIP` "wrist x,y,z, along
+// x,y,z, knuckles x,y,z" tries another grip.
 #include "dff.h"
 #include "gamefiles.h"
 #include "vmarms.h"
@@ -14,6 +18,7 @@
 #include "vmanim.h"
 #include "vmgun.h"
 #include "vmhands.h"
+#include "vmmelee.h"
 #include "vmpose.h"
 #include "vmskin.h"
 #include "vmview.h"
@@ -60,7 +65,7 @@ void WriteObj(const std::string &path, const std::string &texture, const vm::Arm
 // The gun as `frame` puts it, wearing its atlas (<name>_atlas.png).
 // The gun this frame: framed, carried (sprinting), moved as the animation has it, its parts moved.
 struct Moment {
-	vm::Frame framed, carried, moved;
+	vm::Frame framed, carried, kicked, moved;
 	std::vector<vm::Frame> parts;
 	vm::AnimOutput anim{};
 	vm::ReloadHand reload{0.0f, 0.0f, false};
@@ -112,9 +117,19 @@ std::string Inside(const vm::Gun &gun, const vm::Frame &gunView, const vm::Arm &
 vm::Arm Posed(const vm::Arm &arm, const vm::Gun &gun, const Moment &now, bool left, std::string &report, bool &shown)
 {
 	const vm::Fit fit = vm::FitHand(arm, gun, left ? kLeft : kRight, left);
-	const vm::HandPlace place = left ? vm::LeftPlace(gun, now.carried, now.moved, now.parts, fit.part[vm::kDigitIndex], now.reload)
-	                                 : vm::RightPlace(gun, now.carried, now.moved);
+	vm::HandPlace place = left ? vm::LeftPlace(gun, now.kicked, now.moved, now.parts, fit.part[vm::kDigitIndex], now.reload)
+	                           : vm::RightPlace(arm, gun, now.carried, now.moved);
+	if (left && place.shown) { // as the mod: the kick's taken by his left elbow, the shoulder staying
+		const vm::HandPlace rest =
+		    vm::LeftPlace(gun, now.carried, vm::GunMoved(gun, now.carried, now.anim), now.parts, fit.part[vm::kDigitIndex], now.reload);
+		place.angles = vm::KeepShoulder(arm, rest.hand, rest.angles, place.hand.pos, true);
+	}
 	shown = place.shown;
+	if (!left && getenv("VM_DIAGNOSTICS")) {
+		vm::Vec3 fore,upper; vm::ArmDirections(place.hand,place.angles,false,fore,upper);
+		printf("right arm: hand=(%.3f,%.3f,%.3f) fore=(%.3f,%.3f,%.3f) upper=(%.3f,%.3f,%.3f)\n",
+		       place.hand.pos.x,place.hand.pos.y,place.hand.pos.z,fore.x,fore.y,fore.z,upper.x,upper.y,upper.z);
+	}
 	vm::Vec3 anchors[vm::kDigits], bends[vm::kDigits];
 	bool reach[vm::kDigits];
 	for (int d = 0; d < vm::kDigits; d++) {
@@ -128,6 +143,8 @@ vm::Arm Posed(const vm::Arm &arm, const vm::Gun &gun, const Moment &now, bool le
 	const vm::Frame &gunView = now.moved;
 	std::vector<vm::Vec3> pos, normal;
 	vm::Skin(arm.vertices, matrices, pos, normal);
+	if (!left && vm::FindPart(gun, "pump") >= 0)
+		vm::ClearArmNearPlane(arm,pos,0.15f/vm::kPushOut,std::tan(110.0f*3.14159265f/360.0f));
 	report = Inside(gun, gunView, arm, pos);
 	vm::Arm posed = arm;
 	for (size_t i = 0; i < pos.size(); i++) {
@@ -135,6 +152,100 @@ vm::Arm Posed(const vm::Arm &arm, const vm::Gun &gun, const Moment &now, bool le
 		posed.vertices[i].normal = normal[i];
 	}
 	return posed;
+}
+
+// The game's melee weapons' models, by eWeaponType (1-11).
+const char *const kMeleeModels[] = {"brassknuckle", "screwdriver", "golfclub", "nitestick", "knifecur", "bat",
+                                    "hammer",       "cleaver",     "machete",  "katana",    "chnsaw"};
+
+// A melee weapon in his right hand, ready or in a swing, as the mod holds it.
+int Melee(const ImgArchive &img, const std::string &out, const std::string &name, const std::vector<std::string> &outfits)
+{
+	int weapon = -1;
+	for (int i = 0; i < 11; i++)
+		if (name == kMeleeModels[i])
+			weapon = i + 1;
+	std::vector<uint8_t> dff, txd;
+	StaticMesh model;
+	std::string why;
+	if (weapon < 0 || !img.Read(name + ".dff", dff) || !ReadStaticDff(dff, model, why)) {
+		fprintf(stderr, "%s: not a melee weapon's model (%s)\n", name.c_str(), why.c_str());
+		return 1;
+	}
+	int w = 0, h = 0;
+	std::vector<uint8_t> rgba;
+	// Its material's texture (the dictionary's first is its HUD icon).
+	if (img.Read(name + ".txd", txd) && DecodeTxdTexture(txd, model.textures.empty() ? "" : model.textures[0], w, h, rgba))
+		WritePng(out + "/" + name + "_atlas.png", w, h, rgba);
+	const vm::MeleeKind kind = vm::MeleeKindFor(weapon);
+	vm::Grip grip = vm::ReadyGrip(kind);
+	if (const char *s = getenv("VM_SWING")) {
+		vm::Attack swing;
+		sscanf(s, "%d,%f,%f", &swing.which, &swing.time, &swing.strike);
+		grip = vm::AttackGrip(kind, swing);
+	}
+	if (const char *g = getenv("VM_GRIP")) {
+		vm::Grip &p = grip;
+		sscanf(g, "%f,%f,%f,%f,%f,%f,%f,%f,%f", &p.wrist.x, &p.wrist.y, &p.wrist.z, &p.along.x, &p.along.y, &p.along.z,
+		       &p.knuckles.x, &p.knuckles.y, &p.knuckles.z);
+	}
+	const vm::Frame hand = vm::GripFrame(grip);
+	printf("%s: %zu triangles; hand at (%.2f, %.2f, %.2f)\n", name.c_str(), model.triangles.size(), hand.pos.x, hand.pos.y,
+	       hand.pos.z);
+	// The model, in the view (its space is his hand bone's).
+	if (FILE *f = fopen((out + "/" + name + "_fp.obj").c_str(), "w")) {
+		fprintf(f, "mtllib %s.mtl\nusemtl gun\n", name.c_str());
+		for (const vm::SkinVertex &v : model.vertices) {
+			const vm::Vec3 p = vm::Apply(hand, v.pos), n = vm::Rotate(hand, v.normal);
+			fprintf(f, "v %.5f %.5f %.5f\nvn %.4f %.4f %.4f\nvt %.5f %.5f\n", p.x, p.y, p.z, n.x, n.y, n.z, v.u, 1.0f - v.v);
+		}
+		for (const vm::Triangle &t : model.triangles)
+			fprintf(f, "f %d/%d/%d %d/%d/%d %d/%d/%d\n", t.v[0] + 1, t.v[0] + 1, t.v[0] + 1, t.v[1] + 1, t.v[1] + 1, t.v[1] + 1,
+			        t.v[2] + 1, t.v[2] + 1, t.v[2] + 1);
+		fclose(f);
+	}
+	if (FILE *m = fopen((out + "/" + name + ".mtl").c_str(), "w")) {
+		fprintf(m, "newmtl gun\nmap_Kd %s_atlas.png\n", name.c_str());
+		fclose(m);
+	}
+	if (FILE *f = fopen((out + "/gun.txt").c_str(), "w")) {
+		fprintf(f, "%s\n", name.c_str());
+		fclose(f);
+	}
+	for (const std::string &outfit : outfits) {
+		std::vector<uint8_t> pdff, ptxd;
+		vm::SkinnedMesh mesh;
+		if (!img.Read(outfit + ".dff", pdff) || !ReadSkinnedDff(pdff, mesh, why))
+			continue;
+		const vm::Arms arms = vm::Articulate(mesh);
+		if (!arms.ok)
+			continue;
+		const std::string texture = outfit + ".png";
+		int tw = 0, th = 0;
+		std::vector<uint8_t> trgba;
+		if (img.Read(outfit + ".txd", ptxd) && DecodeTxdFirstTexture(ptxd, tw, th, trgba))
+			WritePng(out + "/" + texture, tw, th, trgba);
+		vm::Vec3 anchors[vm::kDigits] = {};
+		bool reach[vm::kDigits] = {};
+		vm::Frame matrices[vm::kArmBones];
+		vm::ArmAngles angles;
+		const float fore = vm::Length(vm::Sub(arms.right.bind[vm::kHand].pos, arms.right.bind[vm::kFore].pos)),
+		            upper = vm::Length(vm::Sub(arms.right.bind[vm::kFore].pos, arms.right.bind[vm::kUpper].pos));
+		vm::ArmTo(hand.pos, fore, upper, angles.forearm, angles.upper);
+		printf("%s: forearm %.3f m, upper arm %.3f m\n", outfit.c_str(), fore, upper);
+		vm::Pose(arms.right, hand, anchors, reach, angles, false, matrices);
+		std::vector<vm::Vec3> pos, normal;
+		vm::Skin(arms.right.vertices, matrices, pos, normal);
+		vm::Arm posed = arms.right;
+		for (size_t i = 0; i < pos.size(); i++) {
+			posed.vertices[i].pos = pos[i];
+			posed.vertices[i].normal = normal[i];
+		}
+		WriteObj(out + "/" + outfit + "_fp.obj", texture, posed);
+		std::remove((out + "/" + outfit + "_fp_left.obj").c_str());
+		printf("%s: ok\n", outfit.c_str());
+	}
+	return 0;
 }
 
 } // namespace
@@ -199,10 +310,13 @@ int main(int argc, char **argv)
 	const std::string gameData = argv[1], out = argv[2];
 	std::string gunName = "colt45";
 	std::vector<std::string> outfits;
+	std::string melee;
 	bool level = false;
 	for (int i = 3; i < argc; i++) {
 		if (std::string(argv[i]) == "--gun" && i + 1 < argc)
 			gunName = argv[++i];
+		else if (std::string(argv[i]) == "--melee" && i + 1 < argc)
+			melee = argv[++i];
 		else if (std::string(argv[i]) == "--level")
 			level = true;
 		else
@@ -215,6 +329,8 @@ int main(int argc, char **argv)
 		fprintf(stderr, "can't open %s/models/gta3.img\n", gameData.c_str());
 		return 1;
 	}
+	if (!melee.empty())
+		return Melee(img, out, melee, outfits);
 	std::ifstream file("assets/guns/" + gunName + ".vmg", std::ios::binary);
 	const std::vector<uint8_t> bytes((std::istreambuf_iterator<char>(file)), std::istreambuf_iterator<char>());
 	vm::Gun gun;
@@ -235,10 +351,11 @@ int main(int argc, char **argv)
 	}
 	if (const char *f = getenv("VM_LEFT_FOREARM")) // trying another: "x,y,z" in the gun frame
 		sscanf(f, "%f,%f,%f", &gun.leftForearm.x, &gun.leftForearm.y, &gun.leftForearm.z);
-	// The moment drawn: held, `VM_RELOAD` (0..1) through a reload, or
-	// `VM_SPRINT` (0..2) through a sprinting stride (the animation the game runs).
+	// The moment drawn: held, `VM_RELOAD` (0..1) through a reload,
+	// `VM_SPRINT` (0..2) through a sprinting stride, or `VM_SHOT` s after a
+	// shot (the animation the game runs).
 	Moment now;
-	now.framed = vm::GunInView(gun, gun.framing, 0.0f);
+	now.framed = vm::GunInView(gun, gun.framing, getenv("VM_AIM") ? std::clamp(float(atof(getenv("VM_AIM"))), 0.0f, 1.0f) : 0.0f);
 	{
 		const float reload = getenv("VM_RELOAD") ? float(atof(getenv("VM_RELOAD"))) : -1.0f;
 		vm::Anim anim;
@@ -254,6 +371,18 @@ int main(int argc, char **argv)
 		}
 		for (int i = 0; i < 40; i++)
 			now.anim = anim.Update(in);
+		if (const char *shot = getenv("VM_SHOT")) {
+			in.dt = 1.0f / 60.0f;
+			in.interval = getenv("VM_INTERVAL") ? float(atof(getenv("VM_INTERVAL"))) : 0.25f; // s between its shots
+			in.shot = true;
+			now.anim = anim.Update(in);
+			in.shot = false;
+			in.clip--;
+			for (float t = in.dt; t <= float(atof(shot)) + 1e-4f; t += in.dt)
+				now.anim = anim.Update(in);
+			printf("%.3f s after a shot: kick %.1f deg up, %.1f over, %.1f round; %.3f m back\n", atof(shot), now.anim.kick.pitch,
+			       now.anim.kick.roll, now.anim.kick.yaw, -now.anim.kick.offset.y);
+		}
 		in.reloading = reload >= 0.0f;
 		in.reloadProgress = reload;
 		in.dt = 0.0f;
@@ -265,7 +394,8 @@ int main(int argc, char **argv)
 		sscanf(c, "%f,%f,%f,%f,%f,%f", &m.offset.x, &m.offset.y, &m.offset.z, &m.pitch, &m.roll, &m.yaw);
 	}
 	now.carried = vm::GunCarried(gun, now.framed, now.anim.carry);
-	now.moved = vm::GunMoved(gun, now.carried, now.anim);
+	now.kicked = vm::GunKicked(gun, now.carried, now.anim.kick);
+	now.moved = vm::GunMoved(gun, now.kicked, now.anim);
 	now.parts.assign(std::max<size_t>(1, gun.parts.size()), vm::Identity());
 	for (size_t i = 0; i < gun.parts.size(); i++)
 		now.parts[i] = vm::PartMove(gun.parts[i], now.anim, gun.scale);

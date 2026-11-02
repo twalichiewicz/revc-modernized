@@ -64,4 +64,9 @@ private:
 	float since_ = 1e9f;
 };
 
+// Third person aimed (LT): the cone's half angle (radians). Standing it's the
+// game's own exact aim; moving, a slight spread from the first shot: first
+// person's base accuracy as aimed, more running and in the air.
+float AimedMoving(Kind kind, Moving moving);
+
 } // namespace fpfire

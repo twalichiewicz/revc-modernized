@@ -40,6 +40,10 @@ Vice City's story, missions and world stay as they are. Every feature can be swi
   waypoint "Destination".
 - HUD shapes (the stars, the wanted icons, the eyes) have smooth edges, though the game draws its 2D
   without anti-aliasing.
+- Options → Gameplay changes the crosshair style, size, thickness, color, center dot and dynamic
+  spread, with a live preview. The same settings apply on foot and in drive-bys in either view.
+- Street racing and the supported RC races put an arrow inside the current checkpoint toward the
+  next one. Finish markers and races with no defined next checkpoint have no arrow.
 
 ### Controls and camera
 
@@ -86,12 +90,18 @@ Vice City's story, missions and world stay as they are. Every feature can be swi
   still held at the rim. Aiming slows it as much as the view zooms in. Over an enemy it slows a little, so
   you don't overshoot him, but it never pulls your aim.
 - Every gun is a proper viewmodel, as Counter-Strike 1.6 draws its guns: Tommy's own arms, from whichever
-  outfit he's wearing, their fingers cut apart and jointed so they grip it, holding a new low-poly,
+  outfit he's wearing, their fingers cut apart and jointed so they grip it (his left fingers close round
+  a handguard as they rest, till they meet it), holding a new low-poly,
   photo-textured model of Vice City's gun (pistols and SMGs one-handed, the rest two-handed, as the game
   holds them). It's drawn after the world, so it never goes into a wall, through its own field of view,
-  and lit as he is. It comes up when you switch to it and kicks as it fires, its slide or bolt cycling, a
-  pump racked, the Python's cylinder turning and the minigun's barrels spinning, with a flash at the
-  muzzle; a pistol's slide locks back when it's empty. Reloading lifts the gun and turns it in, and his
+  and lit as he is. It comes up when you switch to it and kicks as it fires, each kind of gun its own way:
+  a pistol flips up and drops back past where it was, the Python higher and heavier, a shotgun shoves
+  straight back into him, automatics jolt each shot (the first hardest) and climb and back up as you hold
+  the trigger, the minigun buzzes. His forearm goes with the kick and his left elbow takes it; aimed, it
+  kicks mostly straight back so the sights stay on. The slide or bolt cycles (held back for a visible
+  frame), the pump is racked after the kick with the whole gun rolling in, the Python's cylinder turns and
+  the minigun's barrels spin, and the flash at the muzzle (turned and sized afresh each shot) lights his
+  hands and the gun warm for an instant; a pistol's slide locks back when it's empty. Reloading lifts the gun and turns it in, and his
   left hand pulls the magazine out, takes it away and brings the new one up and in (on a two-handed gun it
   leaves the handguard for it). The gun bobs with his steps, more as he runs, and not at all aimed;
   sprinting, he carries it as a runner does: a pistol or SMG up by his ear, muzzle up; a long gun up across his
@@ -104,7 +114,7 @@ Vice City's story, missions and world stay as they are. Every feature can be swi
 - With the new viewmodel, guns fire as Counter-Strike 1.6's do: the shot leaves the frame you pull RT (no
   waiting for Tommy's attack animation), at the gun's own rate (pistols and shotguns once a pull). Each shot
   kicks the view up, automatics more with each shot of a burst and a little sideways, settling back to
-  where you aimed; the gun itself barely moves, the view takes a short jolt (his body takes the recoil). The first shot standing or walking goes exactly where the crosshair is; holding the
+  where you aimed, with a short jolt through him. The first shot standing or walking goes exactly where the crosshair is; holding the
   trigger, running or jumping spreads them, crouching and aiming tighten them. The crosshair is
   Counter-Strike's four lines, crisp on whole pixels, opening and closing with the spread, through a
   Max Payne dive too. Aiming in third person shows the same lines, and a drive-by's ring is as thick.
@@ -112,14 +122,29 @@ Vice City's story, missions and world stay as they are. Every feature can be swi
   and your own gun has a close, centred body under its shot, with a tail that sounds like a room indoors
   and the city outside. The M4 no longer plays the Ruger's shot sped up. The game's sound is plain stereo
   (no headphone 3D processing, which coloured close shots).
-- Fists, melee weapons and things you throw are held as before: his own arms, low on the right, with the
-  game's models.
+- Melee weapons are held up ready where you can see them, in the same arms: the game's own model of each
+  in his right hand, a baton, hammer or blade up on the right leaning in, a knife point-in, a bat cocked over
+  his shoulder, brass knuckles in a raised fist, the chainsaw low at his hip with its bar running in. Each
+  swing follows the game's own attack, so it lands when the hit does: drawn back, quickest through the
+  hit, followed through and back to ready; a knife's combo comes back the other way and then over the
+  top, a club's second blow comes down on someone on the ground, the knuckles jab, hook and uppercut. The
+  chainsaw shakes, harder as it cuts. Fists and things you throw are held as before (his own arms, low on
+  the right, with the game's models).
 - Look far enough round and he turns to face that way.
 - In a vehicle you sit in the driver's seat, looking out through the car with his hands on the wheel:
+  - In a car whose hood or dash comes up to your eyes where the game sits you (most of them), your eye
+    is raised until the hood is 7 degrees under level, as in a real car. It stops short of the roof over
+    you and of the roof's front edge coming down over the road.
   - The right stick looks around the cabin, and the view recentres when you let go. R3 looks back.
   - Getting in and out stays in first person.
   - On a motorcycle the view leans with you.
-  - Drive-bys aim from the seat.
+  - Drive-bys aim from the seat, through first person's crosshair: Counter-Strike's four lines, opening
+    as you fire and when the car's moving fast, as the shots spread.
+  - Your gun lies on the console between the front seats while you drive, so your hand on the wheel
+    holds nothing in front of the view (in a car with nothing between the seats, it's on your own seat
+    by your thigh). Aim and Tommy's right hand goes down to it and brings it up; let go and he puts it
+    back and his hand goes back to the wheel. On a bike or a boat it's put away until you aim. In third
+    person it's the same.
   - Flying, the pilot's hands are empty: you can't shoot from the controls.
 - Cars' steering wheels are round and turn as you steer, with Tommy's hands on them. Sounding the horn
   (clicking the left stick), he presses its middle; when the blinkers come on, he flicks the stalk behind
@@ -135,7 +160,18 @@ Vice City's story, missions and world stay as they are. Every feature can be swi
   of the water onto docks, piers and boats.
 - Tommy walks crouched. Crouch, then push the stick: he creeps along low with his gun ready, and strafes
   while aiming. Sprinting or jumping stands him up.
+- Falls hurt as they would. A storey's drop is nothing and two storeys take a fifth of your health. A
+  fourth-floor window leaves you barely alive, and nobody lives through five storeys, cops and SWAT
+  included. Armour doesn't help, and soft ground (sand, grass) helps a little. The game only took a third
+  of your health for four storeys, and armour took that first.
 - RDR2-style responses: greet or insult people up close, and pick up or wave off hookers.
+- Civilian drivers who see you aiming at them brake, flee or surrender according to their temperament
+  and speed. Mission drivers keep their scripted behavior.
+- An experimental physical reaction layer for ordinary on-foot NPCs: local hit responses, balance,
+  arm bracing, articulated falls and recovery. Cops and civilians share measured body volumes for
+  anatomy, full-limb world contact and separation between falling bodies; supported corpses sleep
+  and wake when support changes. Native damage and protected actors retain their existing owners.
+  Final in-game visual and performance checks are still pending; see the verification record below.
 
 ### Gunfights
 
@@ -168,6 +204,8 @@ Vice City's story, missions and world stay as they are. Every feature can be swi
   road to where they think you are, so how soon the first one arrives depends on where you are. They come
   in out of your sight: through the gate of a walled lot, never inside it, and on a nearby road you can't
   see if they can't arrive where they are.
+- Foot patrols also have positions and routes across the city. Stations replenish lost foot and car
+  units through shared queues; reinforcements travel from their station instead of all reappearing at once.
 - More are sent the longer it goes on, and more at once for more stars. Destroy a car and kill its cops,
   and the next nearest is sent from further off.
 - From two stars they set up roadblocks on the roads out of a ring round where they think you are. As time
@@ -180,6 +218,11 @@ Vice City's story, missions and world stay as they are. Every feature can be swi
 - Cars coming for you on foot pull up short, side-on, round a corner if there is one, and the cops get
   out behind them. Wanted on foot, police arrive in cars, instead of appearing on foot wherever you can't
   see, even inside walls with you.
+- Cops can only pull you out of a car that's barely moving. The game let them open your door up to
+  36 km/h and then held them to it however fast you went. Now, as in GTA IV, one who reaches your door
+  while you're moving catches hold of the handle and hangs on, dragged along tugging at it. The faster
+  you go and the harder you turn, the sooner he lets go and falls; slow to a crawl and he gets it open.
+  Pull away while one's opening it and he's left hanging on. Too fast and he can't catch hold at all.
 
 ### Wanted: the police know only what they've seen
 
@@ -237,7 +280,13 @@ know you by your description, and getting away leaves you under an APB until you
   under the APB.
 - Round icons right of the minimap show what they know: a phone with a ring while a call's going through,
   a magnifier while they search, a badge under the APB, and your outfit and vehicle while they're on your
-  description, struck through once you've changed them.
+  description, struck through once you've changed them. The vehicle greys while you're out of it and
+  comes back when you get in again; once it's destroyed or gone from the streets it's off the
+  description and the icon goes.
+- When a cop spots you (his eye full, or he sees a crime of yours while the police aren't after you), his
+  eye turns red. It stays over him for a few seconds at least, as he comes for you, and fades once he
+  reaches you, loses you for a moment or starts shooting, or after a few seconds more. Once they're after
+  you, nobody else turns red: what they see then is the chase.
 - In a police car you see what they see: the area they're searching, and the other police on the minimap
   (cars, cops on foot, helicopters, units out in the city). But once they're after you, they always know
   where their car is.
@@ -251,9 +300,53 @@ know you by your description, and getting away leaves you under an APB until you
 - Police helicopters fly some 35 m up instead of skimming the rooftops. Bullets hit them where you see
   them: the cabin, the tail boom, or a gunner through his open door. They take hits where they land,
   smoke and then burn as they're damaged, and go down after about a quarter as many hits as before.
+- Its searchlight is a lamp under its chin, turning to follow its spot on the ground, its lens lit at night
+  with a faint beam down to the spot. (The game's light came from a glow 7 m out in front of it, and its
+  red beacon floated 9 m behind it; that's on its tail fin now.) One hit on the can or lens shoots the lamp out: its glass
+  breaks and it stays dark, and at night it can't see as far.
+- A pilot sits at the controls behind the cockpit's glass. Shoot him through it and the helicopter goes
+  down, as you can shoot a driver. Six hits on the tail rotor shoot it away and it spins down. Hits on the
+  mast, where the main rotor meets the roof, do three times the damage.
 - From four stars a second helicopter comes. At six stars the army's Hunter joins in: it hovers off to one
-  side, turns to face you, and fires its cannon close in and its rockets from further off. It takes about
+  side with an Army soldier at the controls, turns to face you, and fires its cannon close in and its rockets from further off. It takes about
   three times the hits of a car to bring down, and leaves when the stars drop.
+
+**Flying**
+
+- Full-size playable helicopters use collective, cyclic and pedal forces with momentum and damping.
+  Their climb tapers above 3,200 m, beyond the cloud layer. Rotor strikes and targeted shots can break
+  the visible main or tail rotor, affecting control; repair restores the damaged parts.
+- The Skimmer has lift, angle-of-attack stalls, thrust, drag and aerodynamic steering while retaining
+  its native water handling. A flyable Dodo is parked on the airport apron; approach it and use the
+  normal vehicle-entry control. Entry and exit require a stopped aircraft with clear ground access.
+  Persistent spawn points replace all seven airport scenery Learjets with usable aircraft as you
+  approach. Returning after distant aircraft unloads creates usable replacements; obstructed spots
+  wait until clear. Board near the left side of the cockpit, ahead of the wing. Tommy reaches for the
+  door, steps inside, crouch-walks through the cabin and sits before taking control. The treads are
+  integrated into the hinged door's inner face.
+  The lined cabin has two cockpit seats, six rear seats and a level floor, with Police Maverick
+  instruments, clear windows, rolling suspension, animated wing and tail controls, and engine sounds
+  from the airport Airtrain. The cockpit uses the Police Maverick's panel and radio artwork. Gear
+  retracts after takeoff and extends on approach, retaining the original attached covers. Flush seals
+  with the original paint close the gaps as the gear finishes folding away. The configured horn
+  control (normally L3 or Shift) toggles it manually. Small
+  navigation and beacon lights sit on modeled lenses. Their original exterior textures are retained. The `Planes`
+  setting controls the additional aircraft and plane-flight changes.
+- Clean Learjet cruise reaches approximately112m/s in sustained flight simulations, above the
+  Infernus/Cheetah handling maximum of83m/s; runway acceleration keeps its existing spool curve.
+  Twin engine exhaust follows the real outlets. Strong thrust pushes exposed people and cars
+  behind the jet, with distance, obstruction and vehicle mass affecting the response.
+- The left stick pitches and rolls; LB/RB operate the rudder without turning the camera sideways.
+  The right stick remains the camera. Configured keyboard flight bindings remain available.
+- Free-roam Skimmer and helicopter bodies use native collision damage instead of their stock zero
+  damage coefficient. Existing nonzero handling and native damage-proof states are preserved.
+- Airborne wheel brakes add no extra drag: normal lift, drag and engine power determine the glide.
+  Above the city, terrain streaming and the ocean/horizon adapt to flight altitude with bounded LOD requests.
+  Nearby original tower models and rooftop details stay loaded along the flight path. Player-controlled
+  fixed-wing bodies also receive the missing upper-surface collisions on the four affected towers.
+- Native takeoff, landing, water behavior and handling feel are still under playtest. Current
+  implementation and acceptance evidence are tracked in
+  [the aircraft follow-up plan](docs/superpowers/plans/2026-10-31-aircraft-flight-followup.md).
 
 ### The world and the story
 
@@ -261,6 +354,13 @@ know you by your description, and getting away leaves you under an APB until you
   There are more of them, so the streets near you aren't emptier.
 - Traffic isn't the same car over and over. More models stay loaded, and the rarest one on the road is
   picked first.
+- The airliners from Escobar International climb above the clouds over the middle of their circuit,
+  instead of levelling off far under them (they flew at 345-450 m; the clouds start at 900 m), and come
+  down to land as before. They're lit by the sky they fly in: the sun on them, less in a cloud's shadow,
+  dark at night (the game lit them like cars on the street, and the far one plain grey). In or behind
+  cloud they fade into it. Their lights show: red beacons pulsing on top and underneath, white strobes
+  and red and green navigation lights on the wingtips, white on the tail, bright at night and faint by
+  day. (The game's only showed within 120 m.)
 - Story phone calls ring anywhere, even while driving. A 1980s brick phone slides up with the caller's
   name, D-pad up answers, and Tommy keeps moving.
 - Car radios can be heard from the street, muffled through the bodywork and coming from where the car is.
@@ -290,6 +390,8 @@ know you by your description, and getting away leaves you under an APB until you
 - reVC's own menu options show their names instead of "FED_VPL missing", including the Graphics Setup
   page, and the police car's name shows when you get in (its text key was in the wrong case).
 - The game no longer crashes when someone gets off a bus whose animations had been unloaded.
+- A line of sight with an end off the edge of the world's grid (the airliners fly past its south edge)
+  no longer reads and writes past the game's sectors, which could crash it.
 - Brake, reverse and headlights no longer draw see-through boxes sticking out of the bodywork (a GTA III
   leftover).
 - If the car radio gets stuck looping one moment of a song (this can happen after the pause menu), it
@@ -314,7 +416,9 @@ know you by your description, and getting away leaves you under an APB until you
 | R3                    | Aiming: bullet time                                         | Look behind                                    |
 | Select / Back         | Camera distance, then first person                          | Camera distance, including the driver's seat   |
 
-Flying a helicopter or plane: RT climbs (or opens the throttle) and LT descends, as far as they're pulled.
+Flying a helicopter: RT climbs and LT descends, as far as they're pulled. In a plane, RT controls
+throttle and LT brakes the wheels on the ground; releasing power leaves the plane gliding. Learjet gear
+operates automatically, with L3 (the configured horn control) available for a manual toggle.
 LB and RB turn the tail (a helicopter's, a plane's rudder), and the left stick pitches and rolls. A fires
 the gun and drops the bombs (the Hunter's cannon, the Sea Sparrow's gun, the RC aircraft's bombs and
 detonation), X fires the Hunter's rockets, and B holds the cinematic camera.
@@ -339,6 +443,9 @@ Options > Controls replaces the game's Controller Setup pages with one page and 
 Everything saves as you change it (`macVC.ini`, and the settings file for the mod's keys and look
 sensitivity), and the hints on screen name the new keys at once. Head bob in first person isn't a control:
 it stays in `macVC.ini` (`HeadBob1stPerson`) until the game's own features get an Options section.
+
+The Mac window's fullscreen button also remembers its last choice across launches. This saves as
+`[VideoMode] NativeFullscreen` in `macVC.ini`, separately from the graphics menu's `Windowed` video mode.
 
 ### Keyboard and mouse
 
@@ -394,31 +501,38 @@ updated after that. To pick up settings added by a newer version, delete it and 
 | `PauseTabs`, `CompactLegend`, `CircleBack` | The pause menu's tabs and legend; B/Circle goes back (0: Y/Triangle, as on the PS2) |
 | `MapIcons` | On the pause map: tooltips, the cursor snapping to icons, and picking one as the destination |
 | `Places`, `RadioLogo` | Map icons for hospitals, police stations and businesses; the station logo |
+| `RaceArrows` | Direction arrows in supported racing checkpoints |
+| `[Crosshair] Style`, `Color`, `Size`, `Thickness`, `CenterDot`, `DynamicSpread` | The crosshair options, also editable in Options → Gameplay |
 | `Tilt`, `Zoom`, `Size`, `Aspect`, `Margin` | The minimap's shape and place |
 | **Controls and camera** | |
 | `ModernTriggers`, `ModernButtons`, `DpadActions`, `Wheels` | The GTA V layout, the D-pad's actions and the wheels |
 | `AimCamera`, `DriveByAim` | Over-the-shoulder aiming; free-aim drive-bys |
 | `LookSensitivity`, `AimSensitivity` | Right stick speed, and while aiming |
-| `FirstPerson`, `SteeringWheel` | First person in the camera cycle; round, turning steering wheels |
+| `FirstPerson`, `SteeringWheel`, `ConsoleGun`, `SeatView` | First person in the camera cycle; round, turning steering wheels; the gun on the console while you drive; your eye raised over the hood |
 | `FirstPersonLook`, `FirstPersonLookYaw`, `FirstPersonLookPitch`, `AimSlowdown` | First person: the right stick's handling and its top speeds (degrees a second); aim slowdown over enemies |
 | `CameraShake` | 0 is none, 1 is the default, 2 is double |
 | `Rumble` | Controller vibration |
 | `MOD_WEAPON_WHEEL` … in `[Keys]` | The keyboard keys of the mod's own actions, written as macVC.ini's `[Bindings]` (`kbd:Q,2ndKbd:F1`, `mouse:MIDDLE`) |
 | **On foot and gunfights** | |
 | `Swimming`, `Climbing`, `CrouchWalk` | Swimming, climbing and walking crouched |
+| `FallDamage` | Falls hurt as they would, armour or not |
 | `FirstPersonMovement`, `FirstPersonAccel`, `FirstPersonFriction` | First person: the stick moves him at once; how fast he gets up to speed and stops (Counter-Strike's 5 and 4) |
-| `FirstPersonGuns`, `ViewmodelFov` | First person: his own arms holding the new guns, drawn as a viewmodel; its field of view (degrees, top to bottom) |
+| `FirstPersonGuns`, `ViewmodelFov` | First person: his own arms holding the new guns and melee weapons, drawn as a viewmodel; its field of view (degrees, top to bottom) |
 | `Interactions` | Greeting and insulting people, hookers |
+| `DriverReactions`, `NPCReactions` | Pedestrian/driver gun-threat responses; the experimental physical NPC reaction layer |
 | `SmarterEnemies` | Gunmen fighting from cover |
 | `BulletTime` | Bullet time and the shootdodge |
 | **Police and wanted** | |
 | `SmarterPolice`, `Roadblocks`, `CopsByCar` | Police sent by road from across the city; the roadblocks; arriving by car |
+| `CopsGrabDoors` | Your door opens only at a crawl; faster, cops hang on to it and let go |
 | `RealisticWanted` | Witnesses, hearing, your description, the search and the APB |
-| `HeliDamage`, `HeliGunners` | Shooting the police helicopter properly; its SWAT gunners, the second helicopter and the Hunter |
+| `HeliDamage`, `HeliGunners` | Shooting the police helicopter properly (its searchlight, pilot, tail rotor and rotor mast too); its SWAT gunners, the second helicopter and the Hunter |
 | **The world** | |
 | `Phone`, `CarRadios`, `StoryHints`, `Credit` | Calls anywhere; car radios from outside; Ken's texts; buying businesses on credit |
 | `SpawnDistance`, `CarVariety` | How much further out cars and people appear (1 is as the game had it); more car models |
+| `WorldPopulation` | Path/zone-based civilians and foot patrols, with shared station replenishment |
 | `Clouds`, `ModernLighting`, `LightGlow` | The new sky, the camera look, and cars' lights glowing on the model |
+| `Planes` | The airliners up in the clouds, lit by the sky, with their lights |
 
 If something looks wrong, the log next to the settings file (`vcmodernhud.log`) usually says why. The
 last three sessions are kept as `vcmodernhud.1.log` to `.3.log`, so a session that crashed isn't lost when
@@ -453,7 +567,9 @@ repository.
 - `make preview` builds an offline renderer for the minimap and phone.
 - `make viewmodel` cuts Tommy's arms from every outfit in your game files, as the mod does, fits his hand
   to each gun, reports how much of each finger ends up inside it, and writes OBJs to render with
-  `blender -b -P tools/viewmodel/render.py -- build/vm fp player`.
+  `blender -b -P tools/viewmodel/render.py -- build/vm fp player`. `VM_SHOT=0.05` renders the gun that long
+  after a shot; `build/vcmm-viewmodel <GameData> build/vm --melee nitestick` holds a melee weapon instead
+  (`VM_SWING=which,time,strike` mid-swing).
 - `make guns` rebuilds the viewmodel guns in Blender (`tools/guns/`; the built `assets/guns/*.vmg` are
   committed, so players never need Blender).
 
@@ -464,15 +580,19 @@ and build plan are in `docs/superpowers/`.
 
 ## Known limits
 
+- The latest feedback build has passed code, offline geometry and unit checks, but its installed-game
+  acceptance checks are pending. Estate lighting remains unresolved. The exact coverage and remaining
+  scenarios are in [the feedback verification record](docs/superpowers/plans/2026-10-31-feedback-verification.md).
 - In first person, things you throw (grenades, molotovs) still use the game's own models and throw, and the
-  keyboard and mouse fire through the game's attack, not the instant firing. A two-handed gun's reload
-  doesn't take the left hand to the magazine yet. Some outfits (the ones with open, straight fingers) grip
+  keyboard and mouse fire through the game's attack, not the instant firing. Melee weapons are the game's own
+  low-detail models (64 px textures, unlike the remade guns), all held in his right hand (the bat and the
+  chainsaw too), his fingers as his model has them round a handle. Some outfits (the ones with open, straight fingers) grip
   the guns less neatly than his usual clothes do. Tommy turns on the spot without a stepping animation.
 - The shadows are the port's own ray-traced ones (`MetalRayTracing=1` in the port's `macVC.ini`). They
   can cost 5–28 ms a frame, and the mod's log shows their timings.
 - Cops hear gunfire, so missions with street shootouts can draw a police search where the game never did.
-- The helicopter door gunners' seats and the Hunter's flying were set from the models' measurements and
-  may need tuning.
+- The helicopter door gunners' seats, its pilot's, its searchlight and its parts to shoot, the gun on each
+  car's console, and the Hunter's flying were all set from the models' measurements and may need tuning.
 - Only the 1.0.5217 build of the port is supported. The installer refuses anything else.
 
 ## Credits

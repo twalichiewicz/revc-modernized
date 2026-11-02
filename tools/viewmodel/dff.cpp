@@ -150,3 +150,81 @@ bool ReadSkinnedDff(const std::vector<uint8_t> &b, vm::SkinnedMesh &out, std::st
 	}
 	return true;
 }
+
+bool ReadStaticDff(const std::vector<uint8_t> &b, StaticMesh &out, std::string &why)
+{
+	Chunk clump;
+	if (!At(b, 0, clump) || clump.type != 0x10) {
+		why = "not a clump";
+		return false;
+	}
+	size_t geometry = 0, geometrySize = 0;
+	for (const Chunk &c : Children(b, clump.data, clump.data + clump.size))
+		if (c.type == 0x1a)
+			for (const Chunk &g : Children(b, c.data, c.data + c.size))
+				if (g.type == 0x0f && !geometry) {
+					geometry = g.data;
+					geometrySize = g.size;
+				}
+	if (!geometry) {
+		why = "no geometry";
+		return false;
+	}
+	const auto kids = Children(b, geometry, geometry + geometrySize);
+	size_t q = kids[0].data;
+	const uint32_t flags = Get<uint32_t>(b, q);
+	const int32_t triangles = Get<int32_t>(b, q + 4), vertices = Get<int32_t>(b, q + 8);
+	q += 16;
+	if (Library(kids[0].version) < 0x34000)
+		q += 12;
+	if (flags & 0x08)
+		q += 4 * size_t(vertices);
+	const uint32_t uvSets = (flags >> 16) & 0xff ? (flags >> 16) & 0xff : (flags & 0x04 ? 1 : 0);
+	out.vertices.assign(size_t(vertices), vm::SkinVertex{});
+	for (uint32_t s = 0; s < uvSets; s++)
+		for (int32_t i = 0; i < vertices; i++, q += 8)
+			if (s == 0) {
+				out.vertices[i].u = Get<float>(b, q);
+				out.vertices[i].v = Get<float>(b, q + 4);
+			}
+	out.triangles.resize(size_t(triangles));
+	for (int32_t i = 0; i < triangles; i++, q += 8) {
+		vm::Triangle &t = out.triangles[i];
+		t.v[1] = Get<uint16_t>(b, q);
+		t.v[0] = Get<uint16_t>(b, q + 2);
+		t.material = Get<uint16_t>(b, q + 4);
+		t.v[2] = Get<uint16_t>(b, q + 6);
+	}
+	q += 16;
+	const uint32_t hasVertices = Get<uint32_t>(b, q), hasNormals = Get<uint32_t>(b, q + 4);
+	q += 8;
+	for (int32_t i = 0; hasVertices && i < vertices; i++, q += 12)
+		out.vertices[i].pos = {Get<float>(b, q), Get<float>(b, q + 4), Get<float>(b, q + 8)};
+	for (int32_t i = 0; hasNormals && i < vertices; i++, q += 12)
+		out.vertices[i].normal = {Get<float>(b, q), Get<float>(b, q + 4), Get<float>(b, q + 8)};
+	for (auto &v : out.vertices) {
+		v.bone[0] = 0;
+		v.weight[0] = 1.0f;
+	}
+	// The materials' textures: material list > material > texture > its name (a string chunk).
+	for (size_t k = 1; k < kids.size(); k++) {
+		if (kids[k].type != 0x08)
+			continue;
+		for (const Chunk &m : Children(b, kids[k].data, kids[k].data + kids[k].size)) {
+			if (m.type != 0x07)
+				continue;
+			std::string name;
+			for (const Chunk &t : Children(b, m.data, m.data + m.size))
+				if (t.type == 0x06)
+					for (const Chunk &s : Children(b, t.data, t.data + t.size))
+						if (s.type == 0x02 && name.empty())
+							name = std::string(reinterpret_cast<const char *>(&b[s.data]), strnlen(reinterpret_cast<const char *>(&b[s.data]), s.size));
+			out.textures.push_back(name);
+		}
+	}
+	if (!hasVertices) {
+		why = "no vertices";
+		return false;
+	}
+	return true;
+}

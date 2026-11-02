@@ -50,6 +50,8 @@ struct Instance {
 	int interior;
 	Vec3f pos;
 	float qx, qy, qz, qw;
+	Vec3f scale{1, 1, 1}; // exported metadata; macVC's native placement ignores it
+	int timeOn = -1, timeOff = -1; // exported timed-model visibility, -1 for ordinary models
 };
 // Reads the "inst" sections of every IPL listed in data/gta_vc.dat.
 std::vector<Instance> LoadInstances(const std::string &gameData);

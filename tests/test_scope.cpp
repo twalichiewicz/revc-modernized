@@ -194,9 +194,15 @@ static void TestViewCarriesAcross()
 		CHECK(Near(Sniper(SniperAngles(f)), f));
 		CHECK(Near(FollowRaised(FollowAngles(f, level), level), f));
 	}
-	// Past each camera's own limits, as far as it goes.
-	CHECK(SniperAngles({0, 0, 1}).alpha <= 60.0f * 3.14159265f / 180.0f + 1e-5f);
-	CHECK(FollowAngles({0, 0, 1}, level).alpha <= 45.0f * 3.14159265f / 180.0f + 1e-5f);
+	// First person reaches 89 degrees in either camera. Follow Alpha may go
+	// below -90 because its leveling offset is applied before making a basis.
+	for (float pitch : {-89.0f, -80.0f, 80.0f, 89.0f}) {
+		const float a = pitch * 3.14159265f / 180.0f;
+		const Dir f{0.0f, std::cos(a), std::sin(a)};
+		CHECK(Near(Sniper(SniperAngles(f)), f));
+		CHECK(Near(FollowRaised(FollowAngles(f, level), level), f));
+	}
+	CHECK(std::fabs(SniperAngles({0,0,1}).alpha - 89.0f*3.14159265f/180.0f)<1e-5f);
 }
 
 int main()

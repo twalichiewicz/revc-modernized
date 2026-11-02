@@ -6,15 +6,35 @@ DYLIB   := $(BUILD)/libVCModernHUD.dylib
 BAKE    := $(BUILD)/vcmm-bake
 PREVIEW := $(BUILD)/vcmm-preview
 VMTOOL  := $(BUILD)/vcmm-viewmodel
-VMCORE  := src/vmanim.cpp src/vmarms.cpp src/vmfit.cpp src/vmgun.cpp src/vmhands.cpp src/vmpose.cpp src/vmskin.cpp src/vmview.cpp src/gunassets.cpp $(BUILD)/gunassets.S
+VMCORE  := src/vmanim.cpp src/vmkick.cpp src/vmmelee.cpp src/vmarms.cpp src/vmfit.cpp src/vmgun.cpp src/vmhands.cpp src/vmpose.cpp src/vmskin.cpp src/vmview.cpp src/gunassets.cpp $(BUILD)/gunassets.S
 
 SHARED := src/brickphone.cpp src/canvas.cpp src/mapdata.cpp src/projection.cpp src/scene.cpp
-PLUGIN := $(SHARED) src/actions.cpp src/aimcam.cpp src/aimslow.cpp src/alert.cpp src/anims.cpp src/bindings.cpp src/body.cpp src/camera.cpp src/carlights.cpp src/carradio.cpp src/climb.cpp src/clouds.cpp src/combat.cpp src/config.cpp src/controls.cpp src/controlsmodel.cpp src/controlspage.cpp src/credit.cpp src/crouch.cpp src/shapes.cpp src/shootdodge.cpp src/sight.cpp src/draw.cpp src/driveby.cpp src/game.cpp src/grade.cpp src/fontbuf.cpp src/fpbob.cpp src/fpcross.cpp src/fpfire.cpp src/fpgait.cpp src/fplook.cpp src/fpshoot.cpp src/fpmove.cpp src/fpwalk.cpp src/gps.cpp src/gunbank.cpp src/gunsfx.cpp src/heat.cpp src/heli.cpp src/hints.cpp src/hinttext.cpp src/hooks.cpp src/hunter.cpp src/hud.cpp src/inifile.cpp src/magnet.cpp src/interact.cpp src/keys.cpp src/log.cpp src/menu.cpp src/minimap.cpp src/phone.cpp src/places.cpp src/player.cpp src/poi.cpp src/police.cpp src/prompt.cpp src/radiohud.cpp src/radiologos.cpp src/rtshadows.cpp src/rumble.mm src/scope.cpp src/sfxdsp.cpp src/shaders.cpp src/shotsound.cpp src/shotsynth.cpp src/sniper.cpp src/sky.cpp src/steering.cpp src/story.cpp src/swim.cpp src/text.cpp src/traffic.cpp src/turns.cpp src/viewmodel.cpp src/vmanim.cpp src/vmarms.cpp src/vmfit.cpp src/vmgun.cpp src/vmhands.cpp src/vmpose.cpp src/vmskin.cpp src/vmuse.cpp src/vmview.cpp src/fpgun.cpp src/gunassets.cpp $(BUILD)/gunassets.S src/wanted.cpp src/wantedhud.cpp src/watch.cpp src/witness.cpp src/wheel.cpp
-GAMEFILES := tools/bake/gamefiles.cpp
+PLUGIN := $(SHARED) src/actions.cpp src/aimcam.cpp src/aimslow.cpp src/alert.cpp src/anims.cpp src/bindings.cpp src/body.cpp src/camera.cpp src/carlights.cpp src/carradio.cpp src/climb.cpp src/clouds.cpp src/combat.cpp src/config.cpp src/consolespot.cpp src/controls.cpp src/controlsmodel.cpp src/controlspage.cpp src/credit.cpp src/crouch.cpp src/doorgrab.cpp src/falldamage.cpp src/falls.cpp src/shapes.cpp src/shootdodge.cpp src/sight.cpp src/spotters.cpp src/draw.cpp src/driveby.cpp src/game.cpp src/grade.cpp src/fontbuf.cpp src/fpbob.cpp src/flightpath.cpp src/fpcross.cpp src/fpfire.cpp src/fpgait.cpp src/fplook.cpp src/fpshoot.cpp src/fpmove.cpp src/fpwalk.cpp src/gps.cpp src/gridclip.cpp src/gridfix.cpp src/grip.cpp src/gunbank.cpp src/gunsfx.cpp src/heat.cpp src/heli.cpp src/helizones.cpp src/hints.cpp src/hinttext.cpp src/hooks.cpp src/hunter.cpp src/hud.cpp src/inifile.cpp src/magnet.cpp src/interact.cpp src/keys.cpp src/log.cpp src/menu.cpp src/minimap.cpp src/phone.cpp src/places.cpp src/planes.cpp src/player.cpp src/poi.cpp src/police.cpp src/prompt.cpp src/radiohud.cpp src/radiologos.cpp src/rtshadows.cpp src/rumble.mm src/scope.cpp src/seateye.cpp src/seatgun.cpp src/seatview.cpp src/sfxdsp.cpp src/shaders.cpp src/shotsound.cpp src/shotsynth.cpp src/sniper.cpp src/sky.cpp src/steering.cpp src/story.cpp src/achievements.cpp src/achievementsmodel.cpp src/statsmodel.cpp src/statspage.cpp src/swim.cpp src/text.cpp src/traffic.cpp src/turns.cpp src/viewmodel.cpp src/vmanim.cpp src/vmkick.cpp src/vmmelee.cpp src/vmarms.cpp src/vmfit.cpp src/vmgun.cpp src/vmhands.cpp src/vmpose.cpp src/vmskin.cpp src/vmuse.cpp src/vmview.cpp src/fpgun.cpp src/gunassets.cpp $(BUILD)/gunassets.S src/wanted.cpp src/wantedhud.cpp src/watch.cpp src/witness.cpp src/wheel.cpp
+GAMEFILES := tools/bake/gamefiles.cpp tools/bake/visualmodel.cpp
+PLUGIN += src/aircraft.cpp src/checkpoint.cpp src/checkpointmodel.cpp src/drivers.cpp src/fpfeedback.cpp \
+          src/greeting.cpp src/intimidation.cpp src/population.cpp src/populationmodel.cpp src/reactions.cpp src/reactphysics.cpp src/reactrig.cpp src/reactcontact.cpp \
+          src/reticle.cpp src/reticlemodel.cpp src/swimmotion.cpp src/voiceclip.cpp src/wheelgrip.cpp \
+          src/gameplaypage.cpp src/gameplaymodel.cpp src/reactself.cpp
+PLUGIN += src/reactcrowd.cpp src/reacthit.cpp
+PLUGIN += src/shotimpact.cpp src/reactimpact.cpp src/playerreact.cpp src/playerreactmodel.cpp
+PLUGIN += src/windowmode.mm
+PLUGIN += src/estatelighting.cpp
+PLUGIN += src/ballistics.cpp
+PLUGIN += src/shotcollision.cpp
+PLUGIN += src/planeflight.cpp src/flightmodel.cpp
+PLUGIN += src/airportjets.cpp src/aircraftdamage.cpp
+PLUGIN += src/airportjetmodel.cpp src/jetwheels.cpp src/jetaudio.cpp src/jetlights.cpp
+PLUGIN += src/airworld.cpp
+PLUGIN += src/jetwash.cpp
+PLUGIN += src/trafficweave.cpp
+PLUGIN += src/towercollision.cpp
+PLUGIN += src/jetshadow.cpp
+PLUGIN += src/jetboardingpose.cpp
 GUNS      ?= $(wildcard assets/guns/*.vmg)  # every gun built (GUNS="..." to build in only some)
 CXXFLAGS  += -I$(BUILD)
 BLENDER   ?= blender
 GAMEDATA  ?= /Applications/Grand Theft Auto Vice City.app/Contents/Resources/GameData
+MACVC_NATIVE ?= $(HOME)/Library/Application Support/macVC/vcmodernhud/macVC.vanilla
 
 all: $(DYLIB) $(BAKE)
 
@@ -28,7 +48,386 @@ FORCE:
 $(DYLIB): $(PLUGIN) $(wildcard src/*.h) $(GUNS) $(BUILD)/gunlist.h $(BUILD)/gunassets.S | $(BUILD)
 	$(CXX) $(CXXFLAGS) -fvisibility=hidden -fobjc-arc -dynamiclib \
 		-install_name @executable_path/../Frameworks/libVCModernHUD.dylib -o $@ $(PLUGIN) \
-		-framework Foundation -framework GameController -framework CoreHaptics
+		-framework Foundation -framework AppKit -framework GameController -framework CoreHaptics -framework AudioToolbox
+
+$(BUILD)/test_aircraft: tests/test_aircraft.cpp src/aircraft.cpp src/aircraft.h | $(BUILD)
+	$(CXX) $(CXXFLAGS) -Isrc -o $@ tests/test_aircraft.cpp src/aircraft.cpp
+
+$(BUILD)/test_apb: tests/test_apb.cpp src/heat.cpp src/heat.h | $(BUILD)
+	$(CXX) $(CXXFLAGS) -Isrc -o $@ tests/test_apb.cpp src/heat.cpp
+
+$(BUILD)/test_helilight: tests/test_helilight.cpp src/helizones.cpp src/helizones.h | $(BUILD)
+	$(CXX) $(CXXFLAGS) -Isrc -o $@ tests/test_helilight.cpp src/helizones.cpp
+
+$(BUILD)/test_fpfeedback: tests/test_fpfeedback.cpp src/fpfeedback.cpp src/fpfeedback.h | $(BUILD)
+	$(CXX) $(CXXFLAGS) -Isrc -o $@ tests/test_fpfeedback.cpp src/fpfeedback.cpp
+
+$(BUILD)/test_swimmotion: tests/test_swimmotion.cpp src/swimmotion.cpp src/swimmotion.h | $(BUILD)
+	$(CXX) $(CXXFLAGS) -Isrc -o $@ tests/test_swimmotion.cpp src/swimmotion.cpp
+
+$(BUILD)/test_wheelgrip: tests/test_wheelgrip.cpp src/wheelgrip.cpp src/wheelgrip.h src/vmpose.cpp src/vmarms.cpp | $(BUILD)
+	$(CXX) $(CXXFLAGS) -Isrc -o $@ tests/test_wheelgrip.cpp src/wheelgrip.cpp src/vmpose.cpp src/vmarms.cpp
+
+$(BUILD)/test_reticlemodel: tests/test_reticlemodel.cpp src/reticlemodel.cpp src/fpcross.cpp src/inifile.cpp | $(BUILD)
+	$(CXX) $(CXXFLAGS) -Isrc -o $@ tests/test_reticlemodel.cpp src/reticlemodel.cpp src/fpcross.cpp src/inifile.cpp
+
+$(BUILD)/test_gameplaymodel: tests/test_gameplaymodel.cpp src/gameplaymodel.cpp src/gameplaymodel.h src/reticlemodel.h | $(BUILD)
+	$(CXX) $(CXXFLAGS) -Isrc -o $@ tests/test_gameplaymodel.cpp src/gameplaymodel.cpp
+
+$(BUILD)/test_menulabels: tests/test_menulabels.cpp src/menulabels.h | $(BUILD)
+	$(CXX) $(CXXFLAGS) -Isrc -o $@ tests/test_menulabels.cpp
+
+$(BUILD)/test_estatelighting: tests/test_estatelighting.cpp src/grade.cpp src/grade.h src/shaders.h | $(BUILD)
+	$(CXX) $(CXXFLAGS) -Isrc -o $@ tests/test_estatelighting.cpp
+
+$(BUILD)/test_carlightrules: tests/test_carlightrules.cpp src/carlightrules.h | $(BUILD)
+	$(CXX) $(CXXFLAGS) -Isrc -o $@ tests/test_carlightrules.cpp
+
+$(BUILD)/test_roofgeometry: tests/test_roofgeometry.cpp tools/bake/roofgeometry.h | $(BUILD)
+	$(CXX) $(CXXFLAGS) -Isrc -o $@ tests/test_roofgeometry.cpp
+
+$(BUILD)/test_mapheights: tests/test_mapheights.cpp src/mapdata.cpp src/mapdata.h | $(BUILD)
+	$(CXX) $(CXXFLAGS) -Isrc -o $@ tests/test_mapheights.cpp src/mapdata.cpp
+
+$(BUILD)/test_checkpointmodel: tests/test_checkpointmodel.cpp src/checkpointmodel.cpp src/checkpointmodel.h | $(BUILD)
+	$(CXX) $(CXXFLAGS) -Isrc -o $@ tests/test_checkpointmodel.cpp src/checkpointmodel.cpp
+
+$(BUILD)/test_voiceclip: tests/test_voiceclip.cpp src/voiceclip.cpp src/voiceclip.h | $(BUILD)
+	$(CXX) $(CXXFLAGS) -Isrc -o $@ tests/test_voiceclip.cpp src/voiceclip.cpp
+
+$(BUILD)/test_intimidation: tests/test_intimidation.cpp src/intimidation.cpp src/intimidation.h | $(BUILD)
+	$(CXX) $(CXXFLAGS) -Isrc -o $@ tests/test_intimidation.cpp src/intimidation.cpp
+
+$(BUILD)/test_populationmodel: tests/test_populationmodel.cpp src/populationmodel.cpp src/populationmodel.h | $(BUILD)
+	$(CXX) $(CXXFLAGS) -Isrc -o $@ tests/test_populationmodel.cpp src/populationmodel.cpp
+
+$(BUILD)/test_reactphysics: tests/test_reactphysics.cpp src/reactphysics.cpp src/reactphysics.h src/reactself.cpp src/reactself.h src/reactshape.h | $(BUILD)
+	$(CXX) $(CXXFLAGS) -Isrc -o $@ tests/test_reactphysics.cpp src/reactphysics.cpp src/reactself.cpp
+
+$(BUILD)/test_reactsolver: tests/test_reactsolver.cpp tests/reactworld.h src/reactphysics.cpp src/reactphysics.h src/reactself.cpp src/reactself.h src/reactcontact.cpp src/reactcontact.h src/reactrig.cpp src/reactshape.h | $(BUILD)
+	$(CXX) $(CXXFLAGS) -Isrc -o $@ tests/test_reactsolver.cpp src/reactphysics.cpp src/reactself.cpp src/reactcontact.cpp src/reactrig.cpp
+
+$(BUILD)/test_reactcontact_native: tests/test_reactcontact_native.cpp src/reactcontact.cpp src/reactcontact.h | $(BUILD)
+	$(CXX) $(CXXFLAGS) -Isrc -o $@ tests/test_reactcontact_native.cpp
+
+$(BUILD)/test_reactcrowd: tests/test_reactcrowd.cpp tests/reactworld.h src/reactcrowd.cpp $(wildcard src/react*.h) src/reactphysics.cpp src/reactself.cpp src/reactcontact.cpp src/reactrig.cpp | $(BUILD)
+	$(CXX) $(CXXFLAGS) -Isrc -o $@ tests/test_reactcrowd.cpp src/reactcrowd.cpp src/reactphysics.cpp src/reactself.cpp src/reactcontact.cpp src/reactrig.cpp
+
+$(BUILD)/test_reactworldhook: tests/test_reactworldhook.cpp tests/test_reactionhook.cpp src/reactions.cpp src/reactcrowd.cpp $(wildcard src/react*.h) src/reactphysics.cpp src/reactself.cpp src/reactcontact.cpp src/reactrig.cpp src/reactimpact.cpp | $(BUILD)
+	$(CXX) $(CXXFLAGS) -Isrc -o $@ tests/test_reactworldhook.cpp src/reactcrowd.cpp src/reactphysics.cpp src/reactself.cpp src/reactcontact.cpp src/reactrig.cpp src/reactimpact.cpp
+
+$(BUILD)/test_reactnavigation: tests/test_reactnavigation.cpp tests/test_reactionhook.cpp src/reactions.cpp $(wildcard src/react*.h) src/reactcrowd.cpp src/reactphysics.cpp src/reactself.cpp src/reactcontact.cpp src/reactrig.cpp src/reactimpact.cpp | $(BUILD)
+	$(CXX) $(CXXFLAGS) -Isrc -o $@ tests/test_reactnavigation.cpp src/reactcrowd.cpp src/reactphysics.cpp src/reactself.cpp src/reactcontact.cpp src/reactrig.cpp src/reactimpact.cpp
+
+$(BUILD)/test_playerragdoll: tests/test_playerragdoll.cpp tests/test_reactionhook.cpp src/reactions.cpp $(wildcard src/react*.h) src/reactcrowd.cpp src/reactphysics.cpp src/reactself.cpp src/reactcontact.cpp src/reactrig.cpp src/reactimpact.cpp | $(BUILD)
+	$(CXX) $(CXXFLAGS) -Isrc -o $@ tests/test_playerragdoll.cpp src/reactcrowd.cpp src/reactphysics.cpp src/reactself.cpp src/reactcontact.cpp src/reactrig.cpp src/reactimpact.cpp
+
+$(BUILD)/test_reactcorpse: tests/test_reactcorpse.cpp tests/test_reactionhook.cpp src/reactions.cpp $(wildcard src/react*.h) src/reactcrowd.cpp src/reactphysics.cpp src/reactself.cpp src/reactcontact.cpp src/reactrig.cpp src/reactimpact.cpp | $(BUILD)
+	$(CXX) $(CXXFLAGS) -Isrc -o $@ tests/test_reactcorpse.cpp src/reactcrowd.cpp src/reactphysics.cpp src/reactself.cpp src/reactcontact.cpp src/reactrig.cpp src/reactimpact.cpp
+
+$(BUILD)/test_reactrecovery: tests/test_reactrecovery.cpp tests/reactworld.h src/reactphysics.cpp src/reactself.cpp src/reactcontact.cpp src/reactrig.cpp $(wildcard src/react*.h) | $(BUILD)
+	$(CXX) $(CXXFLAGS) -Isrc -o $@ tests/test_reactrecovery.cpp src/reactphysics.cpp src/reactself.cpp src/reactcontact.cpp src/reactrig.cpp
+
+$(BUILD)/test_recoveryhook: tests/test_recoveryhook.cpp tests/test_reactionhook.cpp src/reactions.cpp $(wildcard src/react*.h) src/reactcrowd.cpp src/reactphysics.cpp src/reactself.cpp src/reactcontact.cpp src/reactrig.cpp src/reactimpact.cpp | $(BUILD)
+	$(CXX) $(CXXFLAGS) -Isrc -o $@ tests/test_recoveryhook.cpp src/reactcrowd.cpp src/reactphysics.cpp src/reactself.cpp src/reactcontact.cpp src/reactrig.cpp src/reactimpact.cpp
+
+$(BUILD)/test_reacthit_native: tests/test_reacthit_native.cpp tests/test_reactionhook.cpp tests/nativejetshadowarm.h tests/nativeweavearm.h src/reacthit.cpp src/reactions.cpp $(wildcard src/react*.h) src/reactcrowd.cpp src/reactphysics.cpp src/reactself.cpp src/reactcontact.cpp src/reactrig.cpp src/reactimpact.cpp | $(BUILD)
+	$(CXX) $(CXXFLAGS) -Isrc -o $@ tests/test_reacthit_native.cpp src/reactcrowd.cpp src/reactphysics.cpp src/reactself.cpp src/reactcontact.cpp src/reactrig.cpp src/reactimpact.cpp
+
+$(BUILD)/test_reacthit: tests/test_reacthit.cpp tests/nativejetshadowarm.h tests/nativeweavearm.h src/reacthit.cpp $(wildcard src/react*.h) | $(BUILD)
+	$(CXX) $(CXXFLAGS) -Isrc -o $@ tests/test_reacthit.cpp
+
+$(BUILD)/test_reactself: tests/test_reactself.cpp src/reactself.cpp src/reactself.h src/reactphysics.cpp src/reactphysics.h src/reactshape.h | $(BUILD)
+	$(CXX) $(CXXFLAGS) -Isrc -o $@ tests/test_reactself.cpp src/reactself.cpp src/reactphysics.cpp
+
+$(BUILD)/test_reactrig: tests/test_reactrig.cpp src/reactrig.cpp src/reactrig.h src/vmmath.h | $(BUILD)
+	$(CXX) $(CXXFLAGS) -Isrc -o $@ tests/test_reactrig.cpp src/reactrig.cpp
+
+$(BUILD)/test_carmaterials: tests/test_carmaterials.cpp src/carmaterials.h src/carlightrules.h | $(BUILD)
+	$(CXX) $(CXXFLAGS) -Isrc -o $@ tests/test_carmaterials.cpp
+
+$(BUILD)/test_populationstream: tests/test_populationstream.cpp src/populationrules.h | $(BUILD)
+	$(CXX) $(CXXFLAGS) -Isrc -o $@ tests/test_populationstream.cpp
+
+$(BUILD)/test_reactcontact: tests/test_reactcontact.cpp tests/reactworld.h src/reactcontact.cpp src/reactcontact.h src/reactphysics.cpp src/reactphysics.h src/reactself.cpp src/reactself.h src/reactrig.cpp src/reactrig.h src/reactshape.h | $(BUILD)
+	$(CXX) $(CXXFLAGS) -Isrc -o $@ tests/test_reactcontact.cpp src/reactcontact.cpp src/reactphysics.cpp src/reactself.cpp src/reactrig.cpp
+
+$(BUILD)/test_reactionhook: tests/test_reactionhook.cpp src/reactions.cpp src/reactphysics.cpp src/reactrig.cpp src/reactcontact.cpp src/reactself.cpp src/reactself.h src/reactimpact.cpp src/reactimpact.h src/shotimpact.h src/playerreact.h src/config.h src/reactcrowd.cpp src/reactcrowd.h src/reactshape.h | $(BUILD)
+	$(CXX) $(CXXFLAGS) -Isrc -o $@ tests/test_reactionhook.cpp src/reactphysics.cpp src/reactrig.cpp src/reactcontact.cpp src/reactself.cpp src/reactimpact.cpp src/reactcrowd.cpp
+
+$(BUILD)/test_shotimpact: tests/test_shotimpact.cpp src/shotimpact.cpp src/shotimpact.h src/hooks.h src/game.h src/config.h | $(BUILD)
+	$(CXX) $(CXXFLAGS) -Isrc -o $@ tests/test_shotimpact.cpp
+
+$(BUILD)/test_hookchain: tests/test_hookchain.cpp src/hooks.cpp src/hooks.h src/hookname.h | $(BUILD)
+	$(CXX) $(CXXFLAGS) -Isrc -o $@ tests/test_hookchain.cpp
+
+$(BUILD)/test_reactimpact: tests/test_reactimpact.cpp src/reactimpact.cpp src/reactimpact.h src/reactphysics.h | $(BUILD)
+	$(CXX) $(CXXFLAGS) -Isrc -o $@ tests/test_reactimpact.cpp src/reactimpact.cpp
+
+$(BUILD)/test_playerreact: tests/test_playerreact.cpp tests/playerreactrig.h src/playerreactmodel.cpp src/playerreact.h | $(BUILD)
+	$(CXX) $(CXXFLAGS) -Isrc -o $@ tests/test_playerreact.cpp src/playerreactmodel.cpp
+
+$(BUILD)/test_playerreacthook: tests/test_playerreacthook.cpp src/player.cpp src/playerreact.cpp src/playerreactmodel.cpp src/playerreact.h | $(BUILD)
+	$(CXX) $(CXXFLAGS) -Isrc -o $@ tests/test_playerreacthook.cpp src/playerreact.cpp src/playerreactmodel.cpp
+
+$(BUILD)/test_playerreactview: tests/test_playerreactview.cpp tests/vmtestarm.h $(wildcard assets/guns/*.vmg) src/fpgun.cpp src/playerreactmodel.cpp src/playerreact.h $(wildcard src/vm*.h) | $(BUILD)
+	$(CXX) $(CXXFLAGS) -Isrc -Wl,-dead_strip -o $@ tests/test_playerreactview.cpp src/playerreactmodel.cpp src/vmarms.cpp src/vmpose.cpp src/vmhands.cpp src/vmfit.cpp src/vmgun.cpp src/vmanim.cpp src/vmkick.cpp src/vmmelee.cpp src/vmskin.cpp src/vmuse.cpp src/vmview.cpp
+
+$(BUILD)/test_windowmode: tests/test_windowmode.mm src/windowmode.mm src/windowmode.h src/inifile.cpp | $(BUILD)
+	$(CXX) $(CXXFLAGS) -Isrc -fobjc-arc -o $@ tests/test_windowmode.mm src/inifile.cpp -framework AppKit
+
+$(BUILD)/test_aimfire: tests/test_aimfire.cpp src/aimcam.cpp src/body.cpp src/fpfeedback.cpp src/fpfire.cpp $(wildcard src/*.h) | $(BUILD)
+	$(CXX) $(CXXFLAGS) -Isrc -Wl,-dead_strip -o $@ tests/test_aimfire.cpp src/fpfeedback.cpp src/fpfire.cpp
+
+$(BUILD)/test_aimposehook: tests/test_aimposehook.cpp src/aimcam.cpp src/body.cpp src/fpfeedback.cpp $(wildcard src/*.h) | $(BUILD)
+	$(CXX) $(CXXFLAGS) -Isrc -Wl,-dead_strip -o $@ tests/test_aimposehook.cpp src/fpfeedback.cpp
+
+$(BUILD)/test_aimspreadhook: tests/test_aimspreadhook.cpp tests/test_damageoverlayhook.cpp src/player.cpp src/camera.cpp src/fpfeedback.cpp src/draw.cpp src/canvas.cpp src/fpbob.cpp src/scope.cpp src/game.cpp $(wildcard src/*.h) | $(BUILD)
+	$(CXX) $(CXXFLAGS) -Isrc -Wl,-dead_strip -o $@ tests/test_aimspreadhook.cpp src/fpfeedback.cpp src/draw.cpp src/canvas.cpp src/fpbob.cpp src/scope.cpp src/game.cpp
+
+$(BUILD)/test_damageoverlayhook: tests/test_damageoverlayhook.cpp src/player.cpp src/camera.cpp src/fpfeedback.cpp src/draw.cpp src/canvas.cpp src/fpbob.cpp src/scope.cpp src/game.cpp $(wildcard src/*.h) | $(BUILD)
+	$(CXX) $(CXXFLAGS) -Isrc -Wl,-dead_strip -o $@ tests/test_damageoverlayhook.cpp src/fpfeedback.cpp src/draw.cpp src/canvas.cpp src/fpbob.cpp src/scope.cpp src/game.cpp
+
+$(BUILD)/test_aircraftcamerahook: tests/test_aircraftcamerahook.cpp tests/test_damageoverlayhook.cpp src/player.cpp src/camera.cpp src/planeflight.h src/flightinput.h src/fpfeedback.cpp src/draw.cpp src/canvas.cpp src/fpbob.cpp src/scope.cpp src/game.cpp $(wildcard src/*.h) | $(BUILD)
+	$(CXX) $(CXXFLAGS) -Isrc -Wl,-dead_strip -o $@ tests/test_aircraftcamerahook.cpp src/fpfeedback.cpp src/draw.cpp src/canvas.cpp src/fpbob.cpp src/scope.cpp src/game.cpp
+
+$(BUILD)/test_helihook: tests/test_helihook.cpp src/heli.cpp src/helizones.cpp src/aircraft.cpp $(wildcard src/*.h) | $(BUILD)
+	$(CXX) $(CXXFLAGS) -Isrc -o $@ tests/test_helihook.cpp src/helizones.cpp src/aircraft.cpp
+
+$(BUILD)/test_npcthreat: tests/test_npcthreat.cpp src/drivers.cpp src/intimidation.cpp $(wildcard src/*.h) | $(BUILD)
+	$(CXX) $(CXXFLAGS) -Isrc -o $@ tests/test_npcthreat.cpp src/intimidation.cpp
+
+$(BUILD)/test_policedrive: tests/test_policedrive.cpp src/policedrive.h | $(BUILD)
+	$(CXX) $(CXXFLAGS) -Isrc -o $@ tests/test_policedrive.cpp
+
+$(BUILD)/test_policearrive: tests/test_policearrive.cpp src/police.cpp src/heat.cpp $(wildcard src/*.h) | $(BUILD)
+	$(CXX) $(CXXFLAGS) -Isrc -Wl,-dead_strip -o $@ tests/test_policearrive.cpp src/heat.cpp
+
+$(BUILD)/test_policepullup: tests/test_policepullup.cpp src/police.cpp src/heat.cpp $(wildcard src/*.h) | $(BUILD)
+	$(CXX) $(CXXFLAGS) -Isrc -Wl,-dead_strip -o $@ tests/test_policepullup.cpp src/heat.cpp
+
+$(BUILD)/test_policefootsearch: tests/test_policefootsearch.cpp src/police.cpp src/heat.cpp $(wildcard src/*.h) | $(BUILD)
+	$(CXX) $(CXXFLAGS) -Isrc -Wl,-dead_strip -o $@ tests/test_policefootsearch.cpp src/heat.cpp
+
+$(BUILD)/test_achievements: tests/test_achievements.cpp src/achievements.cpp src/achievementsmodel.cpp $(wildcard src/*.h) | $(BUILD)
+	$(CXX) $(CXXFLAGS) -Isrc -o $@ tests/test_achievements.cpp
+
+$(BUILD)/test_statsmodel: tests/test_statsmodel.cpp src/statsmodel.cpp src/statsmodel.h src/achievementsmodel.cpp src/achievementsmodel.h | $(BUILD)
+	$(CXX) $(CXXFLAGS) -Isrc -o $@ tests/test_statsmodel.cpp src/statsmodel.cpp src/achievementsmodel.cpp
+
+$(BUILD)/test_achievementsmodel: tests/test_achievementsmodel.cpp src/achievementsmodel.cpp src/achievementsmodel.h | $(BUILD)
+	$(CXX) $(CXXFLAGS) -Isrc -o $@ tests/test_achievementsmodel.cpp src/achievementsmodel.cpp
+
+$(BUILD)/test_policemove: tests/test_policemove.cpp src/policemove.h | $(BUILD)
+	$(CXX) $(CXXFLAGS) -Isrc -o $@ tests/test_policemove.cpp
+
+$(BUILD)/test_policeseek: tests/test_policeseek.cpp src/police.cpp src/heat.cpp $(wildcard src/*.h) | $(BUILD)
+	$(CXX) $(CXXFLAGS) -Isrc -Wl,-dead_strip -o $@ tests/test_policeseek.cpp src/heat.cpp
+
+$(BUILD)/test_populationroute: tests/test_populationroute.cpp src/population.cpp src/populationmodel.cpp src/police.cpp src/heat.cpp $(wildcard src/*.h) | $(BUILD)
+	$(CXX) $(CXXFLAGS) -Isrc -o $@ tests/test_populationroute.cpp src/populationmodel.cpp src/heat.cpp
+
+$(BUILD)/test_visualmodel: tests/test_visualmodel.cpp tools/bake/visualmodel.cpp tools/bake/visualmodel.h tools/bake/gamefiles.cpp tools/bake/gamefiles.h src/mapdata.cpp src/mapdata.h | $(BUILD)
+	$(CXX) $(CXXFLAGS) -Isrc -o $@ tests/test_visualmodel.cpp tools/bake/visualmodel.cpp tools/bake/gamefiles.cpp src/mapdata.cpp -lz
+
+$(BUILD)/test_mapvisual: tests/test_mapvisual.cpp src/scene.cpp src/projection.cpp src/canvas.cpp src/mapdata.cpp $(wildcard src/*.h) | $(BUILD)
+	$(CXX) $(CXXFLAGS) -Isrc -o $@ tests/test_mapvisual.cpp src/projection.cpp src/canvas.cpp src/mapdata.cpp
+
+$(BUILD)/test_estatehook: tests/test_estatehook.cpp src/estatelighting.cpp src/estatelighting.h src/hooks.h src/types.h | $(BUILD)
+	$(CXX) $(CXXFLAGS) -Isrc -o $@ tests/test_estatehook.cpp
+
+$(BUILD)/test_estateassets: tests/test_estateassets.cpp src/estatelighting.cpp src/estatelighting.h tools/bake/gamefiles.cpp tools/bake/gamefiles.h src/types.h | $(BUILD)
+	$(CXX) $(CXXFLAGS) -Isrc -o $@ tests/test_estateassets.cpp tools/bake/gamefiles.cpp -lz
+
+$(BUILD)/test_mapassets: tests/test_mapassets.cpp tools/bake/bake.cpp $(GAMEFILES) $(wildcard tools/bake/*.h) src/mapdata.cpp src/mapdata.h src/radiologos.cpp | $(BUILD)
+	$(CXX) $(CXXFLAGS) -Isrc -o $@ tests/test_mapassets.cpp $(GAMEFILES) src/mapdata.cpp src/radiologos.cpp -lz
+
+test-game-assets: $(BUILD)/test_estateassets $(BUILD)/test_mapassets $(BUILD)/test_shotcollision $(BUILD)/test_rotorassets $(BUILD)/test_planeflight_assets $(BUILD)/test_flightpath_assets $(BUILD)/test_planeflight_nativecaller $(BUILD)/test_airportjets_assets $(BUILD)/test_planestream $(BUILD)/test_airportjetmodel $(BUILD)/test_airworld_native $(BUILD)/test_learjetseat_assets $(BUILD)/test_jetwash_assets $(BUILD)/test_trafficweave $(BUILD)/test_towercollision_assets $(BUILD)/test_towercollision_native $(BUILD)/test_jetboarding_assets $(BUILD)/test_jetboarding_native $(BUILD)/test_jetshadow_assets $(BUILD)/test_jetshadow_native $(BUILD)/test_jetboardingpose $(BUILD)/test_airportjetspawners_native $(BUILD)/test_jetcrouchgait
+	GAMEDATA="$(GAMEDATA)" $(BUILD)/test_estateassets
+	GAMEDATA="$(GAMEDATA)" $(BUILD)/test_mapassets
+	GAMEDATA="$(GAMEDATA)" $(BUILD)/test_shotcollision --assets
+	GAMEDATA="$(GAMEDATA)" $(BUILD)/test_rotorassets
+	GAMEDATA="$(GAMEDATA)" $(BUILD)/test_planeflight_assets
+	GAMEDATA="$(GAMEDATA)" $(BUILD)/test_flightpath_assets
+	GAMEDATA="$(GAMEDATA)" $(BUILD)/test_planeflight_nativecaller
+	GAMEDATA="$(GAMEDATA)" $(BUILD)/test_airportjets_assets
+	GAMEDATA="$(GAMEDATA)" $(BUILD)/test_planestream
+	GAMEDATA="$(GAMEDATA)" $(BUILD)/test_airportjetmodel
+	GAMEDATA="$(GAMEDATA)" $(BUILD)/test_airworld_native
+	GAMEDATA="$(GAMEDATA)" $(BUILD)/test_learjetseat_assets
+	GAMEDATA="$(GAMEDATA)" $(BUILD)/test_jetwash_assets
+	GAMEDATA="$(GAMEDATA)" MACVC_NATIVE="$(MACVC_NATIVE)" $(BUILD)/test_trafficweave --native
+	GAMEDATA="$(GAMEDATA)" $(BUILD)/test_towercollision_assets
+	GAMEDATA="$(GAMEDATA)" MACVC_NATIVE="$(MACVC_NATIVE)" $(BUILD)/test_towercollision_native
+	GAMEDATA="$(GAMEDATA)" $(BUILD)/test_jetboarding_assets
+	GAMEDATA="$(GAMEDATA)" MACVC_NATIVE="$(MACVC_NATIVE)" $(BUILD)/test_jetboarding_native
+	GAMEDATA="$(GAMEDATA)" MACVC_NATIVE="$(MACVC_NATIVE)" $(BUILD)/test_jetshadow_assets
+	GAMEDATA="$(GAMEDATA)" MACVC_NATIVE="$(MACVC_NATIVE)" $(BUILD)/test_jetshadow_native
+	GAMEDATA="$(GAMEDATA)" $(BUILD)/test_jetboardingpose
+	GAMEDATA="$(GAMEDATA)" $(BUILD)/test_jetcrouchgait
+	GAMEDATA="$(GAMEDATA)" MACVC_NATIVE="$(MACVC_NATIVE)" $(BUILD)/test_airportjetspawners_native
+	python3 -I tests/test_patchcapacity.py
+
+$(BUILD)/test_airportjets_assets: tests/test_airportjets_assets.cpp $(GAMEFILES) $(wildcard tools/bake/*.h) src/mapdata.cpp src/mapdata.h | $(BUILD)
+	$(CXX) $(CXXFLAGS) -Isrc -o $@ tests/test_airportjets_assets.cpp $(GAMEFILES) src/mapdata.cpp -lz
+
+$(BUILD)/test_planestream: tests/test_planestream.cpp tests/test_planeflight.cpp src/planeflight.cpp $(wildcard src/*.h) | $(BUILD)
+	$(CXX) $(CXXFLAGS) -Isrc -o $@ tests/test_planestream.cpp
+
+$(BUILD)/test_airportjetmodel: tests/test_airportjetmodel.cpp src/airportjetmodel.cpp tools/bake/gamefiles.cpp $(wildcard src/*.h tools/bake/*.h) | $(BUILD)
+	$(CXX) $(CXXFLAGS) -Isrc -o $@ tests/test_airportjetmodel.cpp tools/bake/gamefiles.cpp -lz
+
+$(BUILD)/test_drivershook: tests/test_drivershook.cpp src/drivers.cpp src/intimidation.cpp src/config.h | $(BUILD)
+	$(CXX) $(CXXFLAGS) -Isrc -o $@ tests/test_drivershook.cpp src/intimidation.cpp
+
+$(BUILD)/test_trafficinstall: tests/test_trafficinstall.cpp src/traffic.h | $(BUILD)
+	$(CXX) $(CXXFLAGS) -Isrc -o $@ tests/test_trafficinstall.cpp
+
+FEEDBACK_TESTS := test_aircraft test_apb test_helilight test_fpfeedback test_swimmotion test_wheelgrip \
+                  test_reticlemodel test_carlightrules test_roofgeometry test_mapheights test_checkpointmodel \
+                  test_voiceclip test_intimidation test_populationmodel test_reactphysics test_reactsolver test_reactcontact_native test_reactcrowd test_reactworldhook test_reactself test_reactrig test_carmaterials test_populationstream \
+                  test_reactnavigation test_reactcorpse test_playerragdoll test_reactrecovery test_recoveryhook test_reacthit test_reacthit_native \
+                  test_reactcontact test_reactionhook test_drivershook test_trafficinstall \
+                  test_shotimpact test_hookchain test_reactimpact test_playerreact test_playerreacthook test_playerreactview test_windowmode \
+                  test_aimposehook test_aimfire test_aimspreadhook test_damageoverlayhook test_helihook test_npcthreat test_populationroute test_achievementsmodel test_achievements test_statsmodel test_policemove test_policeseek test_policedrive test_policearrive test_policepullup test_policefootsearch test_visualmodel test_mapvisual test_estatehook test_ballistics test_pedcontacthook test_shotcollision test_hunterhook \
+                  test_flightmodelhook test_flightmodel_hunter test_planeflight test_planeflight_roster test_fpwalkcontacthook test_flightownership_native test_aircraftcamerahook test_airportjets test_aircraftdamage test_jetlights test_jetwheel_flight test_jetwheels test_jetaudio test_gridfixhook test_planestability test_planeengine test_planeglide test_jetground test_airworld test_jetwash test_trafficweave test_towercollision test_jetboarding test_airportjetspawners
+
+$(BUILD)/test_jetboarding: tests/test_jetboarding.cpp tests/test_airportjets.cpp tests/test_planeflight.cpp src/airportjets.cpp src/jetboarding.h $(wildcard src/*.h) | $(BUILD)
+	$(CXX) $(CXXFLAGS) -Isrc -o $@ tests/test_jetboarding.cpp
+
+$(BUILD)/test_airportjetspawners: tests/test_airportjetspawners.cpp tests/test_airportjets.cpp tests/test_planeflight.cpp src/airportjets.cpp $(wildcard src/*.h) | $(BUILD)
+	$(CXX) $(CXXFLAGS) -Isrc -o $@ tests/test_airportjetspawners.cpp
+
+$(BUILD)/test_jetboarding_assets: tests/test_jetboarding_assets.cpp tests/test_airportjets.cpp tests/test_planeflight.cpp src/airportjets.cpp src/jetboarding.h tools/bake/gamefiles.cpp $(wildcard src/*.h tools/bake/*.h) | $(BUILD)
+	$(CXX) $(CXXFLAGS) -Isrc -o $@ tests/test_jetboarding_assets.cpp tools/bake/gamefiles.cpp -lz
+
+$(BUILD)/test_jetboarding_native: tests/test_jetboarding_native.cpp tests/test_towercollision_native.cpp | $(BUILD)
+	$(CXX) $(CXXFLAGS) -Isrc -o $@ tests/test_jetboarding_native.cpp
+
+$(BUILD)/test_airportjetspawners_native: tests/test_airportjetspawners_native.cpp tests/test_airportjets.cpp tests/test_planeflight.cpp tests/nativejetshadowarm.h tests/nativeweavearm.h src/airportjets.cpp $(wildcard src/*.h) | $(BUILD)
+	$(CXX) $(CXXFLAGS) -Isrc -o $@ tests/test_airportjetspawners_native.cpp
+
+$(BUILD)/test_jetcrouchgait: tests/test_jetcrouchgait.cpp tests/test_jetboardingpose.cpp tests/test_jetboarding_assets.cpp tests/test_airportjets.cpp tests/test_planeflight.cpp src/airportjets.cpp src/jetboardingpose.cpp src/body.cpp tools/bake/gamefiles.cpp $(wildcard src/*.h tools/bake/*.h) | $(BUILD)
+	$(CXX) $(CXXFLAGS) -Isrc -o $@ tests/test_jetcrouchgait.cpp tools/bake/gamefiles.cpp -lz
+
+$(BUILD)/test_jetboardingpose: tests/test_jetboardingpose.cpp tests/test_jetboarding_assets.cpp tests/test_airportjets.cpp tests/test_planeflight.cpp src/airportjets.cpp src/jetboardingpose.cpp src/body.cpp tools/bake/gamefiles.cpp $(wildcard src/*.h tools/bake/*.h) | $(BUILD)
+	$(CXX) $(CXXFLAGS) -Isrc -o $@ tests/test_jetboardingpose.cpp tools/bake/gamefiles.cpp -lz
+
+$(BUILD)/test_jetshadow_assets: tests/test_jetshadow_assets.cpp tests/test_airportjetmodel.cpp tests/nativejetshadowarm.h tests/nativeweavearm.h src/airportjetmodel.cpp src/planes.cpp tools/bake/gamefiles.cpp $(wildcard src/*.h tools/bake/*.h) | $(BUILD)
+	$(CXX) $(CXXFLAGS) -Isrc -o $@ tests/test_jetshadow_assets.cpp tools/bake/gamefiles.cpp -lz
+
+$(BUILD)/test_jetshadow_native: tests/test_jetshadow_native.cpp tests/nativejetshadowarm.h tests/nativeweavearm.h src/jetshadow.cpp $(wildcard src/*.h) | $(BUILD)
+	$(CXX) $(CXXFLAGS) -Isrc -o $@ tests/test_jetshadow_native.cpp
+
+$(BUILD)/test_towercollision: tests/test_towercollision.cpp src/towercollision.cpp $(wildcard src/*.h) | $(BUILD)
+	$(CXX) $(CXXFLAGS) -Isrc -o $@ tests/test_towercollision.cpp
+
+$(BUILD)/test_towercollision_assets: tests/test_towercollision_assets.cpp $(GAMEFILES) $(wildcard tools/bake/*.h src/*.h) src/mapdata.cpp | $(BUILD)
+	$(CXX) $(CXXFLAGS) -Isrc -o $@ tests/test_towercollision_assets.cpp $(GAMEFILES) src/mapdata.cpp -lz
+
+$(BUILD)/test_towercollision_native: tests/test_towercollision_native.cpp | $(BUILD)
+	$(CXX) $(CXXFLAGS) -Isrc -o $@ tests/test_towercollision_native.cpp
+
+$(BUILD)/vcmm-towercollision: tools/bake/towercollision.cpp $(GAMEFILES) $(wildcard tools/bake/*.h) src/mapdata.cpp src/mapdata.h | $(BUILD)
+	$(CXX) $(CXXFLAGS) -Isrc -o $@ tools/bake/towercollision.cpp $(GAMEFILES) src/mapdata.cpp -lz
+
+$(BUILD)/test_trafficweave: tests/test_trafficweave.cpp tests/nativeweavearm.h src/trafficweave.cpp $(wildcard src/*.h) | $(BUILD)
+	$(CXX) $(CXXFLAGS) -Isrc -o $@ tests/test_trafficweave.cpp
+
+test-feedback: $(addprefix $(BUILD)/,$(FEEDBACK_TESTS))
+	@set -e; for test in $(FEEDBACK_TESTS); do $(BUILD)/$$test; done
+
+test: test-feedback
+
+$(BUILD)/test_ballistics: tests/test_ballistics.cpp src/ballistics.cpp src/ballistics.h src/nativebullet.h src/game.h src/hooks.h | $(BUILD)
+	$(CXX) $(CXXFLAGS) -Isrc -o $@ tests/test_ballistics.cpp
+
+$(BUILD)/test_pedcontacthook: tests/test_pedcontacthook.cpp src/reactions.cpp src/playerreact.cpp src/reactcontact.cpp src/reactphysics.cpp src/reactrig.cpp src/reactself.cpp src/reactimpact.cpp src/playerreactmodel.cpp $(wildcard src/*.h) src/reactcrowd.cpp src/reactcrowd.h src/reactshape.h | $(BUILD)
+	$(CXX) $(CXXFLAGS) -Isrc -o $@ tests/test_pedcontacthook.cpp src/reactphysics.cpp src/reactrig.cpp src/reactself.cpp src/reactimpact.cpp src/playerreactmodel.cpp src/reactcrowd.cpp
+
+$(BUILD)/test_shotcollision: tests/test_shotcollision.cpp src/shotcollision.cpp src/shotcollision.h tools/bake/visualmodel.cpp tools/bake/gamefiles.cpp src/mapdata.cpp $(wildcard src/*.h tools/bake/*.h) | $(BUILD)
+	$(CXX) $(CXXFLAGS) -Isrc -o $@ tests/test_shotcollision.cpp tools/bake/visualmodel.cpp tools/bake/gamefiles.cpp src/mapdata.cpp -lz
+
+$(BUILD)/test_hunterhook: tests/test_hunterhook.cpp src/hunter.cpp src/hunter.h $(wildcard src/*.h) | $(BUILD)
+	$(CXX) $(CXXFLAGS) -Isrc -o $@ tests/test_hunterhook.cpp
+
+$(BUILD)/test_flightmodelhook: tests/test_flightmodelhook.cpp src/flightmodel.cpp src/planeflight.cpp $(wildcard src/*.h) | $(BUILD)
+	$(CXX) $(CXXFLAGS) -Isrc -o $@ tests/test_flightmodelhook.cpp
+
+$(BUILD)/test_flightmodel_hunter: tests/test_flightmodel_hunter.cpp tests/test_flightmodelhook.cpp src/flightmodel.cpp src/planeflight.cpp src/hunter.cpp $(wildcard src/*.h) | $(BUILD)
+	$(CXX) $(CXXFLAGS) -Isrc -o $@ tests/test_flightmodel_hunter.cpp
+
+$(BUILD)/test_flightownership_native: tests/test_flightownership_native.cpp tests/test_flightmodelhook.cpp src/flightmodel.cpp src/planeflight.cpp $(wildcard src/*.h) | $(BUILD)
+	$(CXX) $(CXXFLAGS) -Isrc -o $@ tests/test_flightownership_native.cpp
+
+$(BUILD)/test_planeflight_nativecaller: tests/test_planeflight_nativecaller.cpp tests/test_flightmodelhook.cpp src/flightmodel.cpp src/planeflight.cpp $(wildcard src/*.h) | $(BUILD)
+	$(CXX) $(CXXFLAGS) -Isrc -o $@ tests/test_planeflight_nativecaller.cpp
+
+$(BUILD)/test_planeflight: tests/test_planeflight.cpp src/planeflight.cpp $(wildcard src/*.h) | $(BUILD)
+	$(CXX) $(CXXFLAGS) -Isrc -o $@ tests/test_planeflight.cpp
+
+$(BUILD)/test_planeflight_roster: tests/test_planeflight_roster.cpp tests/test_planeflight.cpp src/planeflight.cpp $(wildcard src/*.h) | $(BUILD)
+	$(CXX) $(CXXFLAGS) -Isrc -o $@ tests/test_planeflight_roster.cpp
+
+$(BUILD)/test_airportjets: tests/test_airportjets.cpp tests/test_planeflight.cpp src/airportjets.cpp src/planeflight.cpp $(wildcard src/*.h) | $(BUILD)
+	$(CXX) $(CXXFLAGS) -Isrc -o $@ tests/test_airportjets.cpp
+
+$(BUILD)/test_aircraftdamage: tests/test_aircraftdamage.cpp src/aircraftdamage.cpp $(wildcard src/*.h) | $(BUILD)
+	$(CXX) $(CXXFLAGS) -Isrc -o $@ tests/test_aircraftdamage.cpp
+
+$(BUILD)/test_jetlights: tests/test_jetlights.cpp src/jetlights.cpp $(wildcard src/*.h) | $(BUILD)
+	$(CXX) $(CXXFLAGS) -Isrc -o $@ tests/test_jetlights.cpp
+
+$(BUILD)/test_jetwheel_flight: tests/test_jetwheel_flight.cpp tests/test_planeflight.cpp src/planeflight.cpp $(wildcard src/*.h) | $(BUILD)
+	$(CXX) $(CXXFLAGS) -Isrc -o $@ tests/test_jetwheel_flight.cpp
+
+$(BUILD)/test_jetwheels: tests/test_jetwheels.cpp src/jetwheels.cpp $(wildcard src/*.h) | $(BUILD)
+	$(CXX) $(CXXFLAGS) -Isrc -o $@ tests/test_jetwheels.cpp
+
+$(BUILD)/test_jetaudio: tests/test_jetaudio.cpp src/jetaudio.cpp $(wildcard src/*.h) | $(BUILD)
+	$(CXX) $(CXXFLAGS) -Isrc -o $@ tests/test_jetaudio.cpp
+
+$(BUILD)/test_gridfixhook: tests/test_gridfixhook.cpp src/gridfix.cpp src/gridclip.cpp $(wildcard src/*.h) | $(BUILD)
+	$(CXX) $(CXXFLAGS) -Isrc -o $@ tests/test_gridfixhook.cpp src/gridclip.cpp
+
+$(BUILD)/test_planestability: tests/test_planestability.cpp tests/test_planeflight.cpp src/planeflight.cpp $(wildcard src/*.h) | $(BUILD)
+	$(CXX) $(CXXFLAGS) -Isrc -o $@ tests/test_planestability.cpp
+
+$(BUILD)/test_planeengine: tests/test_planeengine.cpp tests/test_planeflight.cpp src/planeflight.cpp $(wildcard src/*.h) | $(BUILD)
+	$(CXX) $(CXXFLAGS) -Isrc -o $@ tests/test_planeengine.cpp
+
+$(BUILD)/test_planeglide: tests/test_planeglide.cpp tests/test_planeengine.cpp tests/test_planeflight.cpp src/planeflight.cpp $(wildcard src/*.h) | $(BUILD)
+	$(CXX) $(CXXFLAGS) -Isrc -o $@ tests/test_planeglide.cpp
+
+$(BUILD)/test_airworld: tests/test_airworld.cpp tests/fixtures/airworld_camera_consumer.cpp tests/test_aircraftcamerahook.cpp src/camera.cpp src/airworld.cpp src/canvas.cpp $(wildcard src/*.h) | $(BUILD)
+	$(CXX) $(CXXFLAGS) -Isrc -Wl,-dead_strip -o $@ tests/test_airworld.cpp tests/fixtures/airworld_camera_consumer.cpp src/canvas.cpp
+
+$(BUILD)/test_airworld_native: tests/test_airworld_native.cpp $(GAMEFILES) $(wildcard tools/bake/*.h) src/mapdata.cpp src/mapdata.h | $(BUILD)
+	$(CXX) $(CXXFLAGS) -Isrc -o $@ tests/test_airworld_native.cpp $(GAMEFILES) src/mapdata.cpp -lz
+
+$(BUILD)/test_jetwash: tests/test_jetwash.cpp tests/test_airportjets.cpp tests/test_planeflight.cpp tests/test_reactionhook.cpp src/jetwash.cpp src/airportjets.cpp src/planeflight.cpp src/reactions.cpp src/reactphysics.cpp src/reactrig.cpp src/reactcontact.cpp src/reactself.cpp src/reactimpact.cpp $(wildcard src/*.h) src/reactcrowd.cpp src/reactcrowd.h src/reactshape.h | $(BUILD)
+	$(CXX) $(CXXFLAGS) -Isrc -o $@ tests/test_jetwash.cpp src/reactphysics.cpp src/reactrig.cpp src/reactcontact.cpp src/reactself.cpp src/reactimpact.cpp src/reactcrowd.cpp
+
+$(BUILD)/test_jetwash_assets: tests/test_jetwash_assets.cpp tests/test_airworld_native.cpp $(GAMEFILES) $(wildcard tools/bake/*.h) src/mapdata.cpp src/mapdata.h | $(BUILD)
+	$(CXX) $(CXXFLAGS) -Isrc -o $@ tests/test_jetwash_assets.cpp $(GAMEFILES) src/mapdata.cpp -lz
+
+$(BUILD)/test_learjetseat_assets: tests/test_learjetseat_assets.cpp tests/test_aircraftcamerahook.cpp tests/test_damageoverlayhook.cpp src/player.cpp src/camera.cpp src/fpfeedback.cpp src/draw.cpp src/canvas.cpp src/fpbob.cpp src/scope.cpp src/game.cpp tools/bake/gamefiles.cpp $(wildcard src/*.h tools/bake/*.h) | $(BUILD)
+	$(CXX) $(CXXFLAGS) -Isrc -Wl,-dead_strip -o $@ tests/test_learjetseat_assets.cpp src/fpfeedback.cpp src/draw.cpp src/canvas.cpp src/fpbob.cpp src/scope.cpp src/game.cpp tools/bake/gamefiles.cpp -lz
+
+$(BUILD)/test_jetground: tests/test_jetground.cpp tests/test_jetwheels.cpp src/jetwheels.cpp src/planeflight.cpp $(wildcard src/*.h) | $(BUILD)
+	$(CXX) $(CXXFLAGS) -Isrc -o $@ tests/test_jetground.cpp
+
+$(BUILD)/test_rotorassets: tests/test_rotorassets.cpp tests/test_shotcollision.cpp src/flightmodel.cpp src/shotcollision.cpp tools/bake/visualmodel.cpp tools/bake/gamefiles.cpp src/mapdata.cpp $(wildcard src/*.h tools/bake/*.h) | $(BUILD)
+	$(CXX) $(CXXFLAGS) -Isrc -o $@ tests/test_rotorassets.cpp tools/bake/visualmodel.cpp tools/bake/gamefiles.cpp src/mapdata.cpp -lz
+
+$(BUILD)/test_planeflight_assets: tests/test_planeflight_assets.cpp tools/bake/gamefiles.cpp tools/bake/gamefiles.h | $(BUILD)
+	$(CXX) $(CXXFLAGS) -Isrc -o $@ tests/test_planeflight_assets.cpp tools/bake/gamefiles.cpp -lz
+
+$(BUILD)/test_flightpath_assets: tests/test_flightpath_assets.cpp src/flightpath.cpp src/flightpath.h | $(BUILD)
+	$(CXX) $(CXXFLAGS) -Isrc -o $@ tests/test_flightpath_assets.cpp src/flightpath.cpp
+
+$(BUILD)/test_fpwalkcontacthook: tests/test_fpwalkcontacthook.cpp tests/test_pedcontacthook.cpp src/fpwalk.cpp src/reactions.cpp src/playerreact.cpp src/fpgait.cpp src/fpmove.cpp src/reactphysics.cpp src/reactrig.cpp src/reactself.cpp src/reactimpact.cpp src/playerreactmodel.cpp $(wildcard src/*.h) src/reactcrowd.cpp src/reactcrowd.h src/reactshape.h | $(BUILD)
+	$(CXX) $(CXXFLAGS) -Isrc -o $@ tests/test_fpwalkcontacthook.cpp src/fpgait.cpp src/fpmove.cpp src/reactphysics.cpp src/reactrig.cpp src/reactself.cpp src/reactimpact.cpp src/playerreactmodel.cpp src/reactcrowd.cpp
 
 $(BAKE): tools/bake/bake.cpp $(GAMEFILES) src/mapdata.cpp src/radiologos.cpp $(wildcard tools/bake/*.h src/*.h) | $(BUILD)
 	$(CXX) $(CXXFLAGS) -o $@ tools/bake/bake.cpp $(GAMEFILES) src/mapdata.cpp src/radiologos.cpp -lz
@@ -87,11 +486,17 @@ $(BUILD)/test_scope: tests/test_scope.cpp src/scope.cpp src/scope.h | $(BUILD)
 $(BUILD)/test_sfxdsp: tests/test_sfxdsp.cpp src/sfxdsp.cpp src/sfxdsp.h | $(BUILD)
 	$(CXX) $(CXXFLAGS) -Isrc -o $@ tests/test_sfxdsp.cpp src/sfxdsp.cpp
 
-$(BUILD)/test_vmhands: tests/test_vmhands.cpp src/vmhands.cpp src/vmhands.h src/vmpose.cpp src/vmpose.h src/vmarms.cpp src/vmarms.h src/vmgun.cpp src/vmgun.h src/vmanim.cpp src/vmanim.h src/vmskin.h src/vmmath.h | $(BUILD)
-	$(CXX) $(CXXFLAGS) -Isrc -o $@ tests/test_vmhands.cpp src/vmhands.cpp src/vmpose.cpp src/vmarms.cpp src/vmgun.cpp src/vmanim.cpp
+$(BUILD)/test_vmhands: tests/test_vmhands.cpp src/vmhands.cpp src/vmhands.h src/vmpose.cpp src/vmpose.h src/vmarms.cpp src/vmarms.h src/vmgun.cpp src/vmgun.h src/vmanim.cpp src/vmanim.h src/vmkick.cpp src/vmkick.h src/vmmelee.cpp src/vmmelee.h src/vmskin.h src/vmmath.h | $(BUILD)
+	$(CXX) $(CXXFLAGS) -Isrc -o $@ tests/test_vmhands.cpp src/vmhands.cpp src/vmpose.cpp src/vmarms.cpp src/vmgun.cpp src/vmanim.cpp src/vmkick.cpp src/vmmelee.cpp
 
-$(BUILD)/test_vmanim: tests/test_vmanim.cpp src/vmanim.cpp src/vmanim.h src/vmmath.h | $(BUILD)
-	$(CXX) $(CXXFLAGS) -Isrc -o $@ tests/test_vmanim.cpp src/vmanim.cpp
+$(BUILD)/test_vmanim: tests/test_vmanim.cpp src/vmanim.cpp src/vmanim.h src/vmkick.cpp src/vmkick.h src/vmmelee.cpp src/vmmelee.h src/vmmath.h | $(BUILD)
+	$(CXX) $(CXXFLAGS) -Isrc -o $@ tests/test_vmanim.cpp src/vmanim.cpp src/vmkick.cpp src/vmmelee.cpp
+
+$(BUILD)/test_vmkick: tests/test_vmkick.cpp src/vmkick.cpp src/vmkick.h src/vmmath.h | $(BUILD)
+	$(CXX) $(CXXFLAGS) -Isrc -o $@ tests/test_vmkick.cpp src/vmkick.cpp
+
+$(BUILD)/test_vmmelee: tests/test_vmmelee.cpp src/vmmelee.cpp src/vmmelee.h src/vmmath.h | $(BUILD)
+	$(CXX) $(CXXFLAGS) -Isrc -o $@ tests/test_vmmelee.cpp src/vmmelee.cpp
 
 $(BUILD)/test_fpgun: tests/test_fpgun.cpp src/vmuse.cpp src/vmuse.h | $(BUILD)
 	$(CXX) $(CXXFLAGS) -Isrc -o $@ tests/test_fpgun.cpp src/vmuse.cpp
@@ -106,6 +511,30 @@ $(BUILD)/test_fpfire: tests/test_fpfire.cpp src/fpfire.cpp src/fpfire.h | $(BUIL
 
 $(BUILD)/test_fpcross: tests/test_fpcross.cpp src/fpcross.cpp src/fpcross.h | $(BUILD)
 	$(CXX) $(CXXFLAGS) -Isrc -o $@ tests/test_fpcross.cpp src/fpcross.cpp
+
+$(BUILD)/test_consolespot: tests/test_consolespot.cpp src/consolespot.cpp src/consolespot.h | $(BUILD)
+	$(CXX) $(CXXFLAGS) -Isrc -o $@ tests/test_consolespot.cpp src/consolespot.cpp
+
+$(BUILD)/test_helizones: tests/test_helizones.cpp src/helizones.cpp src/helizones.h | $(BUILD)
+	$(CXX) $(CXXFLAGS) -Isrc -o $@ tests/test_helizones.cpp src/helizones.cpp
+
+$(BUILD)/test_flightpath: tests/test_flightpath.cpp src/flightpath.cpp src/flightpath.h | $(BUILD)
+	$(CXX) $(CXXFLAGS) -Isrc -o $@ tests/test_flightpath.cpp src/flightpath.cpp
+
+$(BUILD)/test_grip: tests/test_grip.cpp src/grip.cpp src/grip.h | $(BUILD)
+	$(CXX) $(CXXFLAGS) -Isrc -o $@ tests/test_grip.cpp src/grip.cpp
+
+$(BUILD)/test_gridclip: tests/test_gridclip.cpp src/gridclip.cpp src/gridclip.h | $(BUILD)
+	$(CXX) $(CXXFLAGS) -Isrc -o $@ tests/test_gridclip.cpp src/gridclip.cpp
+
+$(BUILD)/test_seatview: tests/test_seatview.cpp src/seatview.cpp src/seatview.h | $(BUILD)
+	$(CXX) $(CXXFLAGS) -Isrc -o $@ tests/test_seatview.cpp src/seatview.cpp
+
+$(BUILD)/test_spotters: tests/test_spotters.cpp src/spotters.cpp src/spotters.h | $(BUILD)
+	$(CXX) $(CXXFLAGS) -Isrc -o $@ tests/test_spotters.cpp src/spotters.cpp
+
+$(BUILD)/test_falldamage: tests/test_falldamage.cpp src/falldamage.cpp src/falldamage.h | $(BUILD)
+	$(CXX) $(CXXFLAGS) -Isrc -o $@ tests/test_falldamage.cpp src/falldamage.cpp
 
 $(BUILD)/test_heat: tests/test_heat.cpp src/heat.cpp src/heat.h | $(BUILD)
 	$(CXX) $(CXXFLAGS) -Isrc -o $@ tests/test_heat.cpp src/heat.cpp
@@ -128,9 +557,12 @@ $(BUILD)/test_controlsmodel: tests/test_controlsmodel.cpp src/controlsmodel.cpp 
 $(BUILD)/test_inifile: tests/test_inifile.cpp src/inifile.cpp src/inifile.h | $(BUILD)
 	$(CXX) $(CXXFLAGS) -Isrc -o $@ tests/test_inifile.cpp src/inifile.cpp
 
-test: $(BUILD)/test_projection $(BUILD)/test_turns $(BUILD)/test_heat $(BUILD)/test_magnet $(BUILD)/test_keys \
+test: $(BUILD)/test_estatelighting $(BUILD)/test_gameplaymodel $(BUILD)/test_menulabels $(BUILD)/test_projection $(BUILD)/test_turns $(BUILD)/test_heat $(BUILD)/test_magnet $(BUILD)/test_keys \
       $(BUILD)/test_bindings $(BUILD)/test_hinttext $(BUILD)/test_controlsmodel \
-      $(BUILD)/test_inifile $(BUILD)/test_fpmove $(BUILD)/test_fplook $(BUILD)/test_fpbob $(BUILD)/test_fpgait $(BUILD)/test_fontbuf $(BUILD)/test_vmskin $(BUILD)/test_vmarms $(BUILD)/test_vmgun $(BUILD)/test_vmpose $(BUILD)/test_vmview $(BUILD)/test_vmfit $(BUILD)/test_vmanim $(BUILD)/test_vmhands $(BUILD)/test_sfxdsp $(BUILD)/test_gunsfx $(BUILD)/test_shotsynth $(BUILD)/test_scope $(BUILD)/test_fpgun $(BUILD)/test_hookname $(BUILD)/test_fpfire $(BUILD)/test_fpcross
+      $(BUILD)/test_inifile $(BUILD)/test_fpmove $(BUILD)/test_fplook $(BUILD)/test_fpbob $(BUILD)/test_fpgait $(BUILD)/test_fontbuf $(BUILD)/test_vmskin $(BUILD)/test_vmarms $(BUILD)/test_vmgun $(BUILD)/test_vmpose $(BUILD)/test_vmview $(BUILD)/test_vmfit $(BUILD)/test_vmanim $(BUILD)/test_vmkick $(BUILD)/test_vmmelee $(BUILD)/test_vmhands $(BUILD)/test_sfxdsp $(BUILD)/test_gunsfx $(BUILD)/test_shotsynth $(BUILD)/test_scope $(BUILD)/test_fpgun $(BUILD)/test_hookname $(BUILD)/test_fpfire $(BUILD)/test_fpcross $(BUILD)/test_consolespot $(BUILD)/test_helizones $(BUILD)/test_flightpath $(BUILD)/test_grip $(BUILD)/test_gridclip $(BUILD)/test_spotters $(BUILD)/test_falldamage $(BUILD)/test_seatview
+	$(BUILD)/test_gameplaymodel
+	$(BUILD)/test_estatelighting
+	$(BUILD)/test_menulabels
 	$(BUILD)/test_projection
 	$(BUILD)/test_turns
 	$(BUILD)/test_heat
@@ -152,6 +584,8 @@ test: $(BUILD)/test_projection $(BUILD)/test_turns $(BUILD)/test_heat $(BUILD)/t
 	$(BUILD)/test_vmview
 	$(BUILD)/test_vmfit
 	$(BUILD)/test_vmanim
+	$(BUILD)/test_vmkick
+	$(BUILD)/test_vmmelee
 	$(BUILD)/test_vmhands
 	$(BUILD)/test_sfxdsp
 	$(BUILD)/test_gunsfx
@@ -161,6 +595,14 @@ test: $(BUILD)/test_projection $(BUILD)/test_turns $(BUILD)/test_heat $(BUILD)/t
 	$(BUILD)/test_hookname
 	$(BUILD)/test_fpfire
 	$(BUILD)/test_fpcross
+	$(BUILD)/test_consolespot
+	$(BUILD)/test_helizones
+	$(BUILD)/test_flightpath
+	$(BUILD)/test_grip
+	$(BUILD)/test_gridclip
+	$(BUILD)/test_spotters
+	$(BUILD)/test_falldamage
+	$(BUILD)/test_seatview
 
 # The viewmodel's guns, built in Blender from scripts (developers only: the
 # built assets are committed). The game's own models are read to measure them.

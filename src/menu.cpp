@@ -2,6 +2,8 @@
 #include "config.h"
 #include "controls.h"
 #include "controlspage.h"
+#include "gameplaypage.h"
+#include "statspage.h"
 #include "draw.h"
 #include "game.h"
 #include "hints.h"
@@ -68,6 +70,7 @@ struct Box {
 void (*orig_DrawBackground)(uint8_t *, bool);
 void (*orig_UserInput)(uint8_t *);
 void (*orig_ProcessUserInput)(uint8_t *, uint8_t, uint8_t, uint8_t, uint8_t, int8_t);
+void (*orig_PrintStats)(uint8_t *);
 void (*orig_DrawRect)(const CRect &, const CRGBA &);
 void (*orig_Draw2DPolygon)(float, float, float, float, float, float, float, float, const CRGBA &);
 void (*orig_DrawLegend)(int, int, int);
@@ -87,8 +90,8 @@ Box gTabBoxes[kNumTabs];
 bool gHaveTabBoxes;
 Im2DCanvas gCanvas;
 
-// The cursor is drawn last by DrawBackground; with tabs it is held back and
-// drawn after them.
+// DrawBackground draws its cursor before our tabs and page overlays, so hold
+// it back until all custom content has reached the screen.
 struct DeferredSprite {
 	const CSprite2d *sprite;
 	float rect[4];
@@ -498,6 +501,7 @@ const CRect &AsRect(const float *r) { return *reinterpret_cast<const CRect *>(r)
 
 void Hook_DrawBackground(uint8_t *menu, bool transition)
 {
+	gameplaypage::Prepare(menu);
 	static bool trimmed;
 	if (gTabsOn && !trimmed) {
 		TrimPauseList();
@@ -516,10 +520,16 @@ void Hook_DrawBackground(uint8_t *menu, bool transition)
 	const bool controlsPage = MenuScreen(menu) == controlspage::kPage;
 	if (controlsPage && lastPage != controlspage::kPage)
 		controlspage::Enter(menu);
+	const bool gameplayPage = MenuScreen(menu) == gameplaypage::kPage;
+	if (gameplayPage && lastPage != gameplaypage::kPage)
+		gameplaypage::Enter(menu);
+	const bool statsPage = MenuScreen(menu) == kPageStats && statspage::Available();
+	if (statsPage && lastPage != kPageStats)
+		statspage::Enter(menu);
 	lastPage = MenuScreen(menu);
 	gLegendBoxKnown = false;
 	const int tab = TabsActive(menu) ? TabOf(MenuScreen(menu)) : -1;
-	gDeferCursor = tab >= 0;
+	gDeferCursor = tab >= 0 || controlsPage || gameplayPage || statsPage;
 	gNumCursor = 0;
 	orig_DrawBackground(menu, transition);
 	gDeferCursor = false;
@@ -527,6 +537,10 @@ void Hook_DrawBackground(uint8_t *menu, bool transition)
 		DrawTabs(menu, tab);
 	if (controlsPage)
 		controlspage::Draw(menu);
+	if (gameplayPage)
+		gameplaypage::Draw(menu);
+	if (statsPage)
+		statspage::Draw(menu);
 	const bool onMap = gMapCrosshair && MenuScreen(menu) == kPageMap;
 	poi::DrawTooltip(onMap ? MapPointer(menu) : Vec2{0, 0}, menu[kShowMouse] != 0, onMap);
 	for (int i = 0; i < gNumCursor; i++)
@@ -543,7 +557,14 @@ void Hook_UserInput(uint8_t *menu)
 		TabInput(menu);
 	MapControl(menu, pad);
 	MapPress(menu, pad);
-	if (MenuScreen(menu) != controlspage::kPage || !controlspage::UserInput(menu))
+	bool handled = false;
+	if (MenuScreen(menu) == controlspage::kPage)
+		handled = controlspage::UserInput(menu);
+	else if (MenuScreen(menu) == gameplaypage::kPage)
+		handled = gameplaypage::UserInput(menu);
+	else if (MenuScreen(menu) == kPageStats)
+		handled = statspage::UserInput(menu);
+	if (!handled)
 		orig_UserInput(menu);
 	MapInputBack(pad);
 	MapPressBack(pad);
@@ -556,6 +577,10 @@ void Hook_ProcessUserInput(uint8_t *menu, uint8_t down, uint8_t up, uint8_t sele
 	const int32_t page = MenuScreen(menu);
 	if (page == controlspage::kPage)
 		controlspage::ProcessInput(menu, down, up, select, back, change);
+	else if (page == gameplaypage::kPage)
+		gameplaypage::ProcessInput(menu, down, up, select, back, change);
+	else if (page == kPageStats)
+		statspage::ProcessInput(menu, down, up, select, back, change);
 	// On the pause map Cross (A on Xbox pads) already toggles the waypoint in
 	// AdditionalOptionInput; it must not also select the page's only item, "Back".
 	if (select && page == kPageMap && CrossJustDown(api.GetPad(0)))
@@ -569,6 +594,13 @@ void Hook_ProcessUserInput(uint8_t *menu, uint8_t down, uint8_t up, uint8_t sele
 		}
 	}
 	orig_ProcessUserInput(menu, down, up, select, back, change);
+}
+
+// The Stats page draws its own list (statspage.h): the game's isn't drawn under it.
+void Hook_PrintStats(uint8_t *menu)
+{
+	if (!statspage::Available())
+		orig_PrintStats(menu);
 }
 
 void Hook_DrawRect(const CRect &rect, const CRGBA &col)
@@ -622,6 +654,7 @@ struct ExtraText {
 	const char *key, *text;
 };
 constexpr ExtraText kExtraText[] = {
+    {"VCJET", "Learjet"},           // dynamically registered airport jet
     {"FET_GFX", "Graphics Setup"},    // Options: the graphics page
     {"FED_FLS", "FULLSCREEN"},        // screen mode
     {"FED_WND", "WINDOWED"},          //
@@ -671,6 +704,8 @@ uint16_t *Hook_TextGet(uint8_t *text, const char *key)
 	// The Controls page's names; hints whose controls the mod changed (hints.h).
 	if (const uint16_t *page = controlspage::Text(key))
 		return const_cast<uint16_t *>(page);
+	if (const uint16_t *page = gameplaypage::Text(key))
+		return const_cast<uint16_t *>(page);
 	if (const uint16_t *rewritten = hints::RewriteText(key))
 		return const_cast<uint16_t *>(rewritten);
 	// The waypoint's legend row: "Destination", the mission destination's
@@ -719,7 +754,8 @@ uint16_t *Hook_TextGet(uint8_t *text, const char *key)
 bool Install(SpriteDrawFn spriteDraw, bool fontHooks)
 {
 	gWideError = static_cast<const uint16_t *>(dlsym(RTLD_MAIN_ONLY, "WideErrorString"));
-	if (!gWideError || !hooks::Install("_ZN5CText3GetEPKc", Hook_TextGet, orig_TextGet))
+	const bool textHook = hooks::Install("_ZN5CText3GetEPKc", Hook_TextGet, orig_TextGet);
+	if (!gWideError || !textHook)
 		Log("menu: no CText::Get hook (re-run install.sh); reVC's own menu text shows as \"... missing\"");
 	gSpriteDraw = spriteDraw;
 	gText = static_cast<const uint8_t *>(hooks::ImageBase());
@@ -742,6 +778,11 @@ bool Install(SpriteDrawFn spriteDraw, bool fontHooks)
 	gMapCrosshair = static_cast<CVector2D *>(dlsym(RTLD_MAIN_ONLY, "mapCrosshair"));
 	const bool input = hooks::Install("_ZN12CMenuManager9UserInputEv", Hook_UserInput, orig_UserInput);
 	controlspage::SetAvailable(background && input);
+	gameplaypage::SetAvailable(background && input && textHook);
+	const bool printStats = hooks::Install("_ZN12CMenuManager10PrintStatsEv", Hook_PrintStats, orig_PrintStats);
+	statspage::SetAvailable(background && input && printStats && statspage::Install());
+	if (!printStats)
+		Log("menu: no CMenuManager::PrintStats hook (re-run install.sh); the Stats page stays as it was, no achievements tab");
 	gTabsOn = tabs && input;
 	gCircleBack = gConfig.circleBack && input;
 	// DrawLegend also names the waypoint's row, with or without the compact legend.

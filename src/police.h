@@ -44,6 +44,8 @@ void PlayerFired(int32_t weapon); // a shot of his (CWeapon::Fire), by weapon ty
 // While they search (the wanted overhaul): a road node in the area they're
 // searching, a different one for each slot (cars and cops on foot take turns).
 CVector SearchPoint(int slot);
+// The same for cops on foot: its streets and its pedestrian paths (#22).
+CVector FootSearchPoint(int slot);
 // How far the nearest police unit about the city (on patrol, sent, at a
 // station) is from `at`, if within `reach` (else more than it): who'd hear a shot.
 float UnitWithin(const CVector &at, float reach);

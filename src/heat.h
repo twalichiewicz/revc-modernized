@@ -21,17 +21,20 @@ namespace heat {
 
 enum class State : uint8_t { Clear, Reported, Wanted, Searching, Apb };
 
-// Tommy as a cop would see him now. vehicleModel -1: on foot.
+// Tommy as a cop would see him now. vehicleModel -1: on foot. vehicle: which
+// one it is (the game's handle for it, -1 on foot): the one they saw.
 struct Looks {
 	std::string outfit;
 	int vehicleModel = -1;
 	int colour1 = -1, colour2 = -1;
+	int vehicle = -1;
 };
 
 // What the police have on him: the outfit and the last vehicle they saw him in.
 struct Description {
 	std::string outfit;
 	int vehicleModel = -1, colour1 = -1, colour2 = -1;
+	int vehicle = -1; // which one (-1: not known)
 	bool haveOutfit = false, haveVehicle = false;
 };
 
@@ -82,8 +85,10 @@ public:
 	// They know where he is now: a cop sees him (seenNow) or only just lost him, while Wanted.
 	bool Knows(bool seenNow, uint32_t now) const;
 	bool Matches(const Looks &looks) const;      // the outfit or the vehicle on the description, and the same now
+	float RecognitionRate(const Looks &looks, float distance, bool helicopter) const;
 	bool OutfitStruck(const Looks &looks) const;  // on the description, but he's changed it
 	bool VehicleStruck(const Looks &looks) const; // in another vehicle, or the same one resprayed
+	bool VehicleLeft(const Looks &looks) const;   // on the description, and he's out of it (on foot)
 
 	// A cop (or helicopter) has him: Wanted, the description now `looks`.
 	void CopSees(const Looks &looks, Vec3 at, uint32_t now, int gameStars);
@@ -94,6 +99,9 @@ public:
 	void Calling(bool anyone);
 	void Tick(Vec3 him, uint32_t now);
 	void Lowered(int stars); // a script lowered the game's level
+	// The vehicle on the description is no more (destroyed, or gone from the
+	// world): they've nothing to look for, so it's off it.
+	void VehicleGone(int vehicle);
 	void Clear();
 
 private:

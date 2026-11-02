@@ -6,6 +6,7 @@
 #include "log.h"
 #include "shaders.h"
 #include "viewmodel.h"
+#include "wheelgrip.h"
 
 #include <algorithm>
 #include <cmath>
@@ -53,7 +54,7 @@ constexpr float kStalkThrow = 0.32f, kStalkBackRate = 8.0f; // back to the middl
 // His hands: at ten to two (rad from the top), a little in front of the rim;
 // the horn pressed a little in front of the hub. The flick of the stalk:
 // reaching it, pushing it, back to the wheel (s).
-constexpr float kGripAngle = 1.05f, kGripFront = 0.02f, kHornFront = 0.035f, kHornRate = 14.0f;
+constexpr float kGripAngle = 1.05f, kHornFront = 0.035f, kHornRate = 14.0f;
 constexpr float kFlickReach = 0.26f, kFlickPush = 0.16f, kFlickBack = 0.26f;
 
 // RenderWare.
@@ -123,11 +124,15 @@ bool gReady;
 
 // The player's car: its stalk, his flick of it, the horn.
 const uint8_t *gStalkCar;
+int (*gVehicleRef)(uint8_t *);
+int gStalkHandle = -1;
 float gStalk;            // its turn now (rad)
 int gSignalSeen;         // the signal his hand has answered
 float gFlick = -1.0f;    // s into the flick (< 0: none)
 int gFlickTo;            // which way
 float gHorn;             // his right hand on the horn, 0..1
+uint8_t *gGripPed;
+wheelgrip::Grip gLeftGrip, gRightGrip;
 
 V3 Add(V3 a, V3 b) { return {a.x + b.x, a.y + b.y, a.z + b.z}; }
 V3 Sub(V3 a, V3 b) { return {a.x - b.x, a.y - b.y, a.z - b.z}; }
@@ -577,11 +582,14 @@ void DrawCar(uint8_t *car)
 
 void PoseDriver(uint8_t *ped)
 {
+	gGripPed = nullptr;
 	uint8_t *car = gReady && PedInVehicle(ped) ? PedVehicle(ped) : nullptr;
 	const bool driving = car && IsCar(car) && PedState(ped) == kStateDriving &&
 	                     *reinterpret_cast<uint8_t *const *>(car + kDriver) == ped && !driveby::Aiming();
-	if (car != gStalkCar) { // a new car: its stalk in the middle, no flick yet
+	const int handle = car && gVehicleRef ? gVehicleRef(car) : -1;
+	if (car != gStalkCar || handle != gStalkHandle) { // pool generations are separate cars
 		gStalkCar = car;
+		gStalkHandle = handle;
 		gStalk = 0.0f;
 		gFlick = -1.0f;
 		gSignalSeen = car ? carlights::Signalling(car) : 0;
@@ -597,10 +605,15 @@ void PoseDriver(uint8_t *ped)
 	const V3 c = Apply(ltm, w->centre), A = Normal(Rotate(ltm, w->axis)), U = Normal(Rotate(ltm, w->up)),
 	         L = Normal(Rotate(ltm, w->left));
 	const float turn = WheelTurn(car), rim = w->radius * kRim;
-	auto onRim = [&](float angle) {
-		return Add(Add(c, Mul(Add(Mul(U, std::cos(angle)), Mul(L, std::sin(angle))), rim)), Mul(A, kGripFront));
+	auto grip = [&](float angle) {
+		return wheelgrip::OnRim({c.x,c.y,c.z}, {A.x,A.y,A.z}, {U.x,U.y,U.z}, {L.x,L.y,L.z},
+		                        rim, w->radius*kTube, angle);
 	};
-	V3 leftHand = onRim(kGripAngle + turn), rightHand = onRim(-kGripAngle + turn);
+	gLeftGrip = grip(kGripAngle+turn);
+	gRightGrip = grip(-kGripAngle+turn);
+	gGripPed = ped;
+	const auto &lh = gLeftGrip.hand.pos, &rh = gRightGrip.hand.pos;
+	V3 leftHand{lh.x,lh.y,lh.z}, rightHand{rh.x,rh.y,rh.z};
 
 	// The horn: his right hand in the middle while it sounds.
 	uint8_t *pad = api.GetPad(0);
@@ -646,11 +659,17 @@ void PoseDriver(uint8_t *ped)
 	                    {-U.x - L.x * 0.7f, -U.y - L.y * 0.7f, -U.z - L.z * 0.7f});
 }
 
+bool Grips(uint8_t *ped, wheelgrip::Grip &left, wheelgrip::Grip &right)
+{
+	if (ped != gGripPed || !PedInVehicle(ped) || PedVehicle(ped) != gStalkCar || driveby::Aiming()) return false;
+	left = gLeftGrip; right = gRightGrip; return true;
+}
+
 bool Install()
 {
 	if (!gConfig.steeringWheel)
 		return true;
-	gReady = Bind(rw.ForAllAtomics, "_Z20RpClumpForAllAtomicsPN2rw5ClumpEPFPNS_6AtomicES3_PvES4_") &&
+	gReady = Bind(gVehicleRef, "_ZN6CPools13GetVehicleRefEP8CVehicle") && Bind(rw.ForAllAtomics, "_Z20RpClumpForAllAtomicsPN2rw5ClumpEPFPNS_6AtomicES3_PvES4_") &&
 	         Bind(rw.AtomicFlags, "_Z16RpAtomicGetFlagsPKN2rw6AtomicE") &&
 	         Bind(rw.AtomicFrame, "_Z16RpAtomicGetFramePKN2rw6AtomicE") &&
 	         Bind(rw.AtomicGeometry, "_Z19RpAtomicGetGeometryPKN2rw6AtomicE") &&

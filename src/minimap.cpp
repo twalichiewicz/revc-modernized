@@ -17,13 +17,17 @@
 // Everything falls through to the original whenever the pause-menu map is
 // open, the radar mode is not "map & blips", or the minimap is disabled.
 // The rest of the HUD is in hud.cpp, the pause menu in menu.cpp.
+#include "achievements.h"
+#include "statspage.h"
 #include "aimcam.h"
 #include "alert.h"
 #include "gunbank.h"
 #include "shotsound.h"
+#include "shotimpact.h"
 #include "sniper.h"
 #include "anims.h"
 #include "camera.h"
+#include "checkpoint.h"
 #include "carlights.h"
 #include "carradio.h"
 #include "combat.h"
@@ -34,13 +38,21 @@
 #include "shootdodge.h"
 #include "heli.h"
 #include "hunter.h"
+#include "seatgun.h"
 #include "steering.h"
+#include "doorgrab.h"
+#include "falls.h"
+#include "seateye.h"
 #include "driveby.h"
+#include "drivers.h"
 #include "config.h"
 #include "controls.h"
 #include "draw.h"
 #include "game.h"
 #include "gps.h"
+#include "gridfix.h"
+#include "trafficweave.h"
+#include "towercollision.h"
 #include "hooks.h"
 #include "hints.h"
 #include "hud.h"
@@ -51,8 +63,10 @@
 #include "minimap.h"
 #include "phone.h"
 #include "police.h"
+#include "population.h"
 #include "grade.h"
 #include "places.h"
+#include "planes.h"
 #include "player.h"
 #include "poi.h"
 #include "shaders.h"
@@ -68,11 +82,27 @@
 #include "traffic.h"
 #include "viewmodel.h"
 #include "rumble.h"
+#include "reactions.h"
+#include "reacthit.h"
 #include "scene.h"
 #include "wheel.h"
 #include "wanted.h"
 #include "wantedhud.h"
 #include "watch.h"
+#include "windowmode.h"
+#include "estatelighting.h"
+#include "ballistics.h"
+#include "shotcollision.h"
+#include "planeflight.h"
+#include "flightmodel.h"
+#include "airportjets.h"
+#include "aircraftdamage.h"
+#include "airworld.h"
+#include "jetwheels.h"
+#include "jetaudio.h"
+#include "jetlights.h"
+#include "jetshadow.h"
+#include "jetwash.h"
 
 #include <algorithm>
 #include <chrono>
@@ -422,6 +452,7 @@ void Hook_HudDraw()
 	hud::BeginFrame(shown);
 	menu::OnGameplayFrame();
 	orig_HudDraw();
+	camera::DrawDamage();
 	text::Guard(); // the game's own text, checked before ours goes with it
 	hud::DrawWanted();
 	SetHudRenderStates();
@@ -430,6 +461,8 @@ void Hook_HudDraw()
 	radiohud::Draw();
 	credit::Update();
 	story::Update();
+	achievements::Update();
+	statspage::DrawNotice();
 	phone::Draw();
 	interact::Draw();
 	climb::Draw();
@@ -638,6 +671,11 @@ __attribute__((constructor)) void Init()
 		Log("a hook failed to install; staying vanilla (re-run install.sh)");
 		return;
 	}
+	if (!windowmode::Install())
+		Log("window mode: hooks missing (re-run install.sh); native fullscreen preference cannot be remembered");
+	gridfix::Install(); // (first: every line of sight, the game's own too, kept on the world's grid)
+	if (!trafficweave::Install())
+		Log("traffic steering hook missing; bounded native avoidance unavailable (re-run install.sh)");
 	const bool hudOk = hud::Install();
 	Log(hudOk ? "minimap and HUD hooks installed" : "minimap hooks installed; HUD layout left as is");
 	if (!player::Install())
@@ -654,6 +692,7 @@ __attribute__((constructor)) void Init()
 	if (!phone::Install())
 		Log("phone functions missing; calls left as they are");
 	const bool scriptKnown = story::Install();
+	achievements::Install();
 	if (!credit::Install(scriptKnown))
 		Log("credit: hooks missing (re-run install.sh); businesses sell for the full price");
 	if (!places::Install())
@@ -666,26 +705,37 @@ __attribute__((constructor)) void Init()
 		Log("carradio: the game's audio globals are missing; radios only play in the car");
 	if (!swim::Install())
 		Log("swim: hooks missing (re-run install.sh); Tommy drowns as before");
+	if (!falls::Install())
+		Log("falls: the damage hook is missing (re-run install.sh); falls hurt as the game has them");
 	if (!climb::Install())
 		Log("climb: hooks missing (re-run install.sh); the jump is the game's own");
 	if (!shaders::Install())
 		Log("shaders: the renderer's shader functions are missing; clouds and lighting left as they were");
 	if (!sky::Install())
 		Log("sky: hook missing (re-run install.sh); the clouds are the game's own");
+	planes::Install();
 	if (!grade::Install())
 		Log("grade: hook missing (re-run install.sh); no lighting pass");
 	if (!anims::Install())
 		Log("anims: hooks missing (re-run install.sh); a vehicle's unloaded animations can crash the game");
 	if (!traffic::Install())
 		Log("traffic: hook missing (re-run install.sh); car models are picked as before");
+	if (!population::Install())
+		Log("population: missing world/path bindings; native population retained");
 	if (!carlights::Install())
 		Log("carlights: hook missing (re-run install.sh); cars' light boxes stay");
+	if (gConfig.modernLighting && !estatelighting::Install())
+		Log("estate lighting: native draw/light bindings missing; baked structural lighting retained");
+	seateye::Install();
 	if (!combat::Install())
 		Log("combat: the world's line-of-sight test is missing; enemies shoot as the game has them");
 	if (!heli::Install())
 		Log("heli: hooks missing (re-run install.sh); the police helicopter takes hits as the game has it");
+	if (!shotimpact::Install())
+		Log("shotimpact: bullet observer unavailable; reactions use coarse native body pieces");
 	hunter::Install();
 	police::Install();
+	doorgrab::Install();
 	wanted::Install();
 	alert::Install();
 	gunbank::Install();
@@ -699,10 +749,45 @@ __attribute__((constructor)) void Init()
 		Log("shootdodge: CPed::ClearDuck is missing; no bullet time or dive");
 	if (!steering::Install())
 		Log("steering: functions missing; the steering wheels are the game's own");
+	seatgun::Install();
 	if (!viewmodel::Install())
 		Log("viewmodel: the skeleton functions are missing; no gun in first person");
 	if (!camera::Install())
 		Log("camera: hook missing (re-run install.sh); no first person, camera shake or spawn distance");
+	if (!ballistics::Install())
+		Log("ballistics: hooks missing (re-run install.sh)");
+	if (!planeflight::Install())
+		Log("plane flight: native bindings/hooks incomplete; supported native flight retained");
+	if (!flightmodel::Install())
+		Log("helicopter flight: native bindings/hooks incomplete; supported native flight retained");
+	if (!airportjets::Install())
+		Log("airport jets: native bindings/hooks incomplete; airport scenery retained");
+	if (!airworld::Install())
+		Log("air world: high-altitude terrain and horizon bindings unavailable");
+	if (!towercollision::Install())
+		Log("tower collision: native bindings/hooks incomplete; original collision retained");
+	if (!jetwheels::Install())
+		Log("jet wheels: native rolling/suspension bindings unavailable");
+	if (!jetaudio::Install())
+		Log("jet audio: native engine audio bindings unavailable");
+	if (!jetlights::Install())
+		Log("jet lights: native light bindings unavailable");
+	if (!jetshadow::Install())
+		Log("jet shadow: native raster fallback bindings unavailable");
+	if (!jetwash::Install())
+		Log("jet wash: native exhaust/force bindings unavailable");
+	if (!aircraftdamage::Install())
+		Log("aircraft damage: native bindings/hooks incomplete; original collision handling retained");
+	if (!shotcollision::Install())
+		Log("shot collision: native bindings/hooks missing; original vehicle shot collision retained");
+	if (!drivers::Install())
+		Log("drivers: missing world bindings; native driver behavior retained");
+	if (!reactions::Install())
+		Log("reactions: missing physics/rig hooks; native NPC reactions retained");
+	if (!reacthit::Install())
+		Log("reaction hits: native collision hook unavailable; original NPC hit volumes retained");
+	if (!checkpoint::Install())
+		Log("checkpoint: missing marker hook; racing arrows unavailable");
 	if (!rtshadows::Install())
 		Log("rt shadows: no re3_debug hook (re-run install.sh); their reports stay in the terminal");
 }

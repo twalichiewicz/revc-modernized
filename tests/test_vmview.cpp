@@ -72,8 +72,31 @@ static void TestPushOutKeepsTheImage()
 	CHECK(std::fabs(Length(Sub(far, view.pos)) - kPushOut * Length(p)) < 1e-4f);
 }
 
+static void TestReloadArmClearsTheVisibleNearPlane()
+{
+	Arm arm;
+	for (int bone : {kFore, kUpper, kHand}) {
+		SkinVertex v{};
+		v.bone[0] = uint8_t(bone);
+		v.weight[0] = 1;
+		arm.vertices.push_back(v);
+	}
+	arm.triangles.push_back({{0, 1, 2}, 0});
+	std::vector<Vec3> positions = {{.02f, .01f, .02f}, {.04f, -.1f, -.1f}, {.03f, .15f, -.03f}};
+	const Vec3 hand = positions[2];
+	const float near = .0375f, tanHalf = 1.428148f;
+	ClearArmNearPlane(arm, positions, near, tanHalf);
+	CHECK(Near(positions[2], hand, 1e-6f));
+	for (int i : {0, 1}) {
+		const float t = (near - positions[i].y) / (positions[2].y - positions[i].y);
+		const float z = positions[i].z + (positions[2].z - positions[i].z) * t;
+		CHECK(z < -near * tanHalf);
+	}
+}
+
 int main()
 {
+	TestReloadArmClearsTheVisibleNearPlane();
 	TestHipEyeSitsWhereFramed();
 	TestAimPutsSightsOnTheLine();
 	TestSquashMatchesFov();

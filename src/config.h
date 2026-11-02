@@ -24,13 +24,19 @@ struct Config {
 	bool phone = true;          // calls ring in vehicles too; a brick phone shows them, D-pad up answers
 	bool rumble = true;         // controller vibration for crashes, explosions, punches
 	bool interactions = true;   // prompts on X / B: pick up / wave off hookers, greet / insult people
+	bool driverReactions = true; // pedestrians/drivers perceive gun threats; flee, surrender or fight
+	bool npcReactions = true;    // articulated physical hit reactions, balance and contact for ordinary on-foot NPCs
+	bool worldPopulation = true; // zone/path-based virtual civilians and foot patrols, station reinforcement queues
+	bool raceArrows = true;      // racing checkpoints point toward the next checkpoint
 	bool carRadios = true;      // on foot, hear nearby car radios (and your own after getting out), muffled
 	bool radioLogo = true;      // the station's logo at the bottom when it changes, not the big name
 	bool places = true;         // map icons for hospitals, police stations and businesses not yet for sale
 	bool storyHints = true;     // Ken texts what the story needs once it waits on the businesses; gold rings on the map
+	bool achievements = true;   // the Definitive Edition's achievements, a notice for each, on the Stats page (#24)
 	bool credit = true;         // buy a business with a quarter of its price down, the rest out of its income
 	bool swim = true;           // Tommy swims instead of drowning
 	bool climb = true;          // the jump button vaults, climbs ledges and climbs out of the water
+	bool fallDamage = true;     // falls hurt as they would (nobody lives through five storeys), armour or not
 	bool crouchWalk = true;     // crouched, he walks crouched instead of standing up
 	bool firstPersonMovement = true; // first person: the stick moves him at once, CS 1.6's acceleration and friction
 	float fpAccel = 5.0f, fpFriction = 4.0f; // ... how fast he gets up to speed and stops (CS's)
@@ -45,13 +51,17 @@ struct Config {
 	bool heliDamage = true;     // the police helicopter takes hits where it is, smokes, and goes down sooner
 	bool heliGunners = true;    // SWAT in the police helicopters' doors (no belly gun), two from 4 stars, the Hunter at 6
 	bool copsByCar = true;      // wanted on foot, police arrive by car instead of appearing on foot nearby
+	bool copsGrabDoors = true;  // only a crawling car's door opens; faster, cops hang on to the handle and let go
 	bool smarterPolice = true;  // police units spread over the city, sent by road, more the longer it goes on
 	bool roadblocks = true;     // from two stars, roadblocks on the roads out of a ring about you, heavier as it goes on
 	bool realisticWanted = true; // police know you by what they've seen: witnesses, your clothes and car, a search, an APB
 	bool clouds = true;         // volumetric clouds instead of the flat cloud sprites
+	bool planes = true;         // the airliners fly up into the clouds, lit by the sky, with their lights on
 	bool modernLighting = true; // bloom, sun shafts, filmic highlights and a touch of contrast
 	bool lightGlow = true;      // cars' brake, reverse and headlights glow on the model
 	bool steeringWheel = true;  // round steering wheels that turn, his hands on them
+	bool consoleGun = true;     // driving, the gun lies on the console till he aims (bikes and boats: put away)
+	bool seatView = true;       // first person in a car: his eye raised where the hood or dash comes up to it
 	bool firstPerson = true;    // the Select button's cycle on foot goes on to first person
 	bool carVariety = true;     // more car models loaded, turned over sooner, fewer of one model at once
 	float cameraShake = 1.0f;   // GTA IV-style camera shake (0 = none)
@@ -59,7 +69,10 @@ struct Config {
 	float lookSensitivity = 1.0f; // right stick camera speed
 	float aimSensitivity = 0.45f; // ... while aiming or scoped, relative to that
 	float margin = 0.025f;      // gap to the screen's bottom-left corner, fraction of screen height
-	float buildingScale = 0.6f; // multiplier on real building heights
+	float buildingScale = 1.0f; // multiplier on real building heights
+	int crosshairStyle = 0, crosshairColor = 0;
+	float crosshairSize = 1.0f, crosshairThickness = 1.0f;
+	bool crosshairDot = false, crosshairDynamic = true;
 	float size = 1.25f;         // minimap height relative to the vanilla radar
 	float aspect = 1.55f;       // width / height
 	ViewParams view;

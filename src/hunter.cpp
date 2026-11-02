@@ -5,6 +5,7 @@
 #include "wanted.h"
 
 #include <cmath>
+#include <cstring>
 #include <dlfcn.h>
 
 using namespace game;
@@ -15,6 +16,7 @@ namespace {
 // --- The game (macVC 1.0.5217) -------------------------------------------------------------
 
 constexpr int kHunter = 155;              // MI_HUNTER
+constexpr int kArmy = 4, kCopTypeArmy = 4, kPedTypeCop = 6;
 constexpr size_t kVehicleSize = 0x6f0;    // a vehicle pool entry
 constexpr uint8_t kRandomVehicle = 1;     // eVehicleCreatedBy
 constexpr uint8_t kWrecked = 5; // eEntityStatus, bits 3-7 of +0x60
@@ -36,8 +38,6 @@ constexpr float kComeFrom = 150.0f, kComeUp = 60.0f; // m from him, out of sight
 constexpr float kStandOff = 30.0f, kAbove = 25.0f;   // where it hovers from him
 constexpr float kCannonRange = 80.0f, kRocketRange = 150.0f;
 constexpr uint32_t kCannonEvery = 90, kRocketsEvery = 4000;
-constexpr int32_t kCannonDamage = 25;
-constexpr float kSpread = 1.5f;     // m off him, a round
 constexpr float kToughness = 3000.0f; // health (a car has 1000)
 constexpr uint8_t kSpeed = 40;
 constexpr float kGone = 350.0f;     // m off: it's left
@@ -45,28 +45,30 @@ constexpr float kGone = 350.0f;     // m off: it's left
 void *(*gNewVehicle)(size_t);
 void (*gAutomobile)(void *self, int model, uint8_t createdBy);
 void (*gWorldAdd)(uint8_t *entity);
-void (*gSetUpDriver)(uint8_t *vehicle);
+uint8_t *(*gAddPed)(int32_t,unsigned,const CVector &,int32_t);
+void (*gSetDriver)(uint8_t *,uint8_t *);
+void (*gRegisterReference)(uint8_t *,uint8_t **);
+void (*gAddInCarAnims)(uint8_t *,uint8_t *,bool);
+void (*gPositionInCar)(uint8_t *);
+void (*gHideWeapon)(uint8_t *);
+int (*gPedRef)(uint8_t *);
 void (*gGoTo)(uint8_t *heli, float x, float y, float z, uint8_t speed);
 void (*gInteresting)(uint8_t *vehicle);
 void (*gNotInteresting)(uint8_t *vehicle);
 int (*gVehicleRef)(uint8_t *vehicle);
-void (*gFireRound)(CVector *from, CVector *to, int32_t damage);
+void (*gWeapon)(uint8_t *,int32_t,int32_t);
+bool (*gFire)(uint8_t *,uint8_t *,CVector *);
 bool (*gAddProjectile)(uint8_t *shooter, int32_t type, CVector at, float speed);
 uint8_t *gStreamInfo;
+uint8_t **gPedPool;
 int32_t *gArea; // CGame::currArea: 0 outdoors
 bool gReady;
 
 int gHunter = -1;
+int gSoldier = -1;
 bool gLeaving;
 uint32_t gLastTime;
 uint32_t gLastRound, gLastRockets;
-uint32_t gRandom = 0x51ed270bu;
-
-float Random(float lo, float hi)
-{
-	gRandom = gRandom * 1664525u + 1013904223u;
-	return lo + (hi - lo) * float(gRandom >> 8) / float(1u << 24);
-}
 CVector &Row(uint8_t *e, size_t at) { return *reinterpret_cast<CVector *>(e + at); }
 CVector Plus(const CVector &a, const CVector &d, float k) { return {a.x + d.x * k, a.y + d.y * k, a.z + d.z * k}; }
 CVector Minus(const CVector &a, const CVector &b) { return {a.x - b.x, a.y - b.y, a.z - b.z}; }
@@ -80,6 +82,35 @@ CVector At(uint8_t *e, const CVector &p)
 }
 bool Loaded(int model) { return gStreamInfo[size_t(model) * 0x20 + 0x10] == 1; }
 uint8_t Status(const uint8_t *e) { return e[0x60] >> 3; }
+
+bool PedCapacity()
+{
+	const uint8_t *pool=gPedPool?*gPedPool:nullptr;
+	if(!pool || !*reinterpret_cast<uint8_t *const *>(pool))return false;
+	const uint8_t *flags=*reinterpret_cast<uint8_t *const *>(pool+8);
+	const int capacity=*reinterpret_cast<const int32_t *>(pool+0x10);
+	if(!flags || capacity<=0 || capacity>100000)return false;
+	for(int i=0;i<capacity;++i)if(flags[i]&0x80)return true;
+	return false;
+}
+
+void Crew(uint8_t *h)
+{
+	if(gSoldier>=0 || *reinterpret_cast<uint8_t **>(h+0x218))return;
+	if(!Loaded(kArmy)){api.RequestModel(kArmy,0);return;}
+	if(!PedCapacity())return; // AddPed assumes operator new returned a live pool slot
+	uint8_t *ped=gAddPed(kPedTypeCop,kCopTypeArmy,EntityPos(h),0);
+	if(!ped)return;
+	// Replay SetUpDriver's native ownership/state after explicit Army creation.
+	// Hunter has a single native front seat and zero passenger slots.
+	gSetDriver(h,ped);
+	*reinterpret_cast<uint8_t **>(ped+0x4b8)=h;
+	gRegisterReference(h,reinterpret_cast<uint8_t **>(ped+0x4b8));
+	ped[0x4c0]=1;SetPedState(ped,50); // PED_DRIVING
+	*reinterpret_cast<uint32_t *>(ped+0x60)&=~uint32_t(0x100); // bUsesCollision
+	gHideWeapon(ped);gAddInCarAnims(ped,h,true);gPositionInCar(ped);
+	gSoldier=gPedRef(ped);
+}
 
 int Level(uint8_t *player)
 {
@@ -98,6 +129,7 @@ void Spawn(uint8_t *player)
 		api.RequestModel(kHunter, 0);
 		return;
 	}
+	if(!Loaded(kArmy)){api.RequestModel(kArmy,0);return;}
 	const CVector t = wanted::Active() ? wanted::Target() : Him(player);
 	// From behind the camera: out of his sight as it comes in.
 	const float h = CameraHeading() + 3.14159265f;
@@ -117,11 +149,23 @@ void Spawn(uint8_t *player)
 	*reinterpret_cast<float *>(h8 + kTurnTo) = -1.0f;
 	*reinterpret_cast<float *>(h8 + kHealth) = kToughness;
 	gWorldAdd(h8);
-	gSetUpDriver(h8);
+	gSoldier=-1;Crew(h8);
 	gInteresting(h8); // (kept, however far off: CCarCtrl::PossiblyRemoveVehicle)
 	gHunter = gVehicleRef(h8);
 	gLeaving = false;
 	Log("hunter: up, coming in from %.0f,%.0f", at.x, at.y);
+}
+
+void Cannon(uint8_t *h,CVector from,const CVector &target)
+{
+	const CVector right=Row(h,0x08),forward=Row(h,0x18),up=Row(h,0x28);
+	const CVector aim=Unit(Minus(target,from)),r=Unit(Cross(aim,{0,0,1}));
+	Row(h,0x08)=r;Row(h,0x18)=aim;Row(h,0x28)=Cross(r,aim);
+	alignas(8) uint8_t weapon[0x18];gWeapon(weapon,35,5000); // native WEAPONTYPE_HELICANNON
+	uint8_t *savedIgnore=*api.ignoreEntity;
+	gFire(weapon,h,&from);
+	*api.ignoreEntity=savedIgnore;
+	Row(h,0x08)=right;Row(h,0x18)=forward;Row(h,0x28)=up;
 }
 
 // Its rockets fly along it (CProjectileInfo::AddProjectile): it's turned at him for them, and back.
@@ -165,9 +209,7 @@ void Hunt(uint8_t *h, uint8_t *player, uint32_t now)
 	const bool facing = toHim.x * fwd.x + toHim.y * fwd.y > 0.85f * std::hypot(toHim.x, toHim.y);
 	if (facing && d <= kCannonRange && now - gLastRound >= kCannonEvery) {
 		gLastRound = now;
-		CVector to{him.x + Random(-kSpread, kSpread), him.y + Random(-kSpread, kSpread), him.z + Random(-0.5f, 0.5f)};
-		to = Plus(gun, Unit(Minus(to, gun)), d + 5.0f); // (on past him, into the ground)
-		gFireRound(&gun, &to, kCannonDamage);
+		Cannon(h,gun,him);
 	}
 	if (facing && now - gLastRockets >= kRocketsEvery) {
 		gLastRockets = now;
@@ -183,20 +225,29 @@ bool Install()
 	gNewVehicle = reinterpret_cast<decltype(gNewVehicle)>(sym("_ZN8CVehiclenwEm"));
 	gAutomobile = reinterpret_cast<decltype(gAutomobile)>(sym("_ZN11CAutomobileC1Eih"));
 	gWorldAdd = reinterpret_cast<decltype(gWorldAdd)>(sym("_ZN6CWorld3AddEP7CEntity"));
-	gSetUpDriver = reinterpret_cast<decltype(gSetUpDriver)>(sym("_ZN8CVehicle11SetUpDriverEv"));
+	gAddPed=reinterpret_cast<decltype(gAddPed)>(sym("_ZN11CPopulation6AddPedE8ePedTypejRK7CVectori"));
+	gSetDriver=reinterpret_cast<decltype(gSetDriver)>(sym("_ZN8CVehicle9SetDriverEP4CPed"));
+	gRegisterReference=reinterpret_cast<decltype(gRegisterReference)>(sym("_ZN7CEntity17RegisterReferenceEPPS_"));
+	gAddInCarAnims=reinterpret_cast<decltype(gAddInCarAnims)>(sym("_ZN4CPed13AddInCarAnimsEP8CVehicleb"));
+	gPositionInCar=reinterpret_cast<decltype(gPositionInCar)>(sym("_ZN4CPed19SetPedPositionInCarEv"));
+	gHideWeapon=reinterpret_cast<decltype(gHideWeapon)>(sym("_ZN4CPed31RemoveWeaponWhenEnteringVehicleEv"));
+	gPedRef=reinterpret_cast<decltype(gPedRef)>(sym("_ZN6CPools9GetPedRefEP4CPed"));
 	gGoTo = reinterpret_cast<decltype(gGoTo)>(sym("_ZN11CAutomobile19TellHeliToGoToCoorsEfffh"));
 	gInteresting = reinterpret_cast<decltype(gInteresting)>(sym("_ZN8CCarCtrl25RegisterVehicleOfInterestEP8CVehicle"));
 	gNotInteresting =
 	    reinterpret_cast<decltype(gNotInteresting)>(sym("_ZN8CCarCtrl32RemoveFromInterestingVehicleListEP8CVehicle"));
 	gVehicleRef = reinterpret_cast<decltype(gVehicleRef)>(sym("_ZN6CPools13GetVehicleRefEP8CVehicle"));
-	gFireRound = reinterpret_cast<decltype(gFireRound)>(sym("_Z22FireOneInstantHitRoundP7CVectorS0_i"));
+	gWeapon=reinterpret_cast<decltype(gWeapon)>(sym("_ZN7CWeaponC1E11eWeaponTypei"));
+	gFire=reinterpret_cast<decltype(gFire)>(sym("_ZN7CWeapon4FireEP7CEntityP7CVector"));
 	gAddProjectile = reinterpret_cast<decltype(gAddProjectile)>(
 	    sym("_ZN15CProjectileInfo13AddProjectileEP7CEntity11eWeaponType7CVectorf"));
 	gStreamInfo = static_cast<uint8_t *>(sym("_ZN10CStreaming16ms_aInfoForModelE"));
+	gPedPool=static_cast<uint8_t **>(sym("_ZN6CPools11ms_pPedPoolE"));
 	gArea = static_cast<int32_t *>(sym("_ZN5CGame8currAreaE"));
-	gReady = gNewVehicle && gAutomobile && gWorldAdd && gSetUpDriver && gGoTo && gInteresting && gNotInteresting &&
-	         gVehicleRef && gFireRound && gAddProjectile && gStreamInfo && gArea && api.PoolsGetVehicle &&
-	         api.RequestModel && api.GetIsLineOfSightClear;
+	gReady = gNewVehicle && gAutomobile && gWorldAdd && gAddPed && gSetDriver && gRegisterReference && gAddInCarAnims &&
+	         gPositionInCar && gHideWeapon && gPedRef && gGoTo && gInteresting && gNotInteresting &&
+	         gVehicleRef && gWeapon && gFire && gAddProjectile && gStreamInfo && gPedPool && gArea && api.PoolsGetVehicle &&
+	         api.PoolsGetPed && api.RequestModel && api.GetIsLineOfSightClear && api.ignoreEntity;
 	if (!gReady)
 		Log("hunter: a function is missing; no Hunter at six stars");
 	return gReady;
@@ -210,7 +261,7 @@ void Update(uint32_t now)
 	if (!player)
 		return;
 	if (gLastTime && (now < gLastTime || now - gLastTime > 10000))
-		gHunter = -1; // a game loaded: the old game's handle (another vehicle's, maybe)
+		gHunter = gSoldier = -1; // a game loaded: the old game's handle (another vehicle's, maybe)
 	gLastTime = now;
 	const int level = Level(player);
 	uint8_t *h = gHunter >= 0 ? api.PoolsGetVehicle(gHunter) : nullptr;
@@ -222,6 +273,23 @@ void Update(uint32_t now)
 		if (level >= 6 && *gArea == 0)
 			Spawn(player);
 		return;
+	}
+	uint8_t *driver=*reinterpret_cast<uint8_t **>(h+0x218);
+	if(EntityModel(h)!=kHunter || h[0x294]!=kRandomVehicle || h[kMission]!=kHeliFlyTo || driver==player ||
+	   (gSoldier>=0 && driver && driver!=api.PoolsGetPed(gSoldier))){
+		// A script, another driver or the player has taken ownership.
+		gNotInteresting(h);gHunter=gSoldier=-1;return;
+	}
+	Crew(h);
+	driver=*reinterpret_cast<uint8_t **>(h+0x218);
+	if(!driver && gSoldier>=0){
+		h[kMission]=0;gNotInteresting(h);gHunter=gSoldier=-1;return;
+	}
+	if(!driver || gSoldier<0)return; // failed/streaming crew creation retries without another aircraft
+	if(PedState(driver)==kPedDie || PedState(driver)==kPedDead || !std::isfinite(Health(driver)) || Health(driver)<=0 ||
+	   !PedInVehicle(driver) || PedVehicle(driver)!=h){
+		// Stop the direct AI transform controller; native gravity/contact takes over.
+		h[kMission]=0;gNotInteresting(h);gHunter=gSoldier=-1;return;
 	}
 	if (Status(h) == kWrecked || *reinterpret_cast<const float *>(h + kHealth) <= 0.0f) {
 		Log("hunter: down");

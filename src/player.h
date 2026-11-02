@@ -4,7 +4,7 @@
 // climbing), CPlayerPed::ProcessPlayerWeapon (his weapon: raised to aim, not
 // used in the water or while climbing), CPed::PreRender (his pose: the
 // drive-by arm, swimming, climbing) and CPed::InflictDamage (no drowning,
-// rumble on a punch).
+// falls that hurt, rumble on a punch).
 
 #include <cstdint>
 

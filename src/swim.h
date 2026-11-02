@@ -32,6 +32,8 @@ bool ShowsBreath();
 void DrawUnderwater();
 // The water's surface where he swims (valid while Swimming).
 float Surface();
+// Eye follows the same posed head used at render time (not the upright animation).
+bool EyePosition(uint8_t *ped, CVector &eye);
 // From the player hooks (player.cpp): after CPlayerPed::ProcessControl, and
 // his pose at render time with its weight (0: none).
 void AfterControl(uint8_t *ped);

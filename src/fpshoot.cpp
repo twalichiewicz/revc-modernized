@@ -1,4 +1,5 @@
 #include "fpshoot.h"
+#include "reactions.h"
 #include "camera.h"
 #include "config.h"
 #include "fpfire.h"
@@ -40,18 +41,6 @@ float gSpreadShown;         // the next shot's, for the crosshair
 bool Ours(int32_t type)
 {
 	return type >= kFirstFired && type <= kLastFired && type != kSniper && type != kLaser && type != kRocket;
-}
-
-// Seconds between its shots: its attack animation's loop (weapon.dat's columns R-S, kept in seconds).
-float Interval(int32_t type)
-{
-	const uint8_t *info = api.GetWeaponInfo ? api.GetWeaponInfo(type) : nullptr;
-	if (!info)
-		return 0.25f;
-	float loop = *reinterpret_cast<const float *>(info + kLoopEnd) - *reinterpret_cast<const float *>(info + kLoopStart);
-	if (loop > 2.0f)
-		loop /= 30.0f; // in frames after all
-	return loop > 0.02f ? loop : 0.1f;
 }
 
 fpfire::Moving MovingOf(const uint8_t *ped)
@@ -100,7 +89,8 @@ void Tick(float dt)
 void AfterWeapon(uint8_t *ped, uint8_t *pad)
 {
 	gSpreadNow = 0.0f;
-	if (!gReady || !ped || ped != api.FindPlayerPed())
+	// Knocked down (#25): no shots from the ground till he's up.
+	if (!gReady || !ped || ped != api.FindPlayerPed() || reactions::PlayerDown())
 		return;
 	const float dt = *api.timeStep / 50.0f; // game time: bullet time slows it
 	// RT only as read this frame; and the mod's to fire with only as things are now (a script can take
@@ -138,6 +128,18 @@ void AfterWeapon(uint8_t *ped, uint8_t *pad)
 		gJolt.Kick(kind, float(rand() % 1000) / 1000.0f);
 	}
 	gSpreadNow = 0.0f;
+}
+
+// Seconds between its shots: its attack animation's loop (weapon.dat's columns R-S, kept in seconds).
+float Interval(int32_t type)
+{
+	const uint8_t *info = api.GetWeaponInfo ? api.GetWeaponInfo(type) : nullptr;
+	if (!info)
+		return 0.25f;
+	float loop = *reinterpret_cast<const float *>(info + kLoopEnd) - *reinterpret_cast<const float *>(info + kLoopStart);
+	if (loop > 2.0f)
+		loop /= 30.0f; // in frames after all
+	return loop > 0.02f ? loop : 0.1f;
 }
 
 bool TriggerHeld()

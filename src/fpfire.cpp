@@ -155,4 +155,12 @@ float Spread::Angle(Kind kind, Moving moving, bool crouched, bool aiming) const
 	return Scale(kind) * accuracy;
 }
 
+float AimedMoving(Kind kind, Moving moving)
+{
+	if (moving == Moving::kStill)
+		return 0.0f;
+	const float factor = moving == Moving::kRunning ? kRunning : moving == Moving::kAir ? kAir : 1.0f;
+	return Scale(kind) * kAccuracyBase * kAiming * factor;
+}
+
 } // namespace fpfire

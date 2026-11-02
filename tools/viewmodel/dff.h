@@ -13,3 +13,12 @@
 #include <vector>
 
 bool ReadSkinnedDff(const std::vector<uint8_t> &dff, vm::SkinnedMesh &out, std::string &why);
+
+// A plain (unskinned) DFF's first geometry, as a weapon's: in its own model
+// space (a weapon's is his hand bone's), each material's texture by name.
+struct StaticMesh {
+	std::vector<vm::SkinVertex> vertices; // bones unused
+	std::vector<vm::Triangle> triangles;
+	std::vector<std::string> textures;    // by material
+};
+bool ReadStaticDff(const std::vector<uint8_t> &dff, StaticMesh &out, std::string &why);

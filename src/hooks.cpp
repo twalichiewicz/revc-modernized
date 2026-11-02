@@ -137,6 +137,20 @@ void *Install(const char *mangledName, void *replacement)
 	return base + e.origOff;
 }
 
+void *Chain(const char *mangledName, void *replacement)
+{
+	Entry e;
+	if (!replacement || !Find(mangledName, e) || e.kind != kKindHook)
+		return nullptr;
+	auto *base = reinterpret_cast<uint8_t *>(const_cast<mach_header_64 *>(gImage));
+	auto **slot = reinterpret_cast<void **>(base + e.slotOff);
+	void *next = *slot ? *slot : base + e.origOff;
+	if (next == replacement)
+		return nullptr;
+	*slot = replacement;
+	return next;
+}
+
 volatile uint64_t *Flag(const char *name)
 {
 	Entry e;
@@ -151,8 +165,15 @@ const void *ImageBase() { return gImage; }
 bool IsCallTo(uint32_t retOffset, const char *mangledName)
 {
 	const auto *base = reinterpret_cast<const uint8_t *>(gImage);
-	const auto *fn = static_cast<const uint8_t *>(dlsym(RTLD_MAIN_ONLY, mangledName));
-	if (!base || !fn)
+	if (!base || !mangledName || retOffset < 4)
+		return false;
+	// Local native functions are patchable by the hashed table but invisible
+	// to dlsym. Verify their original entry through that same patched table.
+	Entry entry;
+	const auto *fn = Find(mangledName, entry) && entry.kind == kKindHook
+	                     ? base + entry.funcOff
+	                     : static_cast<const uint8_t *>(dlsym(RTLD_MAIN_ONLY, mangledName));
+	if (!fn)
 		return false;
 	uint32_t insn;
 	memcpy(&insn, base + retOffset - 4, 4);

@@ -5,9 +5,16 @@
 // any of them seeing him keeps the police on him (wanted::CopSees). Once
 // they've lost him (searching, or the APB) each one looking at him has an
 // eye that fills, fast from far off if he matches the description, only up
-// close if not, and empties again once it can't see him; a full eye has
+// close if not while searching. A wholly clean APB description never fills
+// an eye. It empties again once it can't see him; a full eye has
 // him recognised. Nothing sees him in a NoPolice zone or while the police
 // ignore him (a Pay 'n' Spray's door shut, a mission's cutscene).
+//
+// One who's spotted him (his eye full, or a crime of his in front of him
+// while the police weren't on him) keeps his eye, red, while he comes for
+// him: at least a few seconds, and till he's reached him, lost sight of him
+// for a moment, is shooting at him, or the chase has gone on a while; then it
+// fades (spotters.h).
 #include "game.h"
 
 #include <vector>
@@ -19,12 +26,17 @@ struct Eye {
 	bool helicopter;
 	CVector head;    // where to draw it
 	float fill;      // 0..1
+	bool spotted = false; // he's spotted him: red, full
+	float alpha = 1.0f;   // fading out
 };
 
 bool Install();
 void Update(float dt);          // from wanted::Update, every frame
 bool Seen();                    // a cop or helicopter sees him (as of the last look)
 bool CanSee(const CVector &at); // a cop or police helicopter would see something there (a crime)
-const std::vector<Eye> &Eyes(); // those filling (fill > 0), for the HUD
+const std::vector<Eye> &Eyes(); // those filling (fill > 0) and those who've spotted him, for the HUD
+// A crime of his at `at`: every cop or helicopter that sees it has spotted him
+// (unless the police were on him already).
+void Spotted(const CVector &at);
 
 } // namespace sight

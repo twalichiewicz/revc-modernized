@@ -156,7 +156,7 @@ HAND_X = -116.0
 LEFT_AXES = ((0.0, 0.9, -0.44), (0.0, -0.44, -0.9))
 PALM = (HAND_X, HB_Y - 18.5, HB_Z + 17.5)
 # His left forearm out to his left and down from the handlebar's end, clear of the barrels.
-LEFT_FOREARM = (-0.35, -0.55, -0.9)  # down under the carrying handle: levelled, his shoulder came into view
+LEFT_FOREARM = (-0.8, -0.45, -0.6)  # out to his left and down from the handle: in from the lower left, clear of the barrels
 
 
 def hold_left(palm_mm, scale, along, palm_side):
@@ -202,7 +202,7 @@ PARTS = [  # name, pivot (mm), the way it moves
 MUZZLE, SIGHT_REAR, SIGHT_FRONT = (0, BARRELS_Y[1], 0), (0, 200, TOP_BAR[3] + 6), (0, BARRELS_Y[1], TOP_BAR[3] + 6)
 # Seen from: high, left of and behind the grip, the gun at his hip low on the right with the barrels running in
 # beyond his left hand towards (short of) the crosshair; aiming, 0.30 m behind the top bar and 0.02 m over it.
-FRAMING = ((-0.300, -0.384, 0.224), 0.0, 0.0, 0.3, 0.02)  # levelled: its barrel where he aims (vcmm-viewmodel --level)
+FRAMING = ((-0.320, -0.220, 0.330), 8.0, 0.0, 0.3, 0.02)  # low at his hip and close, the barrels turned in towards the crosshair
 
 
 def weathered(name, dark, light, scale=60.0, metallic=0.7, roughness=0.5):

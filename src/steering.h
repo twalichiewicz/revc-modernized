@@ -16,10 +16,13 @@
 // flicks the stalk, down for a left turn, up for a right, and it stays there
 // until the signal ends.
 #include <cstdint>
+#include "wheelgrip.h"
 
 namespace steering {
 
 bool Install();
+// Current wheel contacts, after PoseDriver; rendered using Tommy's articulated fingers.
+bool Grips(uint8_t *ped, wheelgrip::Grip &left, wheelgrip::Grip &right);
 // After the game has drawn a car.
 void DrawCar(uint8_t *car);
 // After the game has posed a ped (the player driving).

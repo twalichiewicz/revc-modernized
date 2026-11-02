@@ -1,4 +1,6 @@
+#include "achievements.h"
 #include "player.h"
+#include "playerreact.h"
 #include "camera.h"
 #include "steering.h"
 #include "aimcam.h"
@@ -8,12 +10,18 @@
 #include "crouch.h"
 #include "shootdodge.h"
 #include "driveby.h"
+#include "drivers.h"
+#include "falls.h"
 #include "fpshoot.h"
 #include "fpwalk.h"
+#include "fpfeedback.h"
 #include "game.h"
 #include "hooks.h"
+#include "jetboardingpose.h"
 #include "log.h"
 #include "rumble.h"
+#include "reactions.h"
+#include "seatgun.h"
 #include "swim.h"
 
 using namespace game;
@@ -29,6 +37,7 @@ bool gControl, gPose, gDamage;
 
 void Hook_ProcessControl(uint8_t *ped)
 {
+	playerreact::BeforeControl(ped);
 	climb::BeforeControl(ped);
 	const bool strafed = aimcam::BeforeControl();
 	const bool fpStrafed = fpwalk::BeforeControl();
@@ -39,6 +48,9 @@ void Hook_ProcessControl(uint8_t *ped)
 	crouch::AfterControl(ped); // crouched, his walk is its
 	fpwalk::AfterControl(ped, fpStrafed); // first person: the stick's, CS-style
 	shootdodge::AfterControl(ped); // last: diving, his speed is its
+	playerreact::AfterControl(ped);
+	drivers::Frame();
+	reactions::Frame();
 }
 
 void Hook_ProcessPlayerWeapon(uint8_t *ped, uint8_t *pad)
@@ -56,8 +68,12 @@ void Hook_ProcessPlayerWeapon(uint8_t *ped, uint8_t *pad)
 
 void Hook_PreRender(uint8_t *ped)
 {
-	if (ped == api.FindPlayerPed()) {
+	camera::BeforePreRender(ped);
+	playerreact::BeforePreRender(ped);
+	reactions::BeforePreRender(ped);
+	if (ped == api.FindPlayerPed() && fpfeedback::CanPose(Health(ped), PedState(ped), true)) {
 		driveby::PilotHolster(ped);
+		seatgun::BeforePose(ped); // driving, the gun on the console till he aims
 		driveby::PreRender(ped);
 		if ((swim::Posing() || climb::Posing()) && body::Prepare(ped)) {
 			body::Pose pose;
@@ -76,9 +92,17 @@ void Hook_PreRender(uint8_t *ped)
 			aimcam::PoseArms(ped);
 		}
 	}
+	jetboardingpose::BeforePedRender(ped);
 	orig_PreRender(ped);
-	if (ped == api.FindPlayerPed())
+	jetboardingpose::AfterPedRender(ped);
+	if (ped == api.FindPlayerPed() && fpfeedback::CanPose(Health(ped), PedState(ped), true)) {
 		steering::PoseDriver(ped); // his hands on the wheel
+		seatgun::Pose(ped);        // ... his right hand going for the gun
+	}
+	playerreact::AfterPreRender(ped);
+	// The ragdoll's pose before the camera's (#25): knocked down in first person,
+	// his articulated body is drawn and only then is his head hidden from the eye.
+	reactions::AfterPreRender(ped);
 	camera::AfterPreRender(ped);
 }
 
@@ -86,12 +110,24 @@ bool Hook_InflictDamage(uint8_t *ped, uint8_t *by, int32_t weapon, float damage,
 {
 	if (swim::RefusesDamage(ped, weapon))
 		return false;
-	const bool hurt = orig_InflictDamage(ped, by, weapon, damage, piece, direction);
-	if (hurt) {
+	const float armour = falls::Land(ped, weapon, damage); // (a landing: as it would hurt, his armour aside)
+	const float healthBefore = Health(ped), armourBefore = Armour(ped);
+	const bool nativeResult = orig_InflictDamage(ped, by, weapon, damage, piece, direction);
+	const float healthAfter = Health(ped);
+	// Observe before Landed restores armour temporarily removed for a fall.
+	// InflictDamage returns false after ordinary nonfatal health loss; its
+	// bool must be preserved for the engine, not used as hit acceptance.
+	const auto facts = fpfeedback::ObserveDamage(nativeResult, healthBefore, healthAfter, armourBefore, Armour(ped));
+	falls::Landed(ped, armour);
+	if (facts.accepted)
+		camera::Damaged(ped, by, healthBefore, healthBefore - facts.healthLost - facts.armourLost * 0.5f);
+	if (facts.accepted) {
+		reactions::Hit(ped, by, weapon, piece);
+		achievements::Damaged(ped, by, weapon, healthAfter <= 0.0f); // the mission kills (#24)
 		rumble::Damaged(ped, by, weapon, damage);
-		combat::Hurt(ped, by, Health(ped) <= 0.0f);
+		combat::Hurt(ped, by, healthAfter <= 0.0f);
 	}
-	return hurt;
+	return facts.nativeResult;
 }
 
 } // namespace
@@ -109,8 +145,14 @@ bool Install()
 
 void Damage(uint8_t *ped, int32_t weapon, float amount)
 {
-	if (gDamage)
-		orig_InflictDamage(ped, nullptr, weapon, amount, 0, 0);
+	if (!gDamage || !ped)
+		return;
+	const float healthBefore = Health(ped), armourBefore = Armour(ped);
+	const bool nativeResult = orig_InflictDamage(ped, nullptr, weapon, amount, 0, 0);
+	const float healthAfter = Health(ped);
+	const auto facts = fpfeedback::ObserveDamage(nativeResult, healthBefore, healthAfter, armourBefore, Armour(ped));
+	if (facts.accepted)
+		camera::Damaged(ped, nullptr, healthBefore, healthBefore - facts.healthLost - facts.armourLost * 0.5f);
 }
 
 bool ControlHooked() { return gControl; }

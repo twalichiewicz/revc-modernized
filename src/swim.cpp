@@ -6,6 +6,8 @@
 #include "hooks.h"
 #include "log.h"
 #include "player.h"
+#include "fpfeedback.h"
+#include "swimmotion.h"
 
 #include <algorithm>
 #include <chrono>
@@ -40,10 +42,8 @@ constexpr float kDiveFor = 0.55f, kDivePitch = -0.95f; // s and radians of the d
 constexpr float kUnderSpeed = 1.3f, kUnderSprint = 2.2f, kUpSpeed = 1.6f; // m/s
 constexpr float kDrift = 0.25f;                        // m/s he floats up when he isn't swimming
 constexpr float kSurfaceAt = 0.45f;                    // m under it, on his way up, he's at the surface
-constexpr float kAboveBottom = 0.8f;                   // m: as close as his position gets to the bottom
 constexpr float kCameraLift = 0.2f;                    // rad: the follow camera looks down at him this much
-constexpr float kBreath = 20.0f, kRefill = 4.0f;       // s of breath; refilled this many times faster
-constexpr float kDrownPerSecond = 8.0f;                // health, once he's out of breath
+constexpr float kBreath = 20.0f; // s; refill/drowning owned by fpfeedback::Breath
 constexpr uint32_t kCarUnderFor = 250;                 // ms after the last drowning damage a sunk car dealt
 constexpr float kStartUnder = 1.2f;                    // m under the surface: in the water that deep, he's under
 // The jump and fall animations he may have gone in with (JUMP_launch to FALL_collapse).
@@ -76,7 +76,11 @@ bool gUnder;
 float gDiveLeft;    // s of the dive itself
 CVector gDir{0, 1, 0}; // where he swims, eased
 float gPitch;       // of his body, up positive
-float gBreath = kBreath;
+fpfeedback::Breath gBreath;
+uint32_t gLastTime;
+bool gHaveTime;
+int (*gPedRef)(uint8_t *);
+int gPedHandle = -1;
 uint32_t gCarUnderAt; // game time a sinking vehicle last tried to drown him
 bool gCarUnderSeen;
 // The pose.
@@ -129,6 +133,8 @@ void Stop(uint8_t *ped)
 		RestoreWeapon(ped);
 }
 
+void ConstrainMotion(uint8_t *ped, float step);
+
 // After the game's own: whether he swims, and if so, no drowning and no fall.
 void Hook_ProcessBuoyancy(uint8_t *ped)
 {
@@ -136,11 +142,14 @@ void Hook_ProcessBuoyancy(uint8_t *ped)
 		orig_ProcessBuoyancy(ped);
 		return;
 	}
-	if (ped != gPed) {
+	if (ped != gPed || (gPedRef && gPedRef(ped) != gPedHandle)) {
 		gPed = ped;
+		gPedHandle = gPedRef ? gPedRef(ped) : -1;
 		gSwimming = gUnder = false;
 		gHolstered = -1;
-		gBreath = kBreath;
+		gBreath.Reset();
+		gCarUnderSeen = false;
+		gWeight = gCrawl = gUnderBlend = 0.0f;
 	}
 	uint64_t &flags = PedFlags(ped);
 	flags &= ~kPedReachingDryLand; // he swims rather than being put ashore
@@ -173,6 +182,10 @@ void Hook_ProcessBuoyancy(uint8_t *ped)
 		more &= ~kDrowning;
 		flags = (flags | kPedStanding | kPedWasStanding) & ~(kPedInTheAir | kPedLanding);
 	}
+	// CPed::ProcessControl calls buoyancy at0x100192dc8, before
+	// CPhysical::ProcessControl at0x1001933c8. Sweep again with this frame's
+	// actual timestep before physics, rather than trusting last frame's dt.
+	if (gSwimming && !climb::Active()) ConstrainMotion(ped, std::max(0.0f,*api.timeStep));
 }
 
 // The camera watches a ped or car that's in the water from where it was
@@ -210,7 +223,22 @@ void Hook_PlayFootSteps(uint8_t *ped)
 }
 
 // In a vehicle that's sunk (its ProcessBuoyancy drowns those inside).
-bool InSunkVehicle(const uint8_t *ped) { return gCarUnderSeen && PedInVehicle(ped) && *api.timeMs - gCarUnderAt < kCarUnderFor; }
+bool InSunkVehicle(const uint8_t *ped)
+{
+	if (!gCarUnderSeen || !PedInVehicle(ped) || *api.timeMs - gCarUnderAt >= kCarUnderFor) return false;
+	CVector head = EntityPos(ped); head.z += 0.6f;
+	uint8_t *clump = *reinterpret_cast<uint8_t *const *>(ped + 0x58);
+	uint8_t *hierarchy = clump && api.GetAnimHierarchyFromSkinClump ? api.GetAnimHierarchyFromSkinClump(clump) : nullptr;
+	const int index = hierarchy && api.HAnimIDGetIndex ? api.HAnimIDGetIndex(hierarchy, 5) : -1;
+	if (index >= 0 && api.HAnimMatrixArray) {
+		const float *m = api.HAnimMatrixArray(hierarchy) + index * 16;
+		head = {m[12], m[13], m[14] + 0.08f};
+	}
+	float surface = 0;
+	// A recent callback remains useful between buoyancy updates, but cannot
+	// continue drowning him after his head has actually emerged.
+	return api.GetWaterLevel(head.x, head.y, head.z, &surface, true) && head.z < surface - 0.05f;
+}
 
 // The exit button in a car in the water. The game's (CPlayerInfo::Process)
 // does nothing while the car is "in the water", that is drowning those in it
@@ -375,17 +403,81 @@ void Turn(float &heading, float want, float most)
 	heading = std::remainder(heading + std::clamp(std::remainder(want - heading, 2 * kPi), -most, most), 2 * kPi);
 }
 
+struct CollisionContext { uint8_t *ped; };
+bool SolidSphere(void *context, CVector centre, float radius, CVector motion, swimmotion::Contact &contact)
+{
+	const auto &ctx = *static_cast<CollisionContext *>(context);
+	if (!api.TestSphereAgainstWorld(centre, radius, ctx.ped, true, true, false, true, true, false))
+		return false;
+	const CVector movement = Normalised(motion);
+	float strongest = -1.0f;
+	uint8_t *ignored = api.ignoreEntity ? *api.ignoreEntity : nullptr;
+	if (api.ignoreEntity) *api.ignoreEntity = ctx.ped;
+	auto probe = [&](CVector direction) {
+		const CVector out = Add(centre, Scale(direction, radius * 1.05f));
+		uint8_t point[64] = {}; uint8_t *entity = nullptr;
+		if (!api.ProcessLineOfSight(centre, out, point, entity, true, true, false, true, true, false, false, false))
+			return false;
+		CVector normal = Normalised(*reinterpret_cast<const CVector *>(point + 0x10));
+		if (Dot(normal, direction) > 0) normal = Scale(normal, -1);
+		const float into = -Dot(movement, normal);
+		if (into > strongest) {
+			strongest = into;
+			const CVector d = Sub(*reinterpret_cast<const CVector *>(point), centre);
+			contact.normal = normal;
+			contact.depth = std::max(0.001f, radius - std::sqrt(Dot(d,d)));
+		}
+		return into > 0.01f;
+	};
+	// Most contacts need just one ray along motion. Glancing overlaps use
+	// radial probes, choosing the face that blocks this slide's movement.
+	if (!probe(movement))
+		for (int x = -1; x <= 1; ++x)
+			for (int y = -1; y <= 1; ++y)
+				for (int z = -1; z <= 1; ++z) {
+					if (!x && !y && !z) continue;
+					probe(Normalised({float(x), float(y), float(z)}));
+				}
+	if (api.ignoreEntity) *api.ignoreEntity = ignored;
+	if (Dot(contact.normal, contact.normal) < 0.1f) {
+		contact.normal = Scale(movement, -1.0f);
+		contact.depth = radius;
+	}
+	return true;
+}
+void ConstrainMotion(uint8_t *ped, float step)
+{
+	if (step <= 0.0f) return;
+	CVector &velocity = EntitySpeed(ped);
+	const CVector from = EntityPos(ped), delta = Scale(velocity, step);
+	const CVector f = HeadingForward(gHeading);
+	const CVector lengthwise = gUnder && gSpeed > 0.2f ? gDir : f;
+	const float laidOut = Smooth(gCrawl);
+	swimmotion::Shape shape;
+	shape.axis = Normalised(Lerp({0, 0, 1}, lengthwise, laidOut));
+	CollisionContext context{ped};
+	const CVector to = swimmotion::Move(from, delta, shape, SolidSphere, &context);
+	velocity = Scale(Sub(to, from), 1.0f / step);
+}
+
+body::Pose CurrentPose()
+{
+	const body::Pose surface = Mix(Tread(gTread, true), Crawl(gCycle, gCycles % 2 == 0), Smooth(gCrawl));
+	return gUnderBlend <= 0.0f ? surface
+	    : Mix(surface, Mix(Tread(gTread, false), Breaststroke(gCycle, gPitch), Smooth(gCrawl)), Smooth(gUnderBlend));
+}
+
 } // namespace
 
 bool Swimming() { return gInstalled && gSwimming; }
 bool Underwater() { return gInstalled && gSwimming && gUnder; }
 bool Posing() { return gInstalled && (gSwimming || gWeight > 0.0f); }
 float Surface() { return gLevel; }
-float Breath() { return gBreath / kBreath; }
+float Breath() { return gBreath.Seconds() / kBreath; }
 bool ShowsBreath()
 {
 	const uint8_t *player = api.FindPlayerPed();
-	return gInstalled && (Underwater() || gBreath < kBreath - 0.01f || (player && InSunkVehicle(player)));
+	return gInstalled && (Underwater() || gBreath.Seconds() < kBreath - 0.01f || (player && InSunkVehicle(player)));
 }
 
 bool RefusesDamage(const uint8_t *ped, int32_t weapon)
@@ -400,10 +492,6 @@ bool RefusesDamage(const uint8_t *ped, int32_t weapon)
 	if (ped == player && PedInVehicle(ped)) {
 		gCarUnderAt = *api.timeMs;
 		gCarUnderSeen = true;
-		const float dt = std::clamp(*api.timeStep, 0.01f, 3.0f) / 50.0f;
-		gBreath = std::max(0.0f, gBreath - dt);
-		if (gBreath <= 0.0f)
-			player::Damage(player, kWeaponDrowning, kDrownPerSecond * dt);
 		return true;
 	}
 	return false;
@@ -427,20 +515,33 @@ void AfterControl(uint8_t *ped)
 	if (!gInstalled)
 		return;
 	OutOfTheWater(ped); // (before he's been on foot since a load, too)
-	if (ped != gPed)
+	const uint32_t now = *api.timeMs;
+	if (ped != gPed || (gPedRef && gPedRef(ped) != gPedHandle) || (gHaveTime && now < gLastTime)) {
+		gPed = ped;
+		gPedHandle = gPedRef ? gPedRef(ped) : -1;
+		gSwimming = gUnder = false;
+		gWeight = gCrawl = gUnderBlend = 0.0f;
+		gHolstered = -1;
+		gCarUnderSeen = false;
+		gBreath.Reset();
+	}
+	gHaveTime = true;
+	gLastTime = now;
+	const float step = std::max(0.0f, *api.timeStep), dt = step / 50.0f;
+	if (!fpfeedback::CanPose(Health(ped), PedState(ped), true)) {
+		gSwimming = gUnder = false;
+		gWeight = gCrawl = gUnderBlend = 0.0f;
+		gCarUnderSeen = false;
+		gBreath.Reset();
 		return;
-	const float step = std::clamp(*api.timeStep, 0.01f, 3.0f), dt = step / 50.0f;
+	}
 	if (gSwimming && PedInVehicle(ped)) // into a boat
 		Stop(ped);
-	// His breath: it goes under the surface (in a sunk car, as it drowns him:
-	// RefusesDamage), and comes back above it.
-	if (Underwater()) {
-		gBreath = std::max(0.0f, gBreath - dt);
-		if (gBreath <= 0.0f)
-			player::Damage(ped, kWeaponDrowning, kDrownPerSecond * dt);
-	} else if (!InSunkVehicle(ped)) {
-		gBreath = std::min(kBreath, gBreath + dt * kRefill);
-	}
+	// Exactly one breath/damage update per player-control frame, including
+	// submerged vehicles. Buoyancy damage callbacks only mark submersion.
+	const float drowning = gBreath.Update(Underwater() || InSunkVehicle(ped), dt, float(MaxHealth(PlayerInfo())));
+	if (drowning > 0.0f)
+		player::Damage(ped, kWeaponDrowning, fpfeedback::DrowningWeaponDamage(drowning));
 	if (!gSwimming) {
 		if (gHolstered >= 0 && !climb::Active())
 			RestoreWeapon(ped);
@@ -502,13 +603,11 @@ void AfterControl(uint8_t *ped)
 		v = Scale(gDir, gSpeed / 50.0f);
 		if (gSpeed < kDrift && gDiveLeft <= 0.0f)
 			v.z = std::max(v.z, kDrift / 50.0f); // floating up
-		const float floor = gBottom + kAboveBottom;
-		if (pos.z + v.z * step < floor)
-			v.z = std::max(v.z, (floor - pos.z) / step);
 		if (gDiveLeft <= 0.0f && pos.z > gLevel - kSurfaceAt && v.z >= 0.0f) {
 			gUnder = false; // up for air
 			gPitch = 0.0f;
 		}
+		ConstrainMotion(ped, step);
 		return;
 	}
 
@@ -524,6 +623,7 @@ void AfterControl(uint8_t *ped)
 	v.z = std::clamp(v.z + (rise * 0.06f - v.z * 0.3f) * step, -0.4f, 0.06f);
 	v.x = f.x * gSpeed / 50.0f;
 	v.y = f.y * gSpeed / 50.0f;
+	ConstrainMotion(ped, step);
 }
 
 float Pose(body::Pose &pose)
@@ -544,11 +644,7 @@ float Pose(body::Pose &pose)
 		gCycles++;
 	}
 	gTread = std::fmod(gTread + dt * 0.8f, 1.0f);
-	const body::Pose surface = Mix(Tread(gTread, true), Crawl(gCycle, gCycles % 2 == 0), Smooth(gCrawl));
-	pose = gUnderBlend <= 0.0f
-	           ? surface
-	           : Mix(surface, Mix(Tread(gTread, false), Breaststroke(gCycle, gPitch), Smooth(gCrawl)),
-	                 Smooth(gUnderBlend));
+	pose = CurrentPose();
 	// A splash as each hand goes in (the sound with the right one), and from the kick when he's going fast.
 	if (gSwimming && !gUnder && !climb::Active() && gCrawl > 0.5f && gPed) {
 		if (Passed(before, gCycle, 0.97f))
@@ -559,6 +655,15 @@ float Pose(body::Pose &pose)
 			Splash(gPed, pose, gCycle < 0.5f ? kFootR : kFootL, 0.35f, false);
 	}
 	return Smooth(gWeight);
+}
+
+bool EyePosition(uint8_t *ped, CVector &eye)
+{
+	if (!Posing() || ped != gPed || !body::Prepare(ped)) return false;
+	const body::Pose pose = Mix(body::Pose{}, CurrentPose(), Smooth(gWeight));
+	const CVector local = body::Joint(pose, body::kHead), f = HeadingForward(gHeading), r{f.y, -f.x, 0};
+	eye = Add(EntityPos(ped), Add(Add(Scale(r, local.x), Scale(f, local.y)), {0, 0, local.z}));
+	return true;
 }
 
 void DrawUnderwater()
@@ -583,7 +688,10 @@ bool Install()
 {
 	if (!gConfig.swim)
 		return true;
-	if (!api.timeStep || !api.GetWaterLevel || !api.ProcessVerticalLine || !player::ControlHooked() ||
+	gPedRef = reinterpret_cast<decltype(gPedRef)>(dlsym(RTLD_MAIN_ONLY,"_ZN6CPools9GetPedRefEP4CPed"));
+	if (!gPedRef) { Log("swim: no player generation handle; swimming disabled"); return false; }
+	if (!api.timeStep || !api.timeMs || !api.GetWaterLevel || !api.ProcessVerticalLine || !api.ProcessLineOfSight ||
+	    !api.TestSphereAgainstWorld || !player::ControlHooked() ||
 	    !player::DamageHooked() || !player::PoseHooked())
 		return false;
 	gInstalled = hooks::Install("_ZN4CPed15ProcessBuoyancyEv", Hook_ProcessBuoyancy, orig_ProcessBuoyancy);

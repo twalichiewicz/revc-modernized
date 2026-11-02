@@ -5,8 +5,9 @@
 // car. Here, after CPlayerPed::ProcessControl, his velocity comes from the
 // stick as Counter-Strike moves a player (fpmove.cpp): friction, then
 // acceleration towards the push in the view's frame, at Vice City's own top
-// speeds (run_player, run_armed, sprint_panic, crouch.cpp's pace); in the air
-// only a little steering. He faces the view throughout, and while this runs
+// speeds (native walking pace, run_player, run_armed, sprint_panic and the
+// crouch.cpp pace); in the air only a little steering. He faces the view
+// throughout, and while this runs
 // the game uses its strafing control (CCamera::bFreeCam off, as aimcam.cpp
 // does while aiming), so his legs walk, strafe and backpedal to match.
 // Swimming, climbing, diving and anything not his to control are left alone.

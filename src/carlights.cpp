@@ -1,4 +1,6 @@
 #include "carlights.h"
+#include "carlightrules.h"
+#include "carmaterials.h"
 #include "camera.h"
 #include "config.h"
 #include "draw.h"
@@ -7,6 +9,7 @@
 #include "hooks.h"
 #include "log.h"
 #include "shaders.h"
+#include "seatgun.h"
 #include "steering.h"
 #include "turns.h"
 
@@ -102,20 +105,24 @@ const char *const kVertex = R"(
 VSIN(ATTRIB_POS) vec3 in_pos;
 VSOUT vec4 v_color;
 VSOUT vec2 v_tex0;
+VSOUT vec3 v_lens;
 void main(void)
 {
 	vec4 Vertex = u_world * vec4(in_pos, 1.0);
 	gl_Position = u_proj * u_view * Vertex;
 	v_color = in_color;
 	v_tex0 = in_tex0;
+	v_lens = in_normal;
 }
 )";
 const char *const kFragment = R"(
 uniform sampler2D tex0;
 FSIN vec4 v_color;
 FSIN vec2 v_tex0;
+FSIN vec3 v_lens;
 void main(void)
 {
+	if (max(abs(v_lens.x), max(abs(v_lens.y), abs(v_lens.z))) > 1.0) discard;
 	vec4 t = texture(tex0, vec2(v_tex0.x, 1.0 - v_tex0.y));
 	float hi = max(t.r, max(t.g, t.b)), lo = min(t.r, min(t.g, t.b));
 	// Red lenses (dull red included): red well over green and blue.
@@ -159,6 +166,7 @@ const uint32_t *gFrameCounter; // CTimer::m_FrameCounter
 
 void (*orig_RegisterOne)(CVector, CVector, CVector, CVector, uint8_t, uint8_t, uint8_t, uint8_t);
 void (*orig_Render)(uint8_t *car);
+bool gDrawsCars;
 void (*orig_SpecialFXRender)();
 void (*orig_PreRender)(uint8_t *car);
 void (*orig_RegisterCorona)(uint32_t, uint8_t, uint8_t, uint8_t, uint8_t, const CVector &, float, float, uint8_t, int8_t,
@@ -168,6 +176,7 @@ void (*orig_RegisterCorona)(uint32_t, uint8_t, uint8_t, uint8_t, uint8_t, const 
 struct Tri {
 	V3 p[3];
 	float u[3], v[3];
+	Vec3 lens[3];
 	uint16_t material;
 	bool tail, left;
 };
@@ -259,6 +268,11 @@ const Lights &Find(void *atomic, const void *geometry, const uint8_t *car, int m
 		const V3 p[3] = {a, b, c};
 		for (int k = 0; k < 3; k++) {
 			out.p[k] = {p[k].x + lift.x * kLift, p[k].y + lift.y * kLift, p[k].z + lift.z * kLift};
+			const CVector &light = isTail ? tail : head;
+			const V3 carPoint = InCar(car, Apply(ltm, p[k]));
+			out.lens[k] = carlightrules::LensCoordinates(
+			    {carPoint.x, carPoint.y, carPoint.z},
+			    {centre.x < 0 ? -std::fabs(light.x) : std::fabs(light.x), light.y, light.z});
 			out.u[k] = uv[2 * t.v[k]];
 			out.v[k] = uv[2 * t.v[k] + 1];
 		}
@@ -436,6 +450,7 @@ void Draw(void *atomic, const void *geometry, const std::vector<Tri> &tris, cons
 				Im3DVertex &v = gVertices[n++];
 				v = {};
 				v.x = t.p[k].x, v.y = t.p[k].y, v.z = t.p[k].z;
+				v.nx = t.lens[k].x, v.ny = t.lens[k].y, v.nz = t.lens[k].z;
 				v.r = uint8_t(red * 255.0f), v.g = uint8_t(green * 255.0f), v.b = uint8_t(blue * 255.0f);
 				v.a = uint8_t(amber * 255.0f);
 				v.u = t.u[k], v.v = t.v[k];
@@ -472,6 +487,8 @@ void *DrawAtomic(void *atomic, void *data)
 
 void DrawCar(uint8_t *car)
 {
+	if (camera::InSeat() && camera::SeatVehicle() == car)
+		return;
 	const State lights = LightsOf(car);
 	void *clump = *reinterpret_cast<void *const *>(car + kRwObject);
 	if (!lights.Any() || !clump)
@@ -494,6 +511,7 @@ void Hook_Render(uint8_t *car)
 {
 	orig_Render(car);
 	steering::DrawCar(car); // its steering wheel, with the car's own opaque parts
+	seatgun::DrawCar(car);  // the gun on its console
 	if (!gConfig.lightGlow)
 		return;
 	if (gQueuedFrame != *gFrameCounter) {
@@ -532,6 +550,9 @@ void Hook_RegisterCorona(uint32_t id, uint8_t r, uint8_t g, uint8_t b, uint8_t a
                          float angle, bool useNear, float nearDist)
 {
 	const uint8_t *car = gPreRendering;
+	if (car && carlightrules::SuppressCabinCorona(camera::InSeat(), car == camera::SeatVehicle(),
+	        id - uint32_t(uintptr_t(car))))
+		return;
 	if (car && id - uint32_t(uintptr_t(car)) - kTailCorona < 2 && gShader && Close(car) &&
 	    gModelsWithTail.count(*reinterpret_cast<const int16_t *>(car + kModelIndex)))
 		return; // its tail lights glow on the model instead
@@ -544,6 +565,45 @@ void Hook_RegisterOne(CVector pos, CVector up, CVector side, CVector front, uint
 	if (type >= kFirstVehicle && type <= kLastVehicle)
 		return;
 	orig_RegisterOne(pos, up, side, front, type, r, g, b);
+}
+
+// Default atomic rendering is also used by the deferred transparent-vehicle pass.
+// Scoping here keeps shared glass materials unchanged between individual draws.
+struct InteriorRW {
+	void *(*Clump)(const void *);
+	void *(*Geometry)(const void *);
+	void *(*Materials)(void *, void *(*)(void *, void *), void *);
+} interior;
+carmaterials::Access materialAccess{};
+void *(*orig_AtomicDefault)(void *);
+void (*orig_AddLight)(uint8_t, CVector, CVector, float, float, float, float, uint8_t, bool);
+void *InteriorMaterial(void *material, void *data)
+{
+	static_cast<carmaterials::InteriorScope *>(data)->Adjust(material);
+	return material;
+}
+void *Hook_AtomicDefault(void *atomic)
+{
+	const uint8_t *car = camera::SeatVehicle();
+	if (!camera::InSeat() || !car || interior.Clump(atomic) != *reinterpret_cast<void *const *>(car + kRwObject))
+		return orig_AtomicDefault(atomic);
+	void *geometry = interior.Geometry(atomic);
+	if (!geometry)
+		return orig_AtomicDefault(atomic);
+	carmaterials::InteriorScope materialScope(materialAccess);
+	interior.Materials(geometry, InteriorMaterial, &materialScope);
+	const shaders::SavedStates states;
+	return orig_AtomicDefault(atomic);
+}
+__attribute__((noinline)) void Hook_AddLight(uint8_t type, CVector pos, CVector direction, float radius, float red,
+                                             float green, float blue, uint8_t fog, bool extra)
+{
+	const auto *base = static_cast<const uint8_t *>(hooks::ImageBase());
+	const uint32_t site = uint32_t(static_cast<const uint8_t *>(__builtin_return_address(0)) - base);
+	if (carlightrules::SuppressCabinLight(camera::InSeat(), gPreRendering && gPreRendering == camera::SeatVehicle(),
+	                                      site))
+		return;
+	orig_AddLight(type, pos, direction, radius, red, green, blue, fog, extra);
 }
 
 template <typename T>
@@ -584,11 +644,33 @@ void DrawDash()
 
 bool Install()
 {
+	const bool windows =
+	    Bind(interior.Clump, "_Z16RpAtomicGetClumpPKN2rw6AtomicE") &&
+	    Bind(interior.Geometry, "_Z19RpAtomicGetGeometryPKN2rw6AtomicE") &&
+	    Bind(interior.Materials, "_Z25RpGeometryForAllMaterialsPN2rw8GeometryEPFPNS_8MaterialES3_PvES4_") &&
+	    Bind(materialAccess.Color, "_Z18RpMaterialGetColorPKN2rw8MaterialE") &&
+	    Bind(materialAccess.SetColor, "_Z18RpMaterialSetColorPN2rw8MaterialEPKNS_4RGBAE");
+	Bind(materialAccess.Effects, "_Z25RpMatFXMaterialGetEffectsPKN2rw8MaterialE");
+	Bind(materialAccess.Env, "_Z35RpMatFXMaterialGetEnvMapCoefficientPKN2rw8MaterialE");
+	Bind(materialAccess.SetEnv, "_Z35RpMatFXMaterialSetEnvMapCoefficientPN2rw8MaterialEf");
+	const bool glass = windows && hooks::Install("_Z27AtomicDefaultRenderCallBackPN2rw6AtomicE", Hook_AtomicDefault,
+	                                             orig_AtomicDefault);
+	const bool prerender = hooks::Install("_ZN11CAutomobile9PreRenderEv", Hook_PreRender, orig_PreRender);
+	const bool cabin =
+	    prerender && hooks::Install("_ZN12CPointLights8AddLightEh7CVectorS0_ffffhb", Hook_AddLight, orig_AddLight);
+	const bool coronas = prerender && hooks::Install("_ZN8CCoronas14RegisterCoronaEjhhhhRK7CVectorffhahhhfbf",
+	    Hook_RegisterCorona, orig_RegisterCorona);
+	Log("carlights: interior glass %s, cabin brake-light containment %s", glass ? "scoped" : "unavailable",
+	    cabin ? "on" : "unavailable");
+
 	if (!hooks::Install("_ZN13CBrightLights11RegisterOneE7CVectorS0_S0_S0_hhhh", Hook_RegisterOne, orig_RegisterOne))
 		return false;
-	if (!gConfig.lightGlow) { // the steering wheels still want the car's draw
-		if (gConfig.steeringWheel && !hooks::Install("_ZN11CAutomobile6RenderEv", Hook_Render, orig_Render))
-			Log("carlights: hook missing (re-run install.sh); the steering wheels are the game's own");
+	if (!gConfig.lightGlow) { // the steering wheels and the gun on the console still want the car's draw
+		if (gConfig.steeringWheel || gConfig.consoleGun) {
+			gDrawsCars = hooks::Install("_ZN11CAutomobile6RenderEv", Hook_Render, orig_Render);
+			if (!gDrawsCars)
+				Log("carlights: hook missing (re-run install.sh); the steering wheels are the game's own");
+		}
 		return true;
 	}
 	const bool bound = Bind(rw.ForAllAtomics, "_Z20RpClumpForAllAtomicsPN2rw5ClumpEPFPNS_6AtomicES3_PvES4_") &&
@@ -617,14 +699,14 @@ bool Install()
 		return true;
 	}
 	if (!hooks::Install("_ZN10CSpecialFX6RenderEv", Hook_SpecialFXRender, orig_SpecialFXRender) ||
-	    !hooks::Install("_ZN11CAutomobile6RenderEv", Hook_Render, orig_Render) ||
-	    !hooks::Install("_ZN11CAutomobile9PreRenderEv", Hook_PreRender, orig_PreRender) ||
-	    !hooks::Install("_ZN8CCoronas14RegisterCoronaEjhhhhRK7CVectorffhahhhfbf", Hook_RegisterCorona,
-	                    orig_RegisterCorona)) {
+	    !(gDrawsCars = hooks::Install("_ZN11CAutomobile6RenderEv", Hook_Render, orig_Render)) || !prerender ||
+	    !coronas) {
 		Log("carlights: hooks missing (re-run install.sh); cars' lights are the game's own");
 		return true;
 	}
 	return true;
 }
+
+bool DrawsCars() { return gDrawsCars; }
 
 } // namespace carlights

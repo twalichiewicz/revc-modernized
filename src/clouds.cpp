@@ -563,4 +563,34 @@ float Transmittance(const Noise &noise, const Weather &weather, const float from
 	return std::exp(-depth * kSigma * (1.0f + weather.rain));
 }
 
+float Between(const Noise &noise, const Weather &weather, const float from[3], const float to[3])
+{
+	const float d[3] = {to[0] - from[0], to[1] - from[1], to[2] - from[2]};
+	const float len = std::sqrt(d[0] * d[0] + d[1] * d[1] + d[2] * d[2]);
+	if (len < 1.0f)
+		return 1.0f;
+	// The part of the line in the layer (flat: the curve's a metre over a few km).
+	float s0 = 0.0f, s1 = 1.0f;
+	if (std::fabs(d[2]) < 1e-4f) {
+		if (from[2] <= kBase || from[2] >= kTop)
+			return 1.0f;
+	} else {
+		const float a = (kBase - from[2]) / d[2], b = (kTop - from[2]) / d[2];
+		s0 = std::max(s0, std::min(a, b));
+		s1 = std::min(s1, std::max(a, b));
+	}
+	if (s1 <= s0)
+		return 1.0f;
+	s1 = std::min(s1, s0 + kMaxSpan / len);
+	constexpr int kStepsCpu = 32;
+	const float dt = (s1 - s0) * len / kStepsCpu;
+	float depth = 0.0f;
+	for (int i = 0; i < kStepsCpu; i++) {
+		const float s = s0 + (s1 - s0) * (i + 0.5f) / kStepsCpu;
+		const float z = from[2] + d[2] * s;
+		depth += Density(noise, weather, from[0] + d[0] * s, from[1] + d[1] * s, (z - kBase) / (kTop - kBase)) * dt;
+	}
+	return std::exp(-depth * kSigma * (1.0f + weather.rain));
+}
+
 } // namespace clouds

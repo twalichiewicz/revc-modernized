@@ -1,6 +1,6 @@
 #pragma once
 // Baked map data (tools/bake): a cleaned land/water class map, the car road
-// network with real widths, and 3D buildings taken from the collision meshes.
+// network with real widths, and placed visual building/bridge meshes.
 // All in world coordinates. No game dependencies.
 #include "types.h"
 
@@ -22,15 +22,20 @@ enum : uint8_t {
 	kArtBuilding = 0x20, // ...or a building
 };
 
-// The roof surface of a building as in its collision mesh, plus the outline
-// edges that get walls down to the ground.
+enum : uint8_t { kVisualMesh = 1, kBridge = 2 };
+// Placed visual triangles, or a collision-roof fallback with outline extrusion.
 struct Building {
+	uint8_t flags = 0;
 	std::vector<Vec3> verts;       // world XY; z = height above the surrounding ground
 	std::vector<uint16_t> tris;    // roof triangles
 	std::vector<uint16_t> edges;   // outline edges as pairs; the roof lies to their left
 	float top = 0;                 // highest vertex
 	Vec2 lo{}, hi{};               // XY bounds
 };
+
+// One common height scale for the visible block: tall roofs fit the map
+// camera without flattening different storeys onto the same height plane.
+float BuildingHeightScale(float requestedScale, float tallest, float maximum);
 
 struct Road {
 	Vec2 a, b;

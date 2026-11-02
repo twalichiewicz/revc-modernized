@@ -315,8 +315,46 @@ static void TestMatchingWitnessUnderApbBringsItBack()
 	CHECK(m.stars() == 3);
 }
 
+// Out of the car they saw him in, it's still on the description but he isn't in it (greyed on
+// the HUD); back in it, it's on him again; in another car it's struck through.
+static void TestOutOfTheCarHeWasSeenIn()
+{
+	Model m;
+	const Looks inIt{"player", 145, 52, 52, 4097};
+	m.CopSees(inIt, kHere, 1000, 2);
+	CHECK(m.description().haveVehicle && m.description().vehicle == 4097);
+	const Looks onFoot{"player"};
+	CHECK(m.VehicleLeft(onFoot) && !m.VehicleStruck(onFoot));
+	CHECK(!m.VehicleLeft(inIt) && !m.VehicleStruck(inIt));
+	const Looks other{"player", 150, 1, 1, 777};
+	CHECK(m.VehicleStruck(other) && !m.VehicleLeft(other));
+	// (Seen on foot they still remember the car, and which.)
+	m.CopSees(onFoot, kHere, 2000, 2);
+	CHECK(m.description().haveVehicle && m.description().vehicle == 4097);
+}
+
+// The car they want blown up or gone from the world: nothing to look for, off the description.
+static void TestTheCarGone()
+{
+	Model m;
+	m.CopSees({"player", 145, 52, 52, 4097}, kHere, 1000, 2);
+	m.VehicleGone(1234); // another car: nothing
+	CHECK(m.description().haveVehicle);
+	m.VehicleGone(4097);
+	CHECK(!m.description().haveVehicle && m.description().vehicle == -1);
+	CHECK(!m.Matches({"play2", 145, 52, 52, 9999})); // the same model and colours no longer give him away
+	CHECK(m.description().haveOutfit);               // (the outfit stays)
+	// A car known only by its model (a witness who saw it, say) can't be gone.
+	Model w;
+	w.CopSees({"player", 145, 52, 52, -1}, kHere, 1000, 2);
+	w.VehicleGone(-1);
+	CHECK(w.description().haveVehicle);
+}
+
 int main()
 {
+	TestOutOfTheCarHeWasSeenIn();
+	TestTheCarGone();
 	TestCopSeesMakesWanted();
 	TestLostAfterFourSeconds();
 	TestSearchEndsIntoApb();

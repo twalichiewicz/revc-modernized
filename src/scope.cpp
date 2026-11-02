@@ -24,14 +24,14 @@ float FovFor(float magnification) { return 2.0f * std::atan(std::tan(35.0f * kPi
 
 Angles SniperAngles(Dir f)
 {
-	constexpr float kHighest = 60.0f * kPi / 180.0f, kLowest = -89.5f * kPi / 180.0f; // CCam::Process_Sniper's
+	constexpr float kHighest = 89.0f * kPi / 180.0f, kLowest = -kHighest; // overridden first-person limits
 	return {std::clamp(std::asin(std::clamp(f.z, -1.0f, 1.0f)), kLowest, kHighest), std::atan2(f.y, f.x)};
 }
 
 Angles FollowAngles(Dir f, float level)
 {
-	constexpr float kHighest = 45.0f * kPi / 180.0f, kLowest = -89.5f * kPi / 180.0f; // Process_FollowPedWithMouse's
-	return {std::clamp(std::asin(std::clamp(f.z, -1.0f, 1.0f)) - level, kLowest, kHighest), std::atan2(-f.y, -f.x)};
+	constexpr float kHighest = 89.0f * kPi / 180.0f, kLowest = -kHighest; // final view pitch, before leveling
+	return {std::clamp(std::asin(std::clamp(f.z, -1.0f, 1.0f)), kLowest, kHighest) - level, std::atan2(-f.y, -f.x)};
 }
 
 Output Scope::Update(const Input &in)

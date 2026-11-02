@@ -252,8 +252,29 @@ static void TestArmDirectionsAsPose()
 	}
 }
 
+// A hand the kick moves: the shoulder stays where it was, the elbow takes it.
+static void TestKeepShoulder()
+{
+	const Arm &arm = TheArm();
+	const Frame rest = Moved(SomeHand(arm), {1, 2, 3});
+	const float l2 = Length(Sub(arm.bind[kFore].pos, arm.bind[kHand].pos)), l1 = Length(Sub(arm.bind[kUpper].pos, arm.bind[kFore].pos));
+	for (bool left : {false, true}) {
+		Vec3 fore, upper;
+		ArmDirections(rest, ArmAngles{}, left, fore, upper);
+		const Vec3 shoulder = Add(Add(rest.pos, Mul(fore, l2)), Mul(upper, l1));
+		for (Vec3 move : {Vec3{0, 0, 0}, Vec3{0.0f, -0.03f, 0.04f}, Vec3{0.02f, 0.0f, -0.02f}}) {
+			const Vec3 hand = Add(rest.pos, move);
+			const ArmAngles a = KeepShoulder(arm, rest, ArmAngles{}, hand, left);
+			CHECK(Near(Add(Add(hand, Mul(a.forearm, l2)), Mul(a.upper, l1)), shoulder, 1e-3f));
+		}
+		const ArmAngles still = KeepShoulder(arm, rest, ArmAngles{}, rest.pos, left);
+		CHECK(Near(still.forearm, fore, 1e-3f) && Near(still.upper, upper, 1e-3f));
+	}
+}
+
 int main()
 {
+	TestKeepShoulder();
 	TestArmDirectionsAsPose();
 	TestForearmOverride();
 	TestBendHintChoosesTheSide();

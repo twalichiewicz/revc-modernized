@@ -122,6 +122,7 @@ constexpr size_t kBlurType = 0xb8, kBlurAlpha = 0xc8; // CCamera::m_BlurType, m_
 constexpr int32_t kBlurNone = 0, kBlurSniper = 1; // MOTION_BLUR_NONE, MOTION_BLUR_SNIPER (CCam::Process_Sniper's)
 const float *gSunX, *gSunY; // CCoronas::SunScreenX/Y: the game's screen
 const bool *gSunHidden;     // CCoronas::SunBlockedByClouds
+const int32_t *gArea;       // CGame::currArea: 0 is the main map; optional for the established look's fallback
 bool gTried, gReady;
 void *gBright, *gBlur, *gShafts, *gGrade;
 int uFrame, uSun, uLook, uStep;
@@ -212,8 +213,13 @@ void Hook_RenderMotionBlur(uint8_t *camera)
 	const float shows = SunShows(sky, *gSunX, *gSunY);
 	shaders::Set(uFrame, w, h, kBloom, kShafts);
 	shaders::Set(uSun, *gSunX * w / W, h - *gSunY * h / H, shows);
-	// Bullet time: less colour, a deeper vignette.
-	shaders::Set(uLook, kContrast, kSaturation * (1.0f - 0.55f * gSlowMotion), kVignette + 0.3f * gSlowMotion, kExposure);
+	// Interiors already carry baked/scripted darkness: do not deepen it with
+	// the camera's contrast and edge shading. CanSeeOutside includes interiors
+	// with windows (the mansion is area 2), so use the native area instead.
+	const bool interior = gArea && *gArea != 0;
+	// Bullet time keeps its deliberate desaturation and extra vignette.
+	shaders::Set(uLook, interior ? 0.0f : kContrast, kSaturation * (1.0f - 0.55f * gSlowMotion),
+	             (interior ? 0.0f : kVignette) + 0.3f * gSlowMotion, kExposure);
 
 	const shaders::SavedStates saved;
 	SetHudRenderStates();
@@ -246,6 +252,7 @@ bool Install()
 	gSunX = static_cast<const float *>(dlsym(RTLD_MAIN_ONLY, "_ZN8CCoronas10SunScreenXE"));
 	gSunY = static_cast<const float *>(dlsym(RTLD_MAIN_ONLY, "_ZN8CCoronas10SunScreenYE"));
 	gSunHidden = static_cast<const bool *>(dlsym(RTLD_MAIN_ONLY, "_ZN8CCoronas18SunBlockedByCloudsE"));
+	gArea = static_cast<const int32_t *>(dlsym(RTLD_MAIN_ONLY, "_ZN5CGame8currAreaE"));
 	gGradeReady = hooked && shaders::Ready() && gSunX && gSunY && gSunHidden; // (the hook's grade only then)
 	return gGradeReady;
 }

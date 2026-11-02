@@ -1,4 +1,5 @@
 #include "fpwalk.h"
+#include "reactions.h"
 #include "fpshoot.h"
 #include "aimcam.h"
 #include "camera.h"
@@ -22,7 +23,7 @@ using namespace game;
 namespace fpwalk {
 namespace {
 
-constexpr int32_t kMoveSprint = 5;               // CPed::m_nMoveState
+constexpr int32_t kMoveWalk = 2, kMoveSprint = 5; // CPed::m_nMoveState
 constexpr int32_t kFirstGun = 17, kLastGun = 33; // eWeaponType: the Colt to the minigun
 constexpr uint32_t kOneHanded = 0x80;            // CWeaponInfo flags (+0x5c): CANAIM_WITHARM
 constexpr float kScopedCreep = 0.6f;             // m/s, scoped (a slow walk)
@@ -67,8 +68,8 @@ float TopSpeed(uint8_t *ped)
 fpgait::Mode Mode(uint8_t *ped)
 {
 	if (!gConfig.firstPersonMovement || !(camera::FirstPersonOnFoot() || sniper::Active()) || !ped || ped != api.FindPlayerPed() ||
-	    PedInVehicle(ped) || swim::Swimming() || climb::Active() || shootdodge::Posing())
-		return fpgait::Mode::kNone;
+	    PedInVehicle(ped) || swim::Swimming() || climb::Active() || shootdodge::Posing() || reactions::PlayerDown())
+		return fpgait::Mode::kNone; // (knocked down, #25: his ragdoll owns him)
 	if (!gPadSeen || *api.timeMs - gPadAt > kPadQuiet)
 		return fpgait::Mode::kNone; // no pad hook: the game's movement, not a frozen one
 	fpgait::Situation s;
@@ -159,7 +160,7 @@ void AfterControl(uint8_t *ped, bool strafed)
 	const bool captured = gCaptured;
 	gCaptured = false;
 	const fpgait::Mode mode = captured ? Mode(ped) : fpgait::Mode::kNone;
-	if (mode == fpgait::Mode::kNone || dt <= 0.0f)
+	if (mode == fpgait::Mode::kNone || !std::isfinite(dt) || dt <= 0.0f)
 		return;
 	const CVector front = *reinterpret_cast<const CVector *>(api.theCamera + 0x10);
 	const float flat = std::hypot(front.x, front.y);
@@ -169,13 +170,26 @@ void AfterControl(uint8_t *ped, bool strafed)
 	const Vec2 wish{right.x * gStick.x + ahead.x * gStick.y, right.y * gStick.x + ahead.y * gStick.y};
 	const float push = std::min(1.0f, std::hypot(wish.x, wish.y));
 	const Vec2 dir = push > 1e-4f ? Vec2{wish.x / std::hypot(wish.x, wish.y), wish.y / std::hypot(wish.x, wish.y)} : Vec2{0, 0};
-	const float top = TopSpeed(ped);
+	const bool ground = mode == fpgait::Mode::kGround;
+	float top = TopSpeed(ped), wishSpeed = push * top;
+	if (ground && PedMoveState(ped) == kMoveWalk && !PedDucking(ped) && !aimcam::Aiming() && !sniper::Wanted()) {
+		// Native control selects Walk below 60/128 stick travel, and publishes
+		// its animation's actual pace through CalculateNewVelocity/UpdatePosition.
+		// Applying the run curve there made a 58/128 walk travel at 2.9m/s.
+		// Retain that native pace (including outfit/strafe/modifier differences)
+		// for both wish speed and stop friction; running/sprinting stay CS-driven.
+		const CVector &native = EntitySpeed(ped);
+		const float pace = std::hypot(native.x, native.y) * 50.0f;
+		if (std::isfinite(pace)) {
+			top = std::min(top, pace);
+			wishSpeed = std::min(wishSpeed, top);
+		}
+	}
 	fpmove::Tuning tuning;
 	tuning.accel = gConfig.fpAccel;
 	tuning.friction = gConfig.fpFriction;
-	const bool ground = mode == fpgait::Mode::kGround;
-	const Vec2 v = ground ? fpmove::Ground(gVelocity, dir, push * top, top, dt, tuning)
-	                      : fpmove::Air(gVelocity, dir, push * top, dt, tuning);
+	const Vec2 v = ground ? fpmove::Ground(gVelocity, dir, wishSpeed, top, dt, tuning)
+	                      : fpmove::Air(gVelocity, dir, wishSpeed, dt, tuning);
 	CVector &speed = EntitySpeed(ped);
 	speed.x = v.x / 50.0f;
 	speed.y = v.y / 50.0f;

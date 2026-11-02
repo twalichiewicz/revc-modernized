@@ -1,5 +1,6 @@
 // Unit tests for where his hands go on the gun each frame: make test
 #include "vmhands.h"
+#include "vmtestarm.h"
 
 #include <cmath>
 #include <cstdio>
@@ -159,8 +160,46 @@ static void TestFingersTravelWithTheHand()
 	CHECK(RightPlace(gun, framed, framed).reaching && Near(RightPlace(gun, framed, framed).anchors, Identity()));
 }
 
+static Vec3 Shoulder(const Arm &arm, const HandPlace &place)
+{
+	Vec3 fore, upper;
+	ArmDirections(place.hand, place.angles, false, fore, upper);
+	return Add(Add(place.hand.pos, Mul(fore, Length(Sub(arm.bind[kFore].pos,arm.bind[kHand].pos)))),
+	           Mul(upper, Length(Sub(arm.bind[kUpper].pos,arm.bind[kFore].pos))));
+}
+static void TestRightShoulderDoesNotFollowPumpRecoil()
+{
+	const Arms arms=Articulate(vmtest::Body());
+	const Gun gun=TestGun(true,true);
+	Frame carried=Framed();carried.pos={.04f,.28f,-.18f};
+	const Vec3 shoulder=Shoulder(arms.right,RightPlace(gun,carried,carried));
+	for(float kick:{-12.0f,0.0f,8.0f,20.0f}) {
+		const Frame moved=GunCarried(gun,carried,Move{{0,-.03f,-.02f},kick,8,5});
+		const HandPlace place=RightPlace(arms.right,gun,carried,moved);
+		CHECK(Near(place.hand,HandFor(gun,moved)));
+		CHECK(Near(Shoulder(arms.right,place),shoulder,.003f));
+	}
+}
+
+static void TestPumpElbowStaysBelowTheAimedEye()
+{
+	const Arms arms=Articulate(vmtest::Body());
+	Gun gun=TestGun(true,false);
+	std::strcpy(gun.parts[1].name,"pump");
+	// The chromegun's pistol grip is pitched50 degrees. Inferring an elbow
+	// from the hand's axes raises it through the eye instead of behind it.
+	gun.hold=TurnAbout({1,0,0},50.0f*3.14159265f/180.0f,{0,0,0});
+	Frame aimed=Identity();aimed.pos={0,.25f,-.02f};
+	const HandPlace place=RightPlace(arms.right,gun,aimed,aimed);
+	Vec3 fore,upper;ArmDirections(place.hand,place.angles,false,fore,upper);
+	CHECK(fore.z<-.25f && upper.z<0);
+	CHECK(Shoulder(arms.right,place).y<0 && Shoulder(arms.right,place).z<-.20f);
+}
+
 int main()
 {
+	TestRightShoulderDoesNotFollowPumpRecoil();
+	TestPumpElbowStaysBelowTheAimedEye();
 	TestFingersTravelWithTheHand();
 	TestGunCarried();
 	TestGunMoved();

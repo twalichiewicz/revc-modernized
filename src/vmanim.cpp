@@ -9,9 +9,9 @@ namespace {
 
 constexpr float kDrawTime = 0.35f, kHolsterTime = 0.2f;
 constexpr float kDrawDrop = 0.25f, kDrawTurn = -35.0f;   // m below, degrees down, at the start of a draw
-constexpr float kKickBack = 0.01f, kKickTurn = 1.5f, kKickFade = 14.0f; // m, degrees, per second (small: his body takes most, the view jolts)
-constexpr float kSlideTravel = 0.022f, kSlideHeld = 0.015f, kSlideHome = 0.05f; // m; back the frame it fires, held, then home (s)
-constexpr float kFlashTime = 0.05f;
+constexpr float kSlideTravel = 0.022f, kSlideHeld = 0.035f, kSlideHome = 0.05f; // m; back the frame it fires, held (a 30 fps frame at least), then home (s)
+constexpr float kFlashHeld = 0.017f, kFlashFade = 0.028f; // s: a frame at full, gone by the third (GoldSrc's lasts one)
+constexpr float kAimedTurn = 0.35f, kAimedMove = 0.6f;    // of the kick aimed (the sights stay on)
 constexpr float kTriggerTravel = 0.004f, kTriggerRate = 40.0f;
 constexpr float kSprintRate = 6.0f, kSprintOutRate = 18.0f; // in, and out quickly (a shot leaves from a gun that's up)
 // Sprinting, by kind: the carry (m; degrees up, over to the right, muzzle
@@ -31,6 +31,8 @@ constexpr CarryPose kCarries[] = {
     {{{-0.06f, -0.02f, 0.03f}, 5.0f, -40.0f, 35.0f}, {{0.02f, 0.0f, 0.0f}, 0.0f, 4.0f, 4.0f}, {0.0f, 0.0f, 0.015f}, 2.0f},
     // Heavy: at the hip, a little across and in; half the swing.
     {{{-0.03f, 0.0f, 0.0f}, -5.0f, -12.0f, 15.0f}, {{0.01f, 0.0f, 0.0f}, 0.0f, 2.0f, 2.0f}, {0.0f, 0.0f, 0.008f}, 1.0f},
+    // Melee: lowered and tipped forward, out to the side a little; swinging with his arm.
+    {{{0.03f, -0.02f, -0.07f}, -20.0f, 10.0f, -5.0f}, {{0.0f, 0.03f, 0.01f}, 8.0f, 4.0f, 0.0f}, {0.0f, 0.0f, 0.012f}, 3.0f},
 };
 constexpr float kTiltRoll = 25.0f, kTiltPitch = 15.0f, kTiltLift = 0.06f, kTiltIn = 0.06f; // reloading: up and in, the magazine well to the eye
 constexpr float kMagazineTravel = 0.12f, kMagazineAway = 0.3f; // m: out of the well; then away out of view
@@ -38,11 +40,29 @@ constexpr float kMagazineTravel = 0.12f, kMagazineAway = 0.3f; // m: out of the 
 // swapped (out of view), back up, in; the hand back.
 constexpr float kHandTo = 0.1f, kOutFrom = 0.18f, kOut = 0.3f, kAway = 0.38f, kSwapped = 0.42f, kUp = 0.52f,
                 kIn = 0.65f, kHandBack = 0.7f, kHandHome = 0.8f;
-constexpr float kPumpTravel = 0.07f, kPumpWait = 0.03f, kPumpBack = 0.1f, kPumpHome = 0.15f; // m, s
+// The pump, after the kick (Counter-Strike's M3 starts at 0.25 s): back,
+// held, home; quicker for a quicker gun. The whole gun goes with it: rolled
+// in, tipped up and drawn back as his left hand pulls.
+constexpr float kPumpTravel = 0.07f, kPumpWait = 0.22f, kPumpBack = 0.12f, kPumpHold = 0.05f, kPumpHome = 0.14f; // m, s
+constexpr float kPumpCadence = 0.7f;                                            // s between shots the pump's timed for
+constexpr float kPumpRoll = -8.0f, kPumpPitch = 4.0f, kPumpYaw = 3.0f;           // degrees, the gun at the pump's back
+constexpr Vec3 kPumpShift{-0.01f, -0.012f, -0.006f};                            // m
 constexpr float kBobRun = 4.5f, kBobMost = 2.2f;          // m/s the bob's sized for; its most, sprinting
 constexpr float kBobSide = 0.012f, kBobDip = 0.01f, kBobPitch = 1.5f, kBobRoll = 2.0f, kBobYaw = 1.0f; // m, degrees, running
 constexpr float kChamber = 60.0f, kCylinderRate = 30.0f;  // degrees a shot; how fast it turns there
 constexpr float kSpinTop = 1800.0f, kSpinRate = 4.0f, kSpinHeld = 0.15f; // degrees a second; easing; s after a shot
+
+// A flash's size by class (pistol, revolver, shotgun, SMG, MP5, rifle, M60, minigun, flamethrower (its
+// flame's its own), none).
+constexpr float kFlashSizes[] = {1.0f, 1.35f, 1.6f, 0.9f, 0.9f, 1.1f, 1.2f, 1.1f, 0.0f, 0.0f};
+
+bool Pumped(int weapon) { return weapon == 19 || weapon == 20; } // the shotgun, the SPAS 12
+
+float Random01(uint32_t &seed)
+{
+	seed = seed * 1664525u + 1013904223u;
+	return float(seed >> 8) / 16777216.0f;
+}
 
 float Smooth(float t)
 {
@@ -68,9 +88,12 @@ AnimOutput Anim::Update(const AnimInput &in)
 		sprint_ = 0.0f;
 		return out;
 	}
-	if (shown_ < 0) {
+	if (shown_ < 0 || (in.weapon != shown_ && IsMelee(shown_))) { // a melee weapon's model goes from his hand at once
 		shown_ = in.weapon;
 		draw_ = 0.0f;
+		holster_ = -1.0f;
+		recoil_ = Recoil{};
+		melee_ = MeleeHand{};
 	} else if (in.weapon != shown_ && holster_ < 0.0f) {
 		holster_ = 0.0f;
 	}
@@ -85,7 +108,8 @@ AnimOutput Anim::Update(const AnimInput &in)
 			down = 1.0f;
 			empty_ = false;
 			sinceShot_ = 1e9f;
-			kick_ = 0.0f;
+			recoil_ = Recoil{};
+			melee_ = MeleeHand{};
 		}
 	} else {
 		down = 1.0f - Smooth(draw_);
@@ -95,14 +119,20 @@ AnimOutput Anim::Update(const AnimInput &in)
 	out.weapon = shown_;
 	const bool current = shown_ == in.weapon && holster_ < 0.0f;
 	out.ready = current && draw_ >= 1.0f;
+	// A melee weapon: ready, or swinging as the game swings it.
+	if (IsMelee(shown_))
+		out.grip = melee_.Update(MeleeKindFor(shown_), current ? in.attack : Attack{}, dt);
 
-	// Firing: a kick, the slide back and home, a flash.
+	// Firing: a kick (its class's), the slide back and home, a flash.
+	const KickClass kick = KickClassFor(shown_);
 	if (current && in.shot) {
-		kick_ = 1.0f;
+		const float random[3] = {Random01(seed_), Random01(seed_), Random01(seed_)};
+		recoil_.Shot(kick, random);
 		sinceShot_ = 0.0f;
+		flashTurn_ = Random01(seed_) * 6.2831853f;
+		flashJitter_ = 0.8f + 0.4f * Random01(seed_);
 	} else {
 		sinceShot_ += dt;
-		kick_ *= std::exp(-kKickFade * dt);
 	}
 	// The shot that empties it locks the slide back, till rounds go in.
 	if (current && in.clip > 0)
@@ -110,14 +140,28 @@ AnimOutput Anim::Update(const AnimInput &in)
 	else if (current && in.shot)
 		empty_ = true;
 	const float s = sinceShot_;
-	float slide = s < kSlideHeld ? 1.0f : s < kSlideHeld + kSlideHome ? 1.0f - (s - kSlideHeld) / kSlideHome : 0.0f;
+	// A quick gun's slide cycles in time for its next shot.
+	const float cycle = in.interval > 0.0f ? std::min(1.0f, 0.85f * in.interval / (kSlideHeld + kSlideHome)) : 1.0f;
+	const float held = kSlideHeld * cycle, home = kSlideHome * cycle;
+	float slide = s < held ? 1.0f : s < held + home ? 1.0f - Smooth((s - held) / home) : 0.0f;
 	if (empty_)
 		slide = 1.0f; // locked back
-	out.flash = s < kFlashTime ? 1.0f : 0.0f;
-	// A pump racked after the shot; a cylinder's next chamber; a minigun's barrels spinning while it fires.
-	out.pumpBack = kPumpTravel * (s < kPumpWait ? 0.0f
-	                              : s < kPumpWait + kPumpBack ? Smooth((s - kPumpWait) / kPumpBack)
-	                                                          : 1.0f - Smooth((s - kPumpWait - kPumpBack) / kPumpHome));
+	out.flash = s < kFlashHeld ? 1.0f : std::max(0.0f, 1.0f - (s - kFlashHeld) / kFlashFade);
+	out.flashTurn = flashTurn_;
+	out.flashSize = kFlashSizes[int(kick)] * flashJitter_;
+	// Firing on: held, with rounds in it, up and not reloading (a flamethrower's light, a minigun's buzz).
+	const bool firing = current && in.triggerHeld && in.clip > 0 && !in.reloading && draw_ >= 1.0f;
+	out.light = kick == KickClass::kFlame ? (firing ? 0.45f + 0.2f * Random01(seed_) : 0.0f) // flickering
+	                                      : out.flash * std::min(1.0f, 0.7f * out.flashSize);
+	// A pump racked after the kick, the gun going with it; a cylinder's next
+	// chamber; a minigun's barrels spinning while it fires.
+	const float k = in.interval > 0.0f ? std::min(1.0f, in.interval / kPumpCadence) : 1.0f;
+	const float wait = kPumpWait * k, back = kPumpBack * k, hold = kPumpHold * k, return_ = kPumpHome * k;
+	const float rack = s < wait ? 0.0f
+	                   : s < wait + back ? Smooth((s - wait) / back)
+	                   : s < wait + back + hold ? 1.0f
+	                                            : 1.0f - Smooth((s - wait - back - hold) / return_);
+	out.pumpBack = kPumpTravel * rack;
 	if (current && in.shot)
 		cylinderTo_ += kChamber;
 	cylinder_ += (cylinderTo_ - cylinder_) * std::min(1.0f, kCylinderRate * dt);
@@ -129,8 +173,16 @@ AnimOutput Anim::Update(const AnimInput &in)
 	spin_ += ((in.triggerHeld || s < kSpinHeld ? kSpinTop : 0.0f) - spin_) * std::min(1.0f, kSpinRate * dt);
 	barrels_ = std::fmod(barrels_ + spin_ * dt, 360.0f);
 	out.barrelsTurn = barrels_;
-	trigger_ += ((in.triggerHeld || s < kFlashTime ? 1.0f : 0.0f) - trigger_) * std::min(1.0f, kTriggerRate * dt);
+	trigger_ += ((in.triggerHeld || s < kFlashHeld + kFlashFade ? 1.0f : 0.0f) - trigger_) * std::min(1.0f, kTriggerRate * dt);
 	out.triggerBack = kTriggerTravel * trigger_;
+	// The kick, less aimed (mostly straight back: the sights stay on).
+	out.kick = recoil_.Update(kick, dt, firing, spin_ / kSpinTop);
+	const float turn = 1.0f - (1.0f - kAimedTurn) * std::clamp(in.aimed, 0.0f, 1.0f),
+	            move = 1.0f - (1.0f - kAimedMove) * std::clamp(in.aimed, 0.0f, 1.0f);
+	out.kick.offset = Mul(out.kick.offset, move);
+	out.kick.pitch *= turn;
+	out.kick.roll *= turn;
+	out.kick.yaw *= turn;
 
 	// Reloading: tilt in, the magazine out and a new one in, the slide let go, tilt out.
 	float tilt = 0.0f;
@@ -176,10 +228,13 @@ AnimOutput Anim::Update(const AnimInput &in)
 	const GunSway bob = GunBob(in.stepPhase, in.stepSpeed);
 	const float bobbing = std::clamp(1.0f - in.aimed, 0.0f, 1.0f) * (1.0f - sprint);
 
-	out.offset = Add({-kTiltIn * tilt, -kKickBack * kick_, -kDrawDrop * down + kTiltLift * tilt}, Mul(bob.offset, bobbing));
-	out.pitch = kDrawTurn * down + kKickTurn * kick_ + kTiltPitch * tilt + bob.pitch * bobbing;
-	out.roll = kTiltRoll * tilt + bob.roll * bobbing;
-	out.yaw = bob.yaw * bobbing;
+	// The pump moves the whole gun, on the pump guns.
+	const float pumping = Pumped(shown_) ? rack : 0.0f;
+	out.offset = Add(Add({-kTiltIn * tilt, 0.0f, -kDrawDrop * down + (Pumped(shown_) ? 0.0f : kTiltLift) * tilt},
+	                    Mul(bob.offset, bobbing)), Mul(kPumpShift, pumping));
+	out.pitch = kDrawTurn * down + kTiltPitch * tilt + bob.pitch * bobbing + kPumpPitch * pumping;
+	out.roll = kTiltRoll * tilt + bob.roll * bobbing + kPumpRoll * pumping;
+	out.yaw = bob.yaw * bobbing + kPumpYaw * pumping;
 	return out;
 }
 
@@ -194,6 +249,8 @@ GunSway GunBob(float phase, float speed)
 
 Carry CarryFor(int weapon)
 {
+	if (IsMelee(weapon))
+		return Carry::kMelee;
 	switch (weapon) {
 	case 17: case 18: case 22: case 23: case 24: // Colt, Python, Tec-9, Uzi, Ingram
 		return Carry::kOneHanded;

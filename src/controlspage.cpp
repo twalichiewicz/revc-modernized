@@ -10,6 +10,7 @@
 #include "keys.h"
 #include "log.h"
 #include "text.h"
+#include "menulabels.h"
 
 #include <algorithm>
 #include <cmath>
@@ -47,6 +48,7 @@ bool gAvailable;
 cm::Focus gFocus;
 int gScroll[2]; // each key box's first row shown
 Im2DCanvas gCanvas;
+menulabels::Batch gLabels;
 
 // What a click lands on, as this frame's drawing laid it out (screen pixels).
 enum class Hit : uint8_t { kTab, kSituation, kSetting, kKey, kMouseRow, kUseThis };
@@ -90,9 +92,7 @@ text::Style Font(int16_t font, float px, CRGBA col)
 // Text vertically centred on `cy` (screen pixels), from `x`.
 void TextAt(float x, float cy, const std::string &s, const text::Style &style)
 {
-	float t, b;
-	text::LineExtent(style, 0.0f, t, b);
-	text::Draw(x, cy - (t + b) / 2, s.c_str(), style);
+	gLabels.Add(x, cy, s, style);
 }
 
 float Width(const std::string &s, const text::Style &style) { return text::Width(s.c_str(), style); }
@@ -748,6 +748,8 @@ void Draw(uint8_t *)
 		return;
 	const Stage st = Now();
 	gTargets.clear();
+	gLabels.Clear();
+	text::Flush();
 	SetHudRenderStates();
 	gCanvas.SetTexture(nullptr);
 	// The frontend wraps text at x 630 of a centred 4:3 screen (1381 of the stage): words past it would go on the next line.
@@ -767,10 +769,14 @@ void Draw(uint8_t *)
 	const char *help = gFocus.tab == cm::Tab::kController ? "PRESS ANY BUTTON TO TEST IT"
 	                   : gFocus.capturing                  ? "PRESS A KEY - ESC CANCELS"
 	                                                       : "SELECT AN ACTION, THEN PRESS ITS NEW KEY";
-	const text::Style style = Font(1, 28, kWhite);
-	TextAt(st.ox + st.L(1576) - Width(help, style), st.L(876), help, style);
-	gCanvas.Flush();
-	text::Flush(); // the frontend has drawn its text for this frame
+	const text::Style style = Font(1, 22, kWhite);
+	TextAt(st.ox + st.L(800) - Width(help, style) / 2, st.L(760), help, style);
+	gLabels.AfterGeometry(gCanvas, [](const menulabels::Label &label) {
+		float top, bottom;
+		text::LineExtent(label.style, 0, top, bottom);
+		text::Draw(label.x, label.centerY - (top + bottom) / 2, label.value.c_str(), label.style);
+	});
+	text::Flush();
 	api.FontSetWrapx(wrap);
 }
 

@@ -28,7 +28,7 @@ constexpr CRGBA kSearchFill{80, 130, 255, 46}, kSearchRim{120, 170, 255, 242}, k
 constexpr size_t kPedSize = 0x8d0, kVehicleSize = 0x6f0, kLawFlags = 0x295; // pool entries; CVehicle's law flag (bit 0)
 constexpr int32_t kCopType = 6;      // ePedType
 constexpr uint8_t kWreckedStatus = 5; // eEntityStatus, bits 3-7 of +0x60
-constexpr float kStruckAlpha = 0.38f;
+constexpr float kStruckAlpha = 0.38f, kLeftAlpha = 0.6f;
 constexpr float kEyeAbove = 0.6f; // m over a cop's head
 constexpr float kRingX = 0.30f, kRingY = 0.34f; // the eyes' ring about the middle, as a share of the screen
 constexpr float kEase = 14.0f;                  // how fast an eye slides to where it should be (1/s)
@@ -104,13 +104,19 @@ void Magnifier(Canvas &c, const Box &b, CRGBA col)
 	Disc(c, b.P(20, 20), 1.3f * b.u, col); // its round end
 }
 
-void Badge(Canvas &c, const Box &b, CRGBA col)
+void Apb(Canvas &c, const Box &b, CRGBA col)
 {
-	Polygon(c, {b.P(12, 2), b.P(14.2f, 4.6f), b.P(17.6f, 4.2f), b.P(18, 7.6f), b.P(20.6f, 10), b.P(18, 12),
-	            b.P(20.6f, 14), b.P(18, 16.4f), b.P(17.6f, 19.8f), b.P(14.2f, 19.4f), b.P(12, 22), b.P(9.8f, 19.4f),
-	            b.P(6.4f, 19.8f), b.P(6, 16.4f), b.P(3.4f, 14), b.P(6, 12), b.P(3.4f, 10), b.P(6, 7.6f), b.P(6.4f, 4.2f),
-	            b.P(9.8f, 4.6f)},
-	        col);
+	// Vector letters stay legible at every HUD scale, without depending on a font atlas.
+	auto stroke = [&](float x0, float y0, float x1, float y1) {
+		Line(c, b.P(x0, y0), b.P(x1, y1), b.u * 1.7f, col);
+	};
+	stroke(0.5f, 17, 3.5f, 7); stroke(3.5f, 7, 6.5f, 17); stroke(1.8f, 13, 5.2f, 13);
+	stroke(9, 17, 9, 7); stroke(9, 7, 13.5f, 7); stroke(13.5f, 7, 14.5f, 8.5f);
+	stroke(14.5f, 8.5f, 14.5f, 11); stroke(14.5f, 11, 13, 12); stroke(13, 12, 9, 12);
+	stroke(17.5f, 7, 17.5f, 17); stroke(17.5f, 7, 21.5f, 7); stroke(21.5f, 7, 23, 8.5f);
+	stroke(23, 8.5f, 23, 10.5f); stroke(23, 10.5f, 21.5f, 12); stroke(17.5f, 12, 21.5f, 12);
+	stroke(21.5f, 12, 23, 13.5f); stroke(23, 13.5f, 23, 15.5f); stroke(23, 15.5f, 21.5f, 17);
+	stroke(21.5f, 17, 17.5f, 17);
 }
 
 void EyeGlyph(Canvas &c, const Box &b, CRGBA col, CRGBA hole)
@@ -126,29 +132,31 @@ void EyeGlyph(Canvas &c, const Box &b, CRGBA col, CRGBA hole)
 	Disc(c, b.P(12, 12), 2 * b.u, col);
 }
 
-enum class Glyph { Phone, Search, Badge, Outfit, Car, Eye };
+enum class Glyph { Phone, Search, Apb, Outfit, Car, Eye };
 
 // A round icon `d` across: the dark disc, a white rim, the glyph; struck, it's
-// faded under a red diagonal; `meter` (0..1, < 0 none) is a ring round it.
-void Icon(Canvas &c, Vec2 at, float d, Glyph g, bool struck, float meter, CRGBA meterColour)
+// faded under a red diagonal; `meter` (0..1, < 0 none) is a ring round it;
+// all of it as faded as `alpha` (greyed), the glyph and rim `ink`.
+void Icon(Canvas &c, Vec2 at, float d, Glyph g, bool struck, float meter, CRGBA meterColour, float alpha = 1.0f,
+          CRGBA ink = kWhite)
 {
-	const float s = Scale(), r = d / 2, a = struck ? kStruckAlpha : 1.0f;
+	const float s = Scale(), r = d / 2, a = (struck ? kStruckAlpha : 1.0f) * alpha;
 	Disc(c, at, r, Faded(kDisc, a));
-	Arc(c, at, r - kRim * s / 2, kRim * s, 1.0f, Faded(kWhite, a));
-	const Box b{at, d * 0.56f / 24.0f};
-	const CRGBA col = Faded(kWhite, a), hole = Faded(kHole, a);
+	Arc(c, at, r - kRim * s / 2, kRim * s, 1.0f, Faded(ink, a));
+	const Box b{at, d * (g == Glyph::Apb ? 0.82f : 0.56f) / 24.0f};
+	const CRGBA col = Faded(ink, a), hole = Faded(kHole, a);
 	switch (g) {
 	case Glyph::Phone: Phone(c, b, col); break;
 	case Glyph::Search: Magnifier(c, b, col); break;
-	case Glyph::Badge: Badge(c, b, col); break;
+	case Glyph::Apb: Apb(c, b, col); break;
 	case Glyph::Outfit: Shirt(c, b, col); break;
 	case Glyph::Car: Car(c, b, col, hole); break;
 	case Glyph::Eye: EyeGlyph(c, b, col, hole); break;
 	}
 	if (meter >= 0.0f) {
-		Arc(c, at, r - kMeter * s / 2, kMeter * s, 1.0f, kFaint);
+		Arc(c, at, r - kMeter * s / 2, kMeter * s, 1.0f, Faded(kFaint, alpha));
 		if (meter > 0.0f)
-			Arc(c, at, r - kMeter * s / 2, kMeter * s, std::min(meter, 1.0f), meterColour);
+			Arc(c, at, r - kMeter * s / 2, kMeter * s, std::min(meter, 1.0f), Faded(meterColour, alpha));
 	}
 	if (struck)
 		Line(c, {at.x + r * 0.62f, at.y - r * 0.62f}, {at.x - r * 0.62f, at.y + r * 0.62f}, 2.5f * s, kCallRed);
@@ -202,6 +210,7 @@ struct Shown {
 	Glyph glyph;
 	bool struck;
 	float meter;
+	float alpha = 1.0f; // greyed: the car they want, and he's out of it
 };
 
 std::vector<Shown> Icons()
@@ -215,14 +224,14 @@ std::vector<Shown> Icons()
 	if (m.state() == heat::State::Searching)
 		icons.push_back({Glyph::Search, false, -1.0f});
 	if (m.state() == heat::State::Apb)
-		icons.push_back({Glyph::Badge, false, -1.0f});
+		icons.push_back({Glyph::Apb, false, -1.0f});
 	if (m.state() == heat::State::Clear || m.state() == heat::State::Reported)
 		return icons;
 	const heat::Looks looks = wanted::Looks();
 	if (m.description().haveOutfit)
 		icons.push_back({Glyph::Outfit, m.OutfitStruck(looks), -1.0f});
 	if (m.description().haveVehicle)
-		icons.push_back({Glyph::Car, m.VehicleStruck(looks), -1.0f});
+		icons.push_back({Glyph::Car, m.VehicleStruck(looks), -1.0f, m.VehicleLeft(looks) ? kLeftAlpha : 1.0f});
 	return icons;
 }
 
@@ -252,7 +261,7 @@ void Draw(Canvas &canvas, float mapX, float mapY, float mapW, float mapH)
 	const float y = mapY + mapH - d / 2;
 	canvas.SetTexture(nullptr);
 	for (const Shown &icon : Icons()) {
-		Icon(canvas, {x, y}, d, icon.glyph, icon.struck, icon.meter, kCallRed);
+		Icon(canvas, {x, y}, d, icon.glyph, icon.struck, icon.meter, kCallRed, icon.alpha);
 		x += d + kGap * s;
 	}
 	canvas.Flush();
@@ -301,15 +310,17 @@ void DrawEyes(Canvas &canvas)
 			p = {it->second.x + (p.x - it->second.x) * k, it->second.y + (p.y - it->second.y) * k};
 		}
 		shown[eye.handle] = p;
+		// Filling, yellow; once he's spotted him, red, full, while he comes for him.
+		const CRGBA ring = eye.spotted ? kCallRed : kEyeYellow;
 		if (onRing) { // a pointer out his way
 			const float len = std::max(std::hypot(p.x - W / 2, p.y - H / 2), 1e-3f);
 			const Vec2 u{(p.x - W / 2) / len, (p.y - H / 2) / len}, n{-u.y, u.x};
 			const float tip = d / 2 + 9.0f * s, base = d / 2 + 2.0f * s, half = 6.0f * s;
 			shapes::Fill(canvas, {{p.x + u.x * tip, p.y + u.y * tip}, {p.x + u.x * base + n.x * half, p.y + u.y * base + n.y * half},
 			                      {p.x + u.x * base - n.x * half, p.y + u.y * base - n.y * half}},
-			             kEyeYellow);
+			             Faded(ring, eye.alpha));
 		}
-		Icon(canvas, p, d, Glyph::Eye, false, eye.fill, kEyeYellow);
+		Icon(canvas, p, d, Glyph::Eye, false, eye.fill, ring, eye.alpha, eye.spotted ? kCallRed : kWhite);
 	}
 	gShown = std::move(shown);
 	canvas.Flush();

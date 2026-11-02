@@ -4,7 +4,7 @@
 // draws the rest. The Controller tab shows the pad's status, a picture of it
 // with a legend for each situation (bindings.h) and a live button test, and
 // the pad's settings; the Keyboard & Mouse tab sets every action's keys and
-// the mouse's settings. What it shows is controlsmodel.h's.
+// the mouse's settings. The control bindings shown come from controlsmodel.h.
 #include <cstdint>
 
 namespace controlspage {

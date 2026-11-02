@@ -32,6 +32,12 @@ bool Install();
 // From the CPed::PreRender hook, after the game's: in first person his head
 // is shrunk away (its skinning matrix), so the eye isn't inside it.
 void AfterPreRender(uint8_t *ped);
+// Restore all first-person matrix edits before the next animation pass.
+void BeforePreRender(uint8_t *ped);
+// Accepted health loss plus half of absorbed armour loss, observed around
+// native InflictDamage. Drawn in the player HUD for every ordinary view.
+void Damaged(uint8_t *ped, uint8_t *attacker, float healthBefore, float healthAfter);
+void DrawDamage();
 // For the gun in first person (viewmodel.cpp): on foot in first person this
 // frame; how far into aiming (0..1); his steps (phase 0..2 a stride, amount 0..1).
 bool FirstPersonOnFoot();
@@ -43,6 +49,7 @@ CVector ScopeEye(uint8_t *ped);
 CVector ViewForward();
 // In a vehicle's first-person seat view this frame.
 bool InSeat();
+uint8_t *SeatVehicle();
 float AimBlend();
 float StepPhase();
 float StepAmount();

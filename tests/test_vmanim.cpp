@@ -70,9 +70,9 @@ static void TestShotKicksAndSettles()
 	AnimInput shot = Holding(kColt, 6);
 	shot.shot = true;
 	const AnimOutput fired = anim.Update(shot);
-	CHECK(fired.flash > 0.99f);
-	const float kick = -fired.offset.y;
-	CHECK(kick > 0.006f && kick < 0.012f && fired.pitch > 1.0f && fired.pitch < 2.0f); // a small kick: his body takes most (the camera's jolt)
+	CHECK(fired.flash > 0.99f && fired.flashSize > 0.7f);
+	CHECK(fired.kick.pitch > 5.0f); // a pistol flips up the frame it fires (vmkick has its shape)
+	CHECK(std::fabs(fired.pitch) < 1e-3f && Length(fired.offset) < 1e-4f); // the kick is its own: his forearm goes with it
 	float peak = fired.slideBack;
 	AnimOutput out = fired;
 	for (float t = kStep; t < 0.03f; t += kStep) {
@@ -80,10 +80,56 @@ static void TestShotKicksAndSettles()
 		peak = std::fmax(peak, out.slideBack);
 	}
 	CHECK(std::fabs(peak - 0.022f) < 0.002f);
-	out = Run(anim, Holding(kColt, 6), 0.06f); // 0.09 s after the shot
+	CHECK(out.slideBack > 0.02f); // still back the next frame at 30 fps
+	out = Run(anim, Holding(kColt, 6), 0.1f); // 0.12 s after the shot
 	CHECK(out.slideBack < 1e-4f && out.flash < 1e-4f);
-	out = Run(anim, Holding(kColt, 6), 0.16f); // 0.25 s
-	CHECK(-out.offset.y < 0.05f * kick);
+	out = Run(anim, Holding(kColt, 6), 1.0f);
+	CHECK(std::fabs(out.kick.pitch) < 0.5f && Length(out.kick.offset) < 0.002f);
+}
+
+// Aimed, the kick is mostly straight back: the sights stay on.
+static void TestAimedKicksLess()
+{
+	float pitch[2], back[2];
+	for (int aimed = 0; aimed < 2; aimed++) {
+		Anim anim;
+		AnimInput in = Holding(kColt, 6);
+		in.aimed = float(aimed);
+		Run(anim, in, 1.0f);
+		in.shot = true;
+		const AnimOutput out = anim.Update(in);
+		pitch[aimed] = out.kick.pitch;
+		back[aimed] = -out.kick.offset.y;
+	}
+	CHECK(pitch[1] < 0.5f * pitch[0] && back[1] > 0.5f * back[0]);
+}
+
+// Each shot's flash turned its own way (not each frame's: no flicker).
+static void TestFlashTurnsEachShot()
+{
+	Anim anim;
+	Run(anim, Holding(kColt), 1.0f);
+	AnimInput shot = Holding(kColt, 6);
+	shot.shot = true;
+	const AnimOutput a = anim.Update(shot), a2 = anim.Update(Holding(kColt, 6));
+	CHECK(a.flashTurn == a2.flashTurn);
+	Run(anim, Holding(kColt, 6), 0.3f);
+	shot.clip = 5;
+	CHECK(anim.Update(shot).flashTurn != a.flashTurn);
+}
+
+// A quick gun's bolt is home in time for its next shot.
+static void TestQuickGunCyclesInTime()
+{
+	Anim anim;
+	AnimInput in = Holding(kUzi, 20);
+	in.interval = 0.067f;
+	Run(anim, in, 1.0f);
+	in.shot = true;
+	anim.Update(in);
+	in.shot = false;
+	const AnimOutput out = Run(anim, in, 0.06f); // the last frame before its next shot
+	CHECK(out.boltBack < 1e-4f);
 }
 
 static void TestEmptyHoldsTheSlide()
@@ -305,6 +351,8 @@ static void TestCarryForEachGun()
 		CHECK(CarryFor(w) == Carry::kTwoHanded);
 	for (int w : {30, 31, 32, 33})
 		CHECK(CarryFor(w) == Carry::kHeavy);
+	for (int w = 1; w <= 11; w++)
+		CHECK(CarryFor(w) == Carry::kMelee);
 }
 
 static AnimOutput Fire(Anim &anim, int weapon)
@@ -314,20 +362,27 @@ static AnimOutput Fire(Anim &anim, int weapon)
 	return anim.Update(shot);
 }
 
+// The pump is racked once the kick's done, the whole gun going with it.
 static void TestPumpCyclesAfterAShot()
 {
 	Anim anim;
-	Run(anim, Holding(19), 1.0f); // the shotgun
-	Fire(anim, 19);
-	float most = 0.0f;
-	AnimOutput out{};
-	for (float t = kStep; t < 0.15f; t += kStep) {
-		out = anim.Update(Holding(19, 5));
+	AnimInput in = Holding(19, 5); // the shotgun
+	in.interval = 0.73f;
+	Run(anim, in, 1.0f);
+	in.shot = true;
+	anim.Update(in);
+	in.shot = false;
+	AnimOutput out = Run(anim, in, 0.15f);
+	CHECK(out.pumpBack < 1e-4f && std::fabs(out.roll) < 0.01f); // the kick first
+	float most = 0.0f, rolled = 0.0f;
+	for (float t = 0.0f; t < 0.3f; t += kStep) {
+		out = anim.Update(in);
 		most = std::fmax(most, out.pumpBack);
+		rolled = std::fmin(rolled, out.roll);
 	}
-	CHECK(std::fabs(most - 0.07f) < 0.005f);
-	out = Run(anim, Holding(19, 5), 0.2f); // 0.35 s after the shot
-	CHECK(out.pumpBack < 1e-4f);
+	CHECK(std::fabs(most - 0.07f) < 0.005f && rolled < -6.0f);
+	out = Run(anim, in, 0.25f); // 0.7 s after the shot: done before the next
+	CHECK(out.pumpBack < 1e-4f && std::fabs(out.roll) < 0.05f);
 }
 
 static void TestCylinderTurnsASixth()
@@ -450,8 +505,39 @@ static void TestGunBobGrowsWithSpeed()
 	CHECK(GunBob(0.5f, 4.5f).offset.z < GunBob(0.0f, 4.5f).offset.z && GunBob(1.5f, 4.5f).offset.z < GunBob(1.0f, 4.5f).offset.z);
 }
 
+// A melee weapon is held up ready, swung as the game swings it, and gone at
+// once when he switches away (its model leaves his hand).
+static void TestMeleeHeldAndSwung()
+{
+	Anim anim;
+	AnimInput in = Holding(4); // the nightstick
+	const AnimOutput ready = Run(anim, in, 1.0f);
+	CHECK(ready.visible && ready.ready && Length(Sub(ready.grip.wrist, ReadyGrip(MeleeKind::kClub).wrist)) < 1e-4f);
+	in.attack = {1, 0.0f, 0.47f};
+	AnimOutput out{};
+	for (float t = 0.0f; t < 0.47f; t += kStep) {
+		in.attack.time = t;
+		out = anim.Update(in);
+	}
+	CHECK(out.grip.wrist.y > ready.grip.wrist.y + 0.05f); // out at the hit
+	const AnimOutput gun = anim.Update(Holding(kColt));
+	CHECK(gun.weapon == kColt && gun.offset.z < -0.2f); // the Colt rising at once, no holster of the stick
+}
+
+static void TestPumpReloadKeepsWristBelowTheEye()
+{
+	Anim anim;
+	AnimInput in=Holding(19);in.aimed=1;
+	Run(anim,in,1);
+	in.reloading=true;in.reloadProgress=.5f;
+	const auto reload=anim.Update(in);
+	CHECK(reload.offset.z<=0); // pistol magazine tilt-lift put the pump's right wrist above the eye
+	CHECK(reload.visible&&reload.weapon==19);
+}
+
 int main()
 {
+	TestPumpReloadKeepsWristBelowTheEye();
 	TestGunBobStillIsZero();
 	TestGunBobGrowsWithSpeed();
 	TestReloadHandTwoHanded();
@@ -459,6 +545,10 @@ int main()
 	TestMagazineTravels();
 	TestReadyOnlyWhenUp();
 	TestPumpCyclesAfterAShot();
+	TestAimedKicksLess();
+	TestFlashTurnsEachShot();
+	TestQuickGunCyclesInTime();
+	TestMeleeHeldAndSwung();
 	TestCylinderTurnsASixth();
 	TestBarrelsSpinWhileFiring();
 	TestUnknownPartStaysPut();

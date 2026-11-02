@@ -4,6 +4,7 @@
 #include "log.h"
 
 #include <cstdio>
+#include <cmath>
 #include <cstdlib>
 #include <cstring>
 
@@ -17,7 +18,7 @@ const char kDefaultIni[] = "; VC Modern HUD for macVC. Delete this file to resto
                            "GPS=1                ; route line to your waypoint / mission objective\n"
                            "AutoClearWaypoint=1  ; remove the waypoint when you arrive\n"
                            "Buildings=1          ; 3D buildings\n"
-                           "BuildingHeight=0.6   ; 1 = true height\n"
+                           "BuildingHeight=1     ; true relative building heights\n"
                            "Bars=1               ; health/armour/stamina under the map\n"
                            "Hud=1                ; clock on the map, no money, small weapon + stars\n"
                            "MoneyPill=1          ; show money next to the map in shops / at property for sale\n"
@@ -34,13 +35,19 @@ const char kDefaultIni[] = "; VC Modern HUD for macVC. Delete this file to resto
                            "Phone=1              ; calls ring in vehicles too: a brick phone slides up, D-pad up answers\n"
                            "Rumble=1             ; controller vibration (crashes, explosions, punches)\n"
                            "Interactions=1       ; X/B (Square/Circle): pick up or wave off hookers, greet or insult people\n"
+                           "DriverReactions=1    ; people and drivers react to perceived gun threats\n"
+                           "NPCReactions=1       ; physical NPC hit reactions, balance recovery and articulated falls\n"
+                           "WorldPopulation=1    ; path/zone-based civilians and foot police; station reinforcements\n"
+                           "RaceArrows=1         ; an arrow inside a racing checkpoint points to the next one\n"
                            "CarRadios=1          ; on foot, hear car radios muffled: yours after you get out, stopped cars nearby\n"
                            "RadioLogo=1          ; station logo at the bottom centre when it changes, instead of the big name\n"
                            "Places=1             ; map icons: hospitals, police stations, businesses before they're for sale\n"
                            "StoryHints=1         ; Ken texts what the story needs from your businesses; gold rings on the map\n"
+                           "Achievements=1       ; the Definitive Edition's achievements, with a notice and a page in Stats\n"
                            "Credit=1             ; buy a business with a quarter down, the rest paid from your businesses' income\n"
                            "Swimming=1           ; Tommy swims instead of drowning\n"
                            "Climbing=1           ; jump vaults low walls, climbs ledges and climbs out of the water\n"
+                           "FallDamage=1         ; falls hurt as they would: a fourth floor nearly kills, five storeys do; armour doesn't help\n"
                            "CrouchWalk=1         ; crouched, Tommy walks crouched instead of standing up\n"
                            "FirstPersonMovement=1 ; first person: the stick moves him at once, CS 1.6's acceleration and friction\n"
                            "FirstPersonAccel=5   ; ... how fast he gets up to speed (CS: 5; higher is snappier)\n"
@@ -49,14 +56,18 @@ const char kDefaultIni[] = "; VC Modern HUD for macVC. Delete this file to resto
                            "BulletTime=1         ; aiming: R3 slows time (uses stamina); jump with the stick dives\n"
                            "HeliDamage=1         ; the police helicopter takes hits where it is, smokes, and goes down sooner\n"
                            "HeliGunners=1        ; police helicopters with SWAT door gunners instead of a belly gun, two from 4 stars, the Hunter at 6\n"
+                           "CopsGrabDoors=1      ; cops open your door only while you crawl; faster they hang on to the handle, then let go\n"
                            "CopsByCar=1          ; wanted on foot, police arrive by car instead of appearing on foot nearby\n"
                            "SmarterPolice=1      ; police units all over the city sent to you by road, more the longer it lasts\n"
                            "Roadblocks=1         ; from two stars, roadblocks round where you are, more and heavier as it goes on\n"
                            "RealisticWanted=1    ; police know you by what they've seen: witnesses, your clothes and car, a search, an APB until you save\n"
                            "Clouds=1             ; volumetric clouds instead of the flat cloud sprites\n"
+                           "Planes=1             ; the airliners fly up into the clouds, lit by the sky, their lights blinking\n"
                            "ModernLighting=1     ; bloom, sun shafts, filmic highlights and a touch of contrast\n"
                            "LightGlow=1          ; cars' brake, reverse and headlights glow on the model\n"
                            "SteeringWheel=1      ; round steering wheels that turn, Tommy's hands on them\n"
+                           "ConsoleGun=1         ; driving, the gun lies on the console till you aim (on a bike or boat it's put away)\n"
+                           "SeatView=1           ; first person in a car: your eye raised where the hood or dash comes up to it\n"
                            "FirstPerson=1        ; on foot, Select (Back) goes near, mid, far, then first person\n"
                            "CameraShake=1        ; handheld camera on foot, sway and jolts in vehicles (0 = none, 2 = double)\n"
                            "SpawnDistance=2      ; cars and people appear this much further out, past where you notice (1 = as the game)\n"
@@ -74,6 +85,13 @@ const char kDefaultIni[] = "; VC Modern HUD for macVC. Delete this file to resto
                            "Zoom=1.5             ; higher = closer\n"
                            "Size=1.25            ; height relative to the original radar\n"
                            "Aspect=1.55          ; width / height\n"
+                           "[Crosshair]\n"
+                           "Style=0              ; cross, dot or T-shape\n"
+                           "Color=0              ; white, green, cyan, yellow, pink or red\n"
+                           "Size=1\n"
+                           "Thickness=1\n"
+                           "CenterDot=0\n"
+                           "DynamicSpread=1\n"
                            "[Keys]\n"
                            "; The keyboard and mouse keys of the mod's own actions, as macVC.ini's [Bindings]\n"
                            "; (kbd:KEY,2ndKbd:KEY or mouse:LEFT/MIDDLE/RIGHT/WHLUP/WHLDOWN). Left out, each gets\n"
@@ -88,8 +106,19 @@ const char kDefaultIni[] = "; VC Modern HUD for macVC. Delete this file to resto
                            "; MOD_CINEMATIC_CAMERA=kbd:C  ; held\n"
                            "; MOD_EXPANDED_MAP=kbd:M\n";
 
-void Apply(const char *key, const char *value)
+void Apply(const char *key, const char *value, const char *section)
 {
+	if (!strcasecmp(section, "Crosshair")) {
+		const float f = static_cast<float>(atof(value));
+		if (!std::isfinite(f)) return;
+		if (!strcasecmp(key, "Style") && f >= 0 && f <= 2) gConfig.crosshairStyle = int(f);
+		else if (!strcasecmp(key, "Color") && f >= 0 && f <= 5) gConfig.crosshairColor = int(f);
+		else if (!strcasecmp(key, "Size") && f >= 0.5f && f <= 2.5f) gConfig.crosshairSize = f;
+		else if (!strcasecmp(key, "Thickness") && f >= 0.5f && f <= 3.0f) gConfig.crosshairThickness = f;
+		else if (!strcasecmp(key, "CenterDot")) gConfig.crosshairDot = atoi(value) != 0;
+		else if (!strcasecmp(key, "DynamicSpread")) gConfig.crosshairDynamic = atoi(value) != 0;
+		return;
+	}
 	bindings::Action action;
 	if (!strncmp(key, "MOD_", 4) && bindings::FromName(key, action) && action >= bindings::Action::kWeaponWheel) {
 		gConfig.modKeys[int(action) - int(bindings::Action::kWeaponWheel)] = value;
@@ -139,6 +168,14 @@ void Apply(const char *key, const char *value)
 		gConfig.rumble = b;
 	else if (!strcasecmp(key, "Interactions"))
 		gConfig.interactions = b;
+	else if (!strcasecmp(key, "DriverReactions"))
+		gConfig.driverReactions = b;
+	else if (!strcasecmp(key, "NPCReactions"))
+		gConfig.npcReactions = b;
+	else if (!strcasecmp(key, "WorldPopulation"))
+		gConfig.worldPopulation = b;
+	else if (!strcasecmp(key, "RaceArrows"))
+		gConfig.raceArrows = b;
 	else if (!strcasecmp(key, "CarRadios"))
 		gConfig.carRadios = b;
 	else if (!strcasecmp(key, "RadioLogo"))
@@ -147,12 +184,16 @@ void Apply(const char *key, const char *value)
 		gConfig.places = b;
 	else if (!strcasecmp(key, "StoryHints"))
 		gConfig.storyHints = b;
+	else if (!strcasecmp(key, "Achievements"))
+		gConfig.achievements = b;
 	else if (!strcasecmp(key, "Credit"))
 		gConfig.credit = b;
 	else if (!strcasecmp(key, "Swimming"))
 		gConfig.swim = b;
 	else if (!strcasecmp(key, "Climbing"))
 		gConfig.climb = b;
+	else if (!strcasecmp(key, "FallDamage"))
+		gConfig.fallDamage = b;
 	else if (!strcasecmp(key, "CrouchWalk"))
 		gConfig.crouchWalk = b;
 	else if (!strcasecmp(key, "FirstPersonLook"))
@@ -181,6 +222,8 @@ void Apply(const char *key, const char *value)
 		gConfig.heliDamage = b;
 	else if (!strcasecmp(key, "HeliGunners"))
 		gConfig.heliGunners = b;
+	else if (!strcasecmp(key, "CopsGrabDoors"))
+		gConfig.copsGrabDoors = b;
 	else if (!strcasecmp(key, "CopsByCar"))
 		gConfig.copsByCar = b;
 	else if (!strcasecmp(key, "SmarterPolice"))
@@ -201,10 +244,16 @@ void Apply(const char *key, const char *value)
 		gConfig.clouds = b;
 	else if (!strcasecmp(key, "ModernLighting"))
 		gConfig.modernLighting = b;
+	else if (!strcasecmp(key, "Planes"))
+		gConfig.planes = b;
 	else if (!strcasecmp(key, "LightGlow"))
 		gConfig.lightGlow = b;
 	else if (!strcasecmp(key, "SteeringWheel"))
 		gConfig.steeringWheel = b;
+	else if (!strcasecmp(key, "ConsoleGun"))
+		gConfig.consoleGun = b;
+	else if (!strcasecmp(key, "SeatView"))
+		gConfig.seatView = b;
 	else if (!strcasecmp(key, "AimSensitivity") && f > 0.05f && f <= 2.0f)
 		gConfig.aimSensitivity = f;
 	else if (!strcasecmp(key, "LookSensitivity") && f > 0.05f && f <= 4.0f)
@@ -295,14 +344,20 @@ void LoadConfig()
 		return;
 	}
 	char line[256];
+	std::string section;
 	while (fgets(line, sizeof line, f)) {
 		if (char *comment = strchr(line, ';'))
 			*comment = '\0';
+		char *trimmed = Trim(line);
+		if (*trimmed == '[') {
+			if (char *end = strchr(trimmed + 1, ']')) section.assign(trimmed + 1, end);
+			continue;
+		}
 		char *eq = strchr(line, '=');
 		if (!eq)
 			continue;
 		*eq = '\0';
-		Apply(Trim(line), Trim(eq + 1));
+		Apply(Trim(line), Trim(eq + 1), section.c_str());
 	}
 	fclose(f);
 	Log("config: enabled=%d gps=%d buildings=%d x%.2f tilt=%.0f zoom=%.2f size=%.2f aspect=%.2f", gConfig.enabled,

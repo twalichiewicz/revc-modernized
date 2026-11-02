@@ -19,6 +19,10 @@ bool Install();
 // frame's viewmodel and hides his real arms; false if today's viewmodel
 // should pose them instead.
 bool Prepare(uint8_t *ped);
+// Suppress a queued viewmodel during death/load/view transitions.
+void CancelFrame();
+// Seat arms with wheel-specific articulated contacts, through world depth/FOV.
+bool PrepareSteering(uint8_t *ped);
 // Last frame: the new viewmodel was drawn; it's up and may fire; where its muzzle was (world).
 bool Active();
 bool Ready();

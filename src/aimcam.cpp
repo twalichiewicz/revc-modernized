@@ -6,6 +6,10 @@
 #include "hooks.h"
 #include "log.h"
 #include "player.h"
+#include "fpfeedback.h"
+#include "fpfire.h"
+#include "controls.h"
+#include "reactions.h"
 
 #include <algorithm>
 #include <chrono>
@@ -58,39 +62,33 @@ bool Crouched(const uint8_t *ped) { return (*reinterpret_cast<const uint64_t *>(
 // Both: CPed::SetPointGunAt raises the gun in the crouch's firing pose.
 bool CrouchFiring(const uint8_t *ped) { return (*reinterpret_cast<const uint64_t *>(ped + 0x188) >> 35 & 3) == 3; }
 bool gAimCrouched; // the aiming pose he's in is the crouch's
-uint32_t gAimStart; // when he raised it (game time)
 
 // Two-handed guns (no CWeaponInfo flag 0x80, "aims with the arm": the shotguns,
 // the MP5, rifles, the M60) are aimed by the torso alone (CPedIK::PointGunInDirection),
 // the arms holding the gun as the animation has it: up at the shoulder in the
 // standing aim (PED_AIM_GUN), down at the hip in the walk. So his arms in the
 // standing aim are learnt, for each such gun, relative to his chest, and laid
-// on the walk while he walks aiming. The first time with a gun he stands to
-// aim a moment while they're learnt.
+// on the walk while he walks aiming. They're learnt the first time he aims
+// that gun standing; walking aimed before then, he's never held still for it
+// (#20), the walk holding the gun its own way meanwhile.
 uint8_t *(*gWeaponInfo)(int32_t type);
+void (*gSetAnimTime)(uint8_t *assoc, float time); // CAnimBlendAssociation::SetCurrentTime
+constexpr uint32_t kFireAnim = 0xcd;               // ANIM_WEAPON_FIRE (CPed::PointGunAt)
+constexpr size_t kAssocTime = 0x30, kInfoLoopStart = 0x38; // its clock; CWeaponInfo's loop start (s)
 constexpr int kWeaponTypes = 40;
-constexpr uint32_t kLearnAfter = 300, kLearnFor = 700; // ms in the standing aim: its pose is in; at most, to learn it
-constexpr float kArmsBlend = 8.0f;                     // per second, into and out of it
-// The shoulders stay with the chest; the arms go with the aim.
-constexpr body::Bone kShoulders[] = {body::kClavicleL, body::kClavicleR};
-constexpr body::Bone kArms[] = {body::kUpperArmL, body::kForearmL, body::kHandL, body::kFingerL,
-                                body::kUpperArmR, body::kForearmR, body::kHandR, body::kFingerR};
-body::Held gShoulders[kWeaponTypes], gArms[kWeaponTypes];
-bool gKnown[kWeaponTypes];
-void *gArmsClump;     // whose they are
-uint32_t gAimGunSince; // since when he's been in the standing aim (0: he isn't)
-float gArmsWeight;
-int gArmsType = -1;
+// The upper chest, clavicles and arms share the aim frame. Native walking
+// twists their joint origins: restoring arm rotations alone separates the
+// offhand from the gun. The lower torso and legs retain locomotion.
+constexpr body::Bone kArms[] = {body::kSpine1,	 body::kClavicleL, body::kUpperArmL, body::kForearmL,
+				body::kHandL,	 body::kFingerL,   body::kClavicleR, body::kUpperArmR,
+				body::kForearmR, body::kHandR,	   body::kFingerR};
+body::Held gArms[kWeaponTypes];
+fpfeedback::AimPose gArmsPose;
 
 bool TwoHanded(int32_t type)
 {
 	const uint8_t *info = type > 0 && type < kWeaponTypes && gWeaponInfo ? gWeaponInfo(type) : nullptr;
 	return info && !(*reinterpret_cast<const uint32_t *>(info + 0x5c) & 0x80);
-}
-// A gun whose shouldered arms aren't known yet, just raised: he stands to aim.
-bool Learning(int32_t type)
-{
-	return TwoHanded(type) && !gKnown[type] && *api.timeMs - gAimStart < kLearnFor && !camera::FirstPersonOnFoot();
 }
 
 bool ThirdPersonGun(int32_t type) { return (type >= 17 && type <= 27) || (type >= 31 && type <= 33); }
@@ -172,6 +170,35 @@ bool Walking(const uint8_t *pad)
 	return std::hypot(x, y) > 128.0f * kWalkStick * kWalkFrom;
 }
 
+// RT only starts his fire animation; native CPed::Attack fires on its fire
+// frame. Standing aimed, CPed::PointGunAt parks that animation at the gun's
+// loop start, so the shot comes a frame or few after the pull; walking aimed
+// he's out of that pose (it would hold him still), and a fresh animation would
+// wait the whole draw (~0.5 s). Start it where the standing aim would have
+// parked it, still running: native fires it, its cadence and the crouch's own
+// pose (CPed::PointGunAt's other animation) untouched (#20).
+void StartAimedShot(uint8_t *ped)
+{
+	if (!gSetAnimTime || !gWeaponInfo || !api.GetAssociation || PedState(ped) != kPedAttack || CrouchFiring(ped))
+		return;
+	const uint8_t *info = gWeaponInfo(WeaponType(PedWeapon(ped, PedCurrentWeaponSlot(ped))));
+	uint8_t *clump = EntityClump(ped);
+	uint8_t *fire = info && clump ? api.GetAssociation(clump, kFireAnim) : nullptr;
+	if (!fire)
+		return;
+	const float loop = *reinterpret_cast<const float *>(info + kInfoLoopStart);
+	if (std::isfinite(loop) && loop > 0 && *reinterpret_cast<const float *>(fire + kAssocTime) < loop)
+		gSetAnimTime(fire, loop);
+}
+
+fpfire::Moving MovingOf(uint8_t *ped)
+{
+	if (PedFlags(ped) & kPedInTheAir)
+		return fpfire::Moving::kAir;
+	const int32_t move = PedMoveState(ped);
+	return move >= 4 ? fpfire::Moving::kRunning : move > 1 ? fpfire::Moving::kWalking : fpfire::Moving::kStill;
+}
+
 // The run-around control runs after ProcessPlayerWeapon and turns him to
 // TheCamera.Orientation, which with the pad's camera is the aim mirrored (he
 // fired backwards): so he's turned back to the aim once it's done. It also
@@ -205,11 +232,25 @@ void Hook_Process(uint8_t *cam, const CVector &target, float a, float b, float c
 		Up(cam) = gRealPose.up;
 	}
 	gMovedCam = nullptr;
+	// Only the active player-follow view owns first-person pitch. Other
+	// CCams may still be evaluated while a script/cutscene controls the view.
+	const bool eyes = camera::FirstPersonChosen() && cam == ActiveCam() && api.theCamera[0x63] && !api.theCamera[0x75];
+	const float alphaBefore = *reinterpret_cast<float *>(cam + 0xac);
+	const float mousePitch = api.newMouseState ? *reinterpret_cast<float *>(api.newMouseState + 12) : 0.0f;
+	const float inputPitch = controls::LookFrozen() || !api.mouseAccelV ? 0.0f
+	    : mousePitch * 4.0f * *api.mouseAccelV * Fov(cam) / 80.0f;
 	orig_Process(cam, target, a, b, c);
+	if (eyes) {
+		// macVC 1.0.5217 clamps Alpha to 45 degrees at 0x1000b6f88.
+		// Input is already mouse+controller merged by controls.cpp. Keep an
+		// independent bounded pitch instead of accumulating against that clamp.
+		float &alpha = *reinterpret_cast<float *>(cam + 0xac);
+		alpha = fpfeedback::Pitch(alphaBefore + inputPitch + 0.17f) - 0.17f;
+	}
 
 	uint8_t *ped = api.FindPlayerPed();
 	if (gRifleThirdPerson && ped) // read when the target button goes down, in CPlayerPed::ProcessPlayerWeapon
-		*gRifleThirdPerson = FirstPersonRifle(WeaponType(PedWeapon(ped, PedCurrentWeaponSlot(ped))));
+		*gRifleThirdPerson = gConfig.aimCamera && FirstPersonRifle(WeaponType(PedWeapon(ped, PedCurrentWeaponSlot(ped))));
 
 	const Clock::time_point now = Clock::now();
 	const float dt = std::min(std::chrono::duration<float>(now - gLastFrame).count(), 0.1f);
@@ -217,6 +258,11 @@ void Hook_Process(uint8_t *cam, const CVector &target, float a, float b, float c
 	gBlend = Aiming() ? std::min(1.0f, gBlend + dt / kEaseIn) : std::max(0.0f, gBlend - dt / kEaseOut);
 	const float e = gBlend * gBlend * (3 - 2 * gBlend); // smoothstep
 	SyncCrosshairBase();
+	if (eyes) {
+		PlaceCrosshair(1.0f);
+		Fov(cam) += (kAimFov - Fov(cam)) * e;
+		return; // first-person orientation/eye are placed by camera::OnFoot
+	}
 	if (e <= 0.0f || !ped) {
 		PlaceCrosshair(0.0f);
 		return;
@@ -266,11 +312,11 @@ void AfterPlayerWeapon(uint8_t *ped, uint8_t *pad)
 	}
 	const float heading = CameraHeading();
 	FaceHeading(ped, heading);
-	if (!gGunRaised)
-		gAimStart = *api.timeMs;
 	gGunRaised = true;
-	if (api.PadGetWeapon(pad)) // firing aims the gun already
+	if (api.PadGetWeapon(pad)) { // firing aims the gun already
+		StartAimedShot(ped);
 		return;
+	}
 	int32_t state = PedState(ped);
 	// Crouched or stood up with the gun raised: it's raised again, in the pose
 	// for how he is now (SetPointGunAt picks the crouch's or the standing one;
@@ -290,7 +336,9 @@ void AfterPlayerWeapon(uint8_t *ped, uint8_t *pad)
 	api.SetLookTimer(ped, 0x7fffffff);
 	*reinterpret_cast<float *>(ped + 0x888) = api.Find3rdPersonQuickAimPitch(api.theCamera); // the arm's pitch
 	ped[0x8a8] = 1;
-	if (Walking(pad) && !Learning(WeaponType(PedWeapon(ped, PedCurrentWeaponSlot(ped))))) {
+	// Walking he's never held still, even to learn a gun's arms (#20): they're
+	// learnt the next time he aims standing.
+	if (Walking(pad)) {
 		if (state == kPedAimGun)
 			api.ClearPointGunAt(ped);
 		api.SetAimFlag(ped, heading); // ClearPointGunAt lowers it
@@ -311,40 +359,28 @@ body::Quat AimFrame(const uint8_t *ped)
 
 void PoseArms(uint8_t *ped)
 {
-	if (!gInstalled || !gWeaponInfo)
+	if (!gInstalled || !gWeaponInfo || !ped || !fpfeedback::CanPose(Health(ped), PedState(ped), true)) {
+		gArmsPose = {};
 		return;
+	}
 	const uint32_t now = *api.timeMs;
 	const int32_t state = PedState(ped), type = WeaponType(PedWeapon(ped, PedCurrentWeaponSlot(ped)));
-	const bool upright = Aiming() && gGunRaised && !Crouched(ped) && !camera::FirstPersonOnFoot() && TwoHanded(type);
-	if (EntityClump(ped) != gArmsClump) { // another model (his clothes): learnt again
-		gArmsClump = EntityClump(ped);
-		std::fill(std::begin(gKnown), std::end(gKnown), false);
-		gArmsWeight = 0.0f;
-	}
-	// Standing aiming a while: his arms as the aim has them, relative to the
-	// way he aims (not his chest: walking, that sways and stays upright, and
-	// the gun pointed where it had when they were learnt, not at the crosshair).
-	gAimGunSince = state == kPedAimGun ? (gAimGunSince ? gAimGunSince : now) : 0;
-	if (upright && state == kPedAimGun && now - gAimGunSince > kLearnAfter && body::Prepare(ped) &&
-	    body::Hold(ped, gShoulders[type], body::kSpine1, kShoulders, int(std::size(kShoulders))) &&
+	const bool ownsPose = !Crouched(ped) && !camera::FirstPersonOnFoot() && !PedInVehicle(ped) && state != kPedAttack;
+	const bool upright = Aiming() && gGunRaised && ownsPose && TwoHanded(type);
+	const float dt = std::clamp(*api.timeStep, 0.0f, 5.0f) / 50.0f;
+	const auto transition = gArmsPose.Update(type, reinterpret_cast<uintptr_t>(EntityClump(ped)), now, upright,
+	                                        state == kPedAimGun, ownsPose, dt);
+	// Learn exactly once per gun/outfit. Recapturing our own blended pose
+	// every standing frame gradually twisted the next walking aim target.
+	if (transition.capture && body::Prepare(ped) &&
 	    body::HoldIn(ped, gArms[type], AimFrame(ped), kArms, int(std::size(kArms)))) {
-		if (!gKnown[type])
-			Log("aimcam: weapon type %d's shouldered arms learnt for walking aimed", type);
-		gKnown[type] = true;
+		gArmsPose.Captured(type);
+		Log("aimcam: weapon type %d's shouldered arms learnt for walking aimed", type);
 	}
-	// Walking aiming (not shooting: that pose holds it up already): laid on the walk.
-	const bool walking = upright && gKnown[type] && state != kPedAimGun && state != kPedAttack && !PedInVehicle(ped);
-	if (walking)
-		gArmsType = type;
-	const float dt = std::clamp(*api.timeStep, 0.01f, 3.0f) / 50.0f;
-	gArmsWeight += ((walking ? 1.0f : 0.0f) - gArmsWeight) * std::min(1.0f, dt * kArmsBlend);
-	if (gArmsWeight < 0.01f) {
-		gArmsWeight = 0.0f;
-		return;
-	}
-	if (gArmsType >= 0 && body::Prepare(ped)) {
-		body::Restore(ped, gShoulders[gArmsType], body::Smooth(gArmsWeight));
-		body::RestoreIn(ped, gArms[gArmsType], AimFrame(ped), body::Smooth(gArmsWeight));
+	// A stable target through standing/walking changes; exponential easing
+	// also lowers it without a frame-rate-dependent pose snap.
+	if (transition.weapon >= 0 && transition.weight > 0.0f && body::Prepare(ped)) {
+		body::RestoreIn(ped, gArms[transition.weapon], AimFrame(ped), body::Smooth(transition.weight));
 	}
 }
 
@@ -379,15 +415,31 @@ void AfterControl(uint8_t *ped, bool strafed)
 bool Aiming()
 {
 	uint8_t *ped = api.FindPlayerPed();
-	if (!ped || PedInVehicle(ped) || !*api.useMouse3rdPerson)
+	// Knocked down (#25): his ragdoll owns him till he's up; no aim, turn or raised gun.
+	if (!gConfig.aimCamera || !ped || PedInVehicle(ped) || !*api.useMouse3rdPerson || reactions::PlayerDown())
 		return false;
 	return (gTestAim || PadNew(api.GetPad(0), kPadRB)) &&
 	       ThirdPersonGun(WeaponType(PedWeapon(ped, PedCurrentWeaponSlot(ped))));
 }
 
+float Spread()
+{
+	uint8_t *ped = api.FindPlayerPed ? api.FindPlayerPed() : nullptr;
+	if (!ped || !Aiming() || camera::FirstPersonOnFoot())
+		return 0.0f;
+	return fpfire::AimedMoving(fpfire::KindOf(WeaponType(PedWeapon(ped, PedCurrentWeaponSlot(ped)))), MovingOf(ped));
+}
+
+int SprintField(uint16_t mode, bool controller)
+{
+	if (!controller || mode < 2 || mode == 3)
+		return kPadCross;
+	return mode == 2 ? 0x22 : -1;
+}
+
 bool Install()
 {
-	if (!gConfig.aimCamera)
+	if (!gConfig.aimCamera && !gConfig.firstPerson)
 		return true;
 	if (!hooks::Install("_ZN4CCam26Process_FollowPedWithMouseERK7CVectorfff", Hook_Process, orig_Process))
 		return false;
@@ -398,6 +450,9 @@ bool Install()
 		Log("aimcam: Tommy only raises two-handed guns once he fires, and stands still aiming (re-run install.sh)");
 	gFreeCam = static_cast<uint8_t *>(dlsym(RTLD_MAIN_ONLY, "_ZN7CCamera8bFreeCamE"));
 	gWeaponInfo = reinterpret_cast<decltype(gWeaponInfo)>(dlsym(RTLD_MAIN_ONLY, "_ZN11CWeaponInfo13GetWeaponInfoE11eWeaponType"));
+	gSetAnimTime = reinterpret_cast<decltype(gSetAnimTime)>(dlsym(RTLD_MAIN_ONLY, "_ZN21CAnimBlendAssociation14SetCurrentTimeEf"));
+	if (!gSetAnimTime)
+		Log("aimcam: walking aimed, the first shot waits for the gun's draw");
 	if (!gWeaponInfo || !player::PoseHooked())
 		Log("aimcam: Tommy holds two-handed guns at the hip while he walks aiming");
 	gRifleThirdPerson = hooks::Flag("skip:rifle_first_person");

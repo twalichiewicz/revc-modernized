@@ -233,8 +233,48 @@ static void TestEveryGunPointsWhereItAims()
 	}
 }
 
+// Compare the actual shipped asset with the native shotgspa.dff silhouette:
+// its folded stock arches above the receiver, and the perforated shroud wraps
+// around the barrel/tube. A flat receiver-top rail and narrow top strip are
+// visibly different models even if weapon20 selects the correct file.
+static void TestCombatShotgunSilhouette()
+{
+	const Embedded *asset = FindEmbedded(20);
+	CHECK(asset != nullptr);
+	if (!asset) return;
+	Gun gun;
+	std::string why;
+	CHECK(ParseGun(asset->begin, size_t(asset->end - asset->begin), gun, why));
+	float stockTop = 0, shroudHalfWidth = 0;
+	for (const auto &v : gun.vertices) {
+		const auto p = Mul(v.pos, 1.0f / (gun.scale * .001f));
+		if (p.y > 140 && p.y < 330) stockTop = std::max(stockTop, p.z);
+		if (p.y > 400 && p.y < 520 && p.z > 105) shroudHalfWidth = std::max(shroudHalfWidth, std::fabs(p.x));
+	}
+	CHECK(stockTop >= 180.0f);
+	CHECK(shroudHalfWidth >= 22.0f);
+	CHECK(gun.twoHanded && FindAnchor(gun, "l_index") && FindPart(gun, "pump") >= 0);
+	// The raised stock must leave the actual aimed camera ray clear. A solid
+	// web between its side rails can pass silhouette tests while hiding ADS.
+	const Frame aimed = GunInView(gun, gun.framing, 1.0f);
+	int obscured = 0;
+	for (size_t i=0;i+2<gun.indices.size();i+=3) {
+		const Vec3 a=Apply(aimed,gun.vertices[gun.indices[i]].pos),
+		           b=Apply(aimed,gun.vertices[gun.indices[i+1]].pos),
+		           c=Apply(aimed,gun.vertices[gun.indices[i+2]].pos);
+		const Vec3 e1=Sub(b,a),e2=Sub(c,a),p=Cross({0,1,0},e2);
+		const float det=Dot(e1,p);
+		if(std::fabs(det)<1e-7f)continue;
+		const Vec3 delta=Mul(a,-1),q=Cross(delta,e1);
+		const float u=Dot(delta,p)/det,v=q.y/det,t=Dot(e2,q)/det;
+		if(u>=0 && v>=0 && u+v<=1 && t>.04f && t<2.0f)++obscured;
+	}
+	CHECK(obscured == 0);
+}
+
 int main()
 {
+	TestCombatShotgunSilhouette();
 	TestEveryGunPointsWhereItAims();
 	TestMagazineGripUnderTheBase();
 	TestParsesAHandMadeGun();

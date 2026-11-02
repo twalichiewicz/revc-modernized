@@ -3,11 +3,12 @@
 #include <algorithm>
 #include <cstdio>
 #include <cstring>
+#include <cmath>
 
 namespace mapdata {
 namespace {
 
-constexpr char kMagic[8] = {'V', 'C', 'M', 'M', 'M', 'A', 'P', '3'};
+constexpr char kMagic[8] = {'V', 'C', 'M', 'M', 'M', 'A', 'P', '4'};
 
 template <typename T>
 bool Read(FILE *f, T &v) { return fread(&v, sizeof v, 1, f) == 1; }
@@ -27,32 +28,46 @@ void WriteVec(FILE *f, const std::vector<T> &v) { fwrite(v.data(), sizeof(T), v.
 
 } // namespace
 
+float BuildingHeightScale(float requested, float tallest, float maximum)
+{
+	return tallest > 0.0f ? std::max(0.0f, std::min(requested, maximum / tallest)) : std::max(0.0f, requested);
+}
+
 bool Map::Load(const std::string &path)
 {
+	*this = {};
 	FILE *f = fopen(path.c_str(), "rb");
 	if (!f)
 		return false;
 	char magic[8];
 	uint32_t mapSize = 0, count = 0;
-	bool ok = Read(f, magic) && memcmp(magic, kMagic, 8) == 0 && Read(f, mapSize) && mapSize > 0 && mapSize <= 8192 &&
-	          ReadVec(f, classes, size_t(mapSize) * mapSize) && Read(f, count);
+	bool ok = Read(f, magic) && memcmp(magic, kMagic, 7) == 0 && (magic[7] == '3' || magic[7] == '4') &&
+	          Read(f, mapSize) && mapSize > 0 && mapSize <= 8192 &&
+	          ReadVec(f, classes, size_t(mapSize) * mapSize) && Read(f, count) && count <= 100000;
+	const bool visual = ok && magic[7] == '4';
 	size = int(mapSize);
 	for (uint32_t i = 0; ok && i < count; i++) {
 		Building b;
 		uint16_t nv, nt, ne;
-		ok = Read(f, nv) && Read(f, nt) && Read(f, ne) && ReadVec(f, b.verts, nv) && ReadVec(f, b.tris, size_t(nt) * 3) &&
+		ok = (!visual || Read(f, b.flags)) && !(b.flags & ~(kVisualMesh | kBridge)) &&
+		     Read(f, nv) && Read(f, nt) && Read(f, ne) && ReadVec(f, b.verts, nv) && ReadVec(f, b.tris, size_t(nt) * 3) &&
 		     ReadVec(f, b.edges, size_t(ne) * 2);
+		for (uint16_t index : b.tris)
+			ok = ok && index < b.verts.size();
+		for (uint16_t index : b.edges)
+			ok = ok && index < b.verts.size();
 		if (!ok || b.verts.empty())
 			continue;
 		b.lo = b.hi = {b.verts[0].x, b.verts[0].y};
 		for (const Vec3 &v : b.verts) {
+			ok = ok && std::isfinite(v.x) && std::isfinite(v.y) && std::isfinite(v.z);
 			b.lo = {std::min(b.lo.x, v.x), std::min(b.lo.y, v.y)};
 			b.hi = {std::max(b.hi.x, v.x), std::max(b.hi.y, v.y)};
 			b.top = std::max(b.top, v.z);
 		}
 		buildings.push_back(std::move(b));
 	}
-	ok = ok && Read(f, count) && ReadVec(f, roads, count);
+	ok = ok && Read(f, count) && count <= 1000000 && ReadVec(f, roads, count);
 	fclose(f);
 	if (!ok) {
 		*this = {};
@@ -71,6 +86,7 @@ bool Map::Save(const std::string &path) const
 	WriteVec(f, classes);
 	Write(f, uint32_t(buildings.size()));
 	for (const Building &b : buildings) {
+		Write(f, b.flags);
 		Write(f, uint16_t(b.verts.size()));
 		Write(f, uint16_t(b.tris.size() / 3));
 		Write(f, uint16_t(b.edges.size() / 2));
