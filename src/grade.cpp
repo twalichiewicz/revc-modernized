@@ -5,6 +5,7 @@
 #include "hooks.h"
 #include "log.h"
 #include "shaders.h"
+#include "raindrops.h"
 #include "sniper.h"
 
 #include <algorithm>
@@ -184,6 +185,8 @@ float SunShows(const shaders::Sky &sky, float x, float y)
 	return sky.daylight * ahead * std::clamp(1.0f - off, 0.0f, 1.0f) * (*gSunHidden ? 0.3f : 1.0f);
 }
 
+void Grade();
+
 void Hook_RenderMotionBlur(uint8_t *camera)
 {
 	// The mod's scope: no sniper blur (the last frame blended in green, smearing
@@ -197,6 +200,12 @@ void Hook_RenderMotionBlur(uint8_t *camera)
 	orig_RenderMotionBlur(camera);
 	blurType = typeWas;
 	blurAlpha = alphaWas;
+	Grade();
+	raindrops::Draw(); // on the lens or the glass: over the graded frame, under the HUD
+}
+
+void Grade()
+{
 	if (!gGradeReady || !Prepare())
 		return;
 	void *frame = shaders::GrabFrame();

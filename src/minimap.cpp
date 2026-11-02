@@ -32,6 +32,7 @@
 #include "checkpoint.h"
 #include "wetroads.h"
 #include "rainstreaks.h"
+#include "raindrops.h"
 #include "carlights.h"
 #include "carradio.h"
 #include "combat.h"
@@ -798,6 +799,7 @@ __attribute__((constructor)) void Init()
 		Log("checkpoint: missing marker hook; racing arrows unavailable");
 	wetroads::Install();
 	rainstreaks::Install();
+	raindrops::Install();
 	if (!rtshadows::Install())
 		Log("rt shadows: no re3_debug hook (re-run install.sh); their reports stay in the terminal");
 }

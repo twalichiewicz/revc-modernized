@@ -33,6 +33,7 @@ struct Config {
 	bool streetNames = true;    // the street he's on over the area, bottom right (#35)
 	bool wetGround = true;      // wet streets in the rain: darker, glossy, the lights streaked on them (#32)
 	bool rainStreaks = true;    // dense, lit, wind-blown rain, none under cover (#32)
+	bool rainDrops = true;      // drops on the view in first person, on the windscreen in a car's seat view (#32)
 	bool radioLogo = true;      // the station's logo at the bottom when it changes, not the big name
 	bool places = true;         // map icons for hospitals, police stations and businesses not yet for sale
 	bool storyHints = true;     // Ken texts what the story needs once it waits on the businesses; gold rings on the map
