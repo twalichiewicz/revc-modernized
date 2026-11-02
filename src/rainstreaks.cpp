@@ -20,7 +20,6 @@ using namespace game;
 namespace rainstreaks {
 namespace {
 
-constexpr Vec2 kWind{7, 3};           // m/s: the volumetric clouds' (clouds.cpp), so the two agree
 constexpr uint8_t kNoRainZone = 0x08; // CCullZones' no-rain attribute (as CWeather::AddRain tests it)
 constexpr int kLamps = 8;             // the nearest lights that catch the rain
 
@@ -28,7 +27,8 @@ void (*orig_RenderRainStreaks)();
 const int32_t *gArea;
 const uint8_t *gCameraZone, *gPlayerZone;
 bool gTried, gReady;
-void *gShader;
+void *gShader, *gCurtainShader;
+int uSheet = -1;
 
 const char *const kVertex = R"(
 VSIN(ATTRIB_POS) vec3 in_pos;
@@ -58,6 +58,45 @@ void main(void)
 }
 )";
 
+// Blended as alpha: a veil of mist, billowing as it blows across, its rain's
+// grain falling through it, soft at every edge (its wind across it in the
+// vertex red, its strength in the alpha).
+const char *const kCurtainFragment = R"(
+uniform vec4 u_rainSheet; // seconds, unused, the sheet's width and height (m)
+FSIN vec4 v_colour;
+FSIN vec2 v_uv;
+FSIN float v_fog;
+float Hash(vec2 p) { return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453); }
+float Noise(vec2 p)
+{
+	vec2 i = floor(p), f = fract(p);
+	f = f * f * (3.0 - 2.0 * f);
+	return mix(mix(Hash(i), Hash(i + vec2(1.0, 0.0)), f.x), mix(Hash(i + vec2(0.0, 1.0)), Hash(i + vec2(1.0, 1.0)), f.x), f.y);
+}
+float Fbm(vec2 p)
+{
+	float s = 0.0, a = 0.5;
+	for (int i = 0; i < 4; i++) {
+		s += a * Noise(p);
+		p = p * 2.03 + vec2(1.7, 9.2);
+		a *= 0.5;
+	}
+	return s;
+}
+void main(void)
+{
+	float t = u_rainSheet.x, across = (v_colour.r - 0.5) * 40.0;
+	vec2 m = v_uv * u_rainSheet.zw;
+	float billow = Fbm(vec2(m.x * 0.06 - t * across * 0.06, m.y * 0.04 + t * 0.15));
+	float grain = Noise(vec2(m.x * 1.5, m.y * 0.12 + t * 2.5));
+	float k = smoothstep(0.32, 0.8, billow) * (0.7 + 0.3 * grain);
+	float edges = smoothstep(0.0, 0.25, v_uv.x) * (1.0 - smoothstep(0.75, 1.0, v_uv.x)) *
+	              smoothstep(0.0, 0.3, v_uv.y) * (1.0 - smoothstep(0.6, 1.0, v_uv.y));
+	vec3 mist = mix(u_fogColor.rgb, vec3(0.75, 0.78, 0.82), 0.2);
+	FRAGCOLOR(vec4(mist, k * edges * v_colour.a));
+}
+)";
+
 bool Prepare()
 {
 	if (gTried)
@@ -66,7 +105,9 @@ bool Prepare()
 	if (!shaders::Ready())
 		return false;
 	gShader = shaders::Create("rain streaks", kVertex, kFragment);
-	gReady = gShader != nullptr;
+	uSheet = shaders::Uniform("u_rainSheet");
+	gCurtainShader = shaders::Create("rain curtains", kVertex, kCurtainFragment);
+	gReady = gShader != nullptr; // (the curtains are drawn if theirs built)
 	return gReady;
 }
 
@@ -134,8 +175,10 @@ void Draw()
 	rainmodel::Box cabin;
 	const bool inCar = camera::InSeat() && Cabin(camera::SeatVehicle(), cabin);
 	const auto covered = [&](Vec3 p) { return (map && mapdata::CoveredAt(*map, p)) || (inCar && rainmodel::Inside(cabin, p)); };
+	const float seconds = shaders::Seconds();
+	const rainmodel::Gust gust = rainmodel::GustAt(seconds);
 	const std::vector<rainmodel::Streak> streaks =
-	    rainmodel::Streaks({eye.x, eye.y, eye.z}, kWind, count, shaders::Seconds(), covered);
+	    rainmodel::Streaks({eye.x, eye.y, eye.z}, gust.wind, count, seconds, covered);
 
 	// The nearest lights catch it; the sky lights the rest (dim at night).
 	std::vector<worlddraw::Light> lights = worlddraw::PointLights();
@@ -187,6 +230,30 @@ void Draw()
 			const float u[4] = {-1, 1, 1, -1}, v[4] = {0, 0, 1, 1};
 			for (int i : {0, 1, 2, 0, 2, 3})
 				batch.Put(q[i], r, g, b, u[i], v[i]);
+		}
+	}
+	// Sheets of rain blown past, thicker in a gust (depth-tested: the buildings in front hide them).
+	if (gCurtainShader) {
+		const std::vector<rainmodel::Curtain> curtains = rainmodel::Curtains({eye.x, eye.y, eye.z}, w.rain, seconds, gust.strength);
+		if (!curtains.empty()) {
+			shaders::Set(uSheet, seconds, 0, curtains[0].width, curtains[0].height);
+			api.RwRenderStateSet(kStateSrcBlend, reinterpret_cast<void *>(kBlendSrcAlpha));
+			api.RwRenderStateSet(kStateDestBlend, reinterpret_cast<void *>(kBlendInvSrcAlpha));
+			worlddraw::Batch batch(gCurtainShader);
+			for (const rainmodel::Curtain &c : curtains) {
+				const float d = std::hypot(c.centre.x - eye.x, c.centre.y - eye.y);
+				const float near = std::clamp((d - 10.0f) / 14.0f, 0.0f, 1.0f); // never a flat card in his face
+				const float rx = -c.facing.y, ry = c.facing.x, across = gust.wind.x * rx + gust.wind.y * ry;
+				const uint8_t r = worlddraw::Byte(0.5f + across / 40.0f), a = worlddraw::Byte(0.45f * c.density * near);
+				if (a == 0)
+					continue;
+				const float hw = c.width / 2, lo = c.centre.z - c.height / 2, hi = c.centre.z + c.height / 2;
+				const Vec3 q[4] = {{c.centre.x - rx * hw, c.centre.y - ry * hw, lo}, {c.centre.x + rx * hw, c.centre.y + ry * hw, lo},
+				                   {c.centre.x + rx * hw, c.centre.y + ry * hw, hi}, {c.centre.x - rx * hw, c.centre.y - ry * hw, hi}};
+				const float u[4] = {0, 1, 1, 0}, v[4] = {0, 0, 1, 1};
+				for (int i : {0, 1, 2, 0, 2, 3})
+					batch.Put(q[i], r, 0, 0, u[i], v[i], a);
+			}
 		}
 	}
 	gStats.ms += std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - start).count();

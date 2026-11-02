@@ -23,7 +23,7 @@ uint32_t Hash(uint32_t x)
 float Unit(uint32_t h) { return float(h & 0xffffff) / float(0x1000000); }
 
 constexpr float kPuddleLevel = 0.05f; // less is a damp road, no standing water
-constexpr int kPuddlesPerCell = 8;
+constexpr int kPuddlesPerCell = 16;
 constexpr float kFlat = 0.998f;       // the normal's z: water stands only on the flattest ground
 constexpr float kSplashLife = 0.3f;   // s
 constexpr int kSplashes = 260, kPerRoof = 7; // in a downpour
@@ -194,12 +194,12 @@ std::vector<Puddle> Puddles(const mapdata::WetCell &cell, float level)
 		const float nx = uy * vz - uz * vy, ny = uz * vx - ux * vz, nz = ux * vy - uy * vx;
 		const float len = std::sqrt(nx * nx + ny * ny + nz * nz);
 		const float z = len > 0 ? std::fabs(nz) / len : 0;
-		if (z >= kFlat && len / 2 > 3.0f) // and big enough to hold one
+		if (z >= kFlat && len / 2 > 2.0f) // and big enough to hold one
 			flat.push_back({t, z});
 	}
 	std::stable_sort(flat.begin(), flat.end(), [](const Candidate &l, const Candidate &r) { return l.flat > r.flat; });
 	const uint32_t seed = Hash(uint32_t(uint16_t(cell.cx)) * 73856093u ^ uint32_t(uint16_t(cell.cy)) * 19349663u);
-	const size_t pool = std::min(flat.size(), size_t(kPuddlesPerCell * 3)); // among the flattest
+	const size_t pool = std::min(flat.size(), size_t(kPuddlesPerCell * 2)); // among the flattest
 	std::vector<bool> taken(pool, false);
 	for (int k = 0; k < kPuddlesPerCell && k < int(pool); k++) {
 		size_t pick = size_t(Hash(seed + uint32_t(k) * 2654435761u) % pool);

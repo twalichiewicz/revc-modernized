@@ -24,6 +24,16 @@ struct Drop {
 	float seed;          // 0..1: its own uneven outline (a merged drop keeps the bigger one's)
 };
 
+// A windscreen's drops are in a window of directions from his seat, fixed to
+// the car (x right, y ahead, z up): a drop's place there (0, 0 its top left)
+// as a unit direction, and its size (a fraction of the window's height) as an
+// angle. So they stay on the glass as he looks round.
+constexpr float kWindscreenWide = 1.745f;  // radians across (50 degrees either side)
+constexpr float kWindscreenHigh = 0.611f;  // radians from top to bottom...
+constexpr float kWindscreenTop = 0.349f;   // ...from 20 degrees over level
+Vec3 WindscreenDirection(Vec2 pos);
+float WindscreenAngle(float size);
+
 class Drops {
 public:
 	void Update(float rain, bool exposed, float speed, DropMode mode, float dt);

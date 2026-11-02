@@ -155,7 +155,7 @@ static void TestPuddlesStable()
 {
 	const mapdata::WetCell c = Street(), copy = Street();
 	const std::vector<Puddle> a = Puddles(c, 1), b = Puddles(copy, 1);
-	CHECK(!a.empty() && a.size() == b.size());
+	CHECK(a.size() >= 14 && a.size() == b.size()); // a street's worth: one every few metres of lane
 	bool same = true, onFlat = true;
 	for (size_t i = 0; i < a.size() && i < b.size(); i++) {
 		same &= a[i].centre.x == b[i].centre.x && a[i].centre.y == b[i].centre.y && a[i].radius == b[i].radius;

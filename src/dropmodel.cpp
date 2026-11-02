@@ -43,6 +43,14 @@ DropMode ModeFor(bool firstPersonOnFoot, bool seatView, int vehicleType, bool to
 	}
 }
 
+Vec3 WindscreenDirection(Vec2 pos)
+{
+	const float across = (pos.x - 0.5f) * kWindscreenWide, up = kWindscreenTop - pos.y * kWindscreenHigh;
+	return {std::sin(across) * std::cos(up), std::cos(across) * std::cos(up), std::sin(up)};
+}
+
+float WindscreenAngle(float size) { return size * kWindscreenHigh; }
+
 float Drops::Random()
 {
 	seed_ ^= seed_ << 13;

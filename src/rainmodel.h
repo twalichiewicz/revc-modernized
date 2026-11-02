@@ -34,7 +34,8 @@ private:
 int StreakCount(float rain, bool sheltered = false);
 
 // The streaks: a box of them around the camera, fixed in the world (they
-// wrap round as he moves, not with him), falling and blown by the wind.
+// wrap round as he moves, not with him), falling, carried by the steady wind
+// and slanted by `wind` (the gust's).
 constexpr float kStreakBox = 40.0f;    // m across
 constexpr float kStreakHeight = 25.0f; // m tall...
 constexpr float kStreakBelow = 8.0f;   // ...from this far under the camera
@@ -53,6 +54,27 @@ struct Box {
 	Vec3 centre, right, forward, up, half;
 };
 bool Inside(const Box &box, Vec3 p);
+
+// The wind, in gusts: the volumetric clouds' steady wind (clouds.cpp), now and
+// then stronger (to 1.6 times) and swung round a little; `strength` 0..1 is how
+// much of a gust is blowing.
+constexpr Vec2 kBaseWind{7, 3};
+struct Gust {
+	Vec2 wind;
+	float strength;
+};
+Gust GustAt(float seconds);
+
+// Sheets of rain blown along (as GTA IV's): tall veils of mist round the
+// camera, carried downwind, each turned to face him, thicker in a gust.
+constexpr float kCurtainBox = 160.0f; // m across
+constexpr int kCurtains = 16;
+struct Curtain {
+	Vec3 centre;
+	Vec2 facing; // towards him
+	float width, height, density; // m, m, 0..1
+};
+std::vector<Curtain> Curtains(Vec3 camera, float rain, float seconds, float gust);
 
 // A streak's light: the sky's, and each lamp's within its reach.
 struct Lamp {

@@ -271,11 +271,38 @@ void Draw()
 	shaders::OverrideIm2D(gDropShader);
 	gCanvas.SetTexture(frame);
 	const uint8_t strength = 230;
+	// On a windscreen: where its glass is from his seat, through the camera
+	// (fixed to the car, so they stay on the glass as he looks round).
+	float vp[16];
+	const bool onGlass = masked && shaders::ViewProjection(vp);
+	const worlddraw::Axes axes = onGlass ? worlddraw::VehicleAxes(car) : worlddraw::Axes{};
+	auto toScreen = [&](Vec2 at, float &x, float &y) { // a place in the windscreen's window, on the screen
+		const Vec3 d = dropmodel::WindscreenDirection(at);
+		const float wx = axes.right.x * d.x + axes.forward.x * d.y + axes.up.x * d.z;
+		const float wy = axes.right.y * d.x + axes.forward.y * d.y + axes.up.y * d.z;
+		const float wz = axes.right.z * d.x + axes.forward.z * d.y + axes.up.z * d.z;
+		const float px = eye.x + wx, py = eye.y + wy, pz = eye.z + wz;
+		const float cx = vp[0] * px + vp[4] * py + vp[8] * pz + vp[12], cy = vp[1] * px + vp[5] * py + vp[9] * pz + vp[13];
+		const float cw = vp[3] * px + vp[7] * py + vp[11] * pz + vp[15];
+		if (cw <= 0.01f)
+			return false; // behind him
+		x = (cx / cw * 0.5f + 0.5f) * W;
+		y = (0.5f - cy / cw * 0.5f) * H;
+		return true;
+	};
 	for (const dropmodel::Drop &d : gDrops.All()) {
-		const float r = d.radius * H, x = d.pos.x * W, y = d.pos.y * H;
+		float r = d.radius * H, x = d.pos.x * W, y = d.pos.y * H, top = y - d.trail * H;
+		if (onGlass) {
+			float ex, ey, tx; // its edge, a radius up the glass; the top of its trail
+			if (!toScreen(d.pos, x, y) || !toScreen({d.pos.x, d.pos.y - d.radius}, ex, ey))
+				continue;
+			r = std::hypot(ex - x, ey - y);
+			if (!toScreen({d.pos.x, d.pos.y - d.trail}, tx, top))
+				top = y;
+		}
 		const uint8_t rpx = uint8_t(std::clamp(r, 1.0f, 255.0f));
 		if (d.trail > 0.002f) { // the wet line above it, fading to the top
-			const float top = y - d.trail * H, half = r * 0.45f;
+			const float half = r * 0.45f;
 			const CRGBA c{rpx, 255, 0, uint8_t(strength * 0.8f)};
 			gCanvas.Tri({x - half, y, -1, 0}, {x + half, y, 1, 0}, {x + half, top, 1, 1}, c);
 			gCanvas.Tri({x - half, y, -1, 0}, {x + half, top, 1, 1}, {x - half, top, -1, 1}, c);

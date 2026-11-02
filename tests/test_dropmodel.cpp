@@ -97,6 +97,26 @@ static void TestSpeedPushesUp()
 	CHECK(parked.All().size() == 1 && parked.All()[0].pos.y == 0.5f);
 }
 
+// On a windscreen they're where the glass is from his seat, fixed to the car:
+// a window of directions (its x right, y ahead, z up), so they stay on the
+// glass as he looks round.
+static void TestOnTheWindscreen()
+{
+	const Vec3 middle = WindscreenDirection({0.5f, 0.5f}), topLeft = WindscreenDirection({0, 0}),
+	           bottomRight = WindscreenDirection({1, 1});
+	CHECK(std::fabs(middle.x) < 1e-5f && middle.y > 0.99f && std::fabs(middle.z) < 0.1f); // about straight ahead
+	CHECK(topLeft.x < -0.6f && topLeft.z > 0.3f && topLeft.y > 0);                          // up and to the left
+	CHECK(bottomRight.x > 0.6f && bottomRight.z < -0.2f && bottomRight.y > 0);               // down and to the right
+	bool unit = true;
+	for (float u : {0.0f, 0.3f, 1.0f})
+		for (float v : {0.0f, 0.7f, 1.0f}) {
+			const Vec3 d = WindscreenDirection({u, v});
+			unit &= std::fabs(d.x * d.x + d.y * d.y + d.z * d.z - 1) < 1e-4f;
+		}
+	CHECK(unit);
+	CHECK(std::fabs(WindscreenAngle(0.02f) - 0.02f * kWindscreenHigh) < 1e-6f); // a drop's size as an angle
+}
+
 static void TestModeSwitchClears()
 {
 	Drops d;
@@ -120,6 +140,7 @@ int main()
 	TestNoDropsWhenCovered();
 	TestMergeAndTrickle();
 	TestSpeedPushesUp();
+	TestOnTheWindscreen();
 	TestModeSwitchClears();
 	TestInteriorNoDrops();
 	if (failures)

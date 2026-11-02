@@ -139,6 +139,49 @@ static void TestLitByNearLights()
 	CHECK(near.x > sky.x + 0.5f && near.y > sky.y + 0.2f && near.z < near.y);
 }
 
+// The wind comes in gusts: mostly the clouds' steady wind, now and then much
+// stronger and swung round a little, never jumping from one frame to the next.
+static void TestGustsComeAndGo()
+{
+	const float base = std::hypot(kBaseWind.x, kBaseWind.y);
+	float calm = 1, strong = 0, least = 1e9f, most = 0, jump = 0;
+	Gust last = GustAt(0);
+	for (int i = 1; i < 30 * 120; ++i) { // two minutes at 30 a second
+		const Gust g = GustAt(i / 30.0f);
+		calm = std::fmin(calm, g.strength);
+		strong = std::fmax(strong, g.strength);
+		const float speed = std::hypot(g.wind.x, g.wind.y);
+		least = std::fmin(least, speed);
+		most = std::fmax(most, speed);
+		jump = std::fmax(jump, std::hypot(g.wind.x - last.wind.x, g.wind.y - last.wind.y) / base);
+		last = g;
+	}
+	CHECK(calm < 0.05f && strong > 0.8f);
+	CHECK(least > 0.6f * base && least < 0.8f * base && most > 1.4f * base && most < 1.7f * base);
+	CHECK(jump < 0.08f); // a gust takes a second or so to build
+}
+
+// Sheets of rain blown along: round him, carried downwind, thicker in a gust,
+// none when it isn't raining.
+static void TestCurtainsBlowPast()
+{
+	const std::vector<Curtain> now = Curtains(kCamera, 1, 30, 0.2f), later = Curtains(kCamera, 1, 30.5f, 0.2f);
+	CHECK(now.size() >= 10 && now.size() == later.size());
+	bool around = true, facing = true;
+	for (const Curtain &c : now) {
+		around &= std::fabs(c.centre.x - kCamera.x) <= kCurtainBox / 2 && std::fabs(c.centre.y - kCamera.y) <= kCurtainBox / 2;
+		const float dx = kCamera.x - c.centre.x, dy = kCamera.y - c.centre.y, d = std::hypot(dx, dy);
+		facing &= d < 1e-3f || (c.facing.x * dx + c.facing.y * dy) / d > 0.999f;
+	}
+	CHECK(around && facing);
+	int downwind = 0;
+	for (size_t i = 0; i < now.size(); ++i) // half a second on: moved with the wind (but for any that wrapped round)
+		downwind += (later[i].centre.x - now[i].centre.x) * kBaseWind.x + (later[i].centre.y - now[i].centre.y) * kBaseWind.y > 0;
+	CHECK(downwind >= int(now.size()) - 2);
+	CHECK(Curtains(kCamera, 0, 30, 0.2f).empty());
+	CHECK(Curtains(kCamera, 1, 30, 1)[0].density > Curtains(kCamera, 1, 30, 0)[0].density);
+}
+
 static void TestStreakCounts()
 {
 	CHECK(StreakCount(0) == 0 && StreakCount(0.04f) == 0);
@@ -159,6 +202,8 @@ int main()
 	TestInteriorNoStreaks();
 	TestLitByNearLights();
 	TestNotInsideTheCabin();
+	TestGustsComeAndGo();
+	TestCurtainsBlowPast();
 	if (failures)
 		return 1;
 	std::puts("rainmodel: all rain weather tests passed");
