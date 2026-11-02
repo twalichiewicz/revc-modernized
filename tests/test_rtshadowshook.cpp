@@ -3,8 +3,15 @@
 // report's line.
 #include "../src/rtshadows.cpp"
 #include <cmath>
+#include <cstdlib>
 #include <limits>
 #include <string>
+#include <sys/stat.h>
+#include <unistd.h>
+
+Config gConfig;
+static std::string gDir;
+std::string SupportDir() { return gDir; }
 
 static std::vector<std::string> gLogs;
 void Log(const char *format, ...)
@@ -118,6 +125,35 @@ int main()
 	CHECK(gLogs.size() == 2 && gLogs[1].find("light 2 of 2") != std::string::npos);
 	*reinterpret_cast<int32_t *>(view + 0x2058) = 1; // that light's not one it has
 	CHECK(rtshadows::Hook_TraceShadows(view, 720, 405, nullptr, nullptr, nullptr) && gTraces == 2);
+
+	// What a traced frame came to: a line with the sun's values and how much is
+	// shadowed; with RTShadowDump=1 the mask too (white lit, black shadowed).
+	char dir[] = "/tmp/rtshadows-XXXXXX";
+	gDir = mkdtemp(dir) ? dir : "/tmp";
+	mkdir((gDir + "/vcmodernhud").c_str(), 0755);
+	gConfig.rtShadowDump = true;
+	static uint8_t mask[720 * 405] = {};
+	for (int i = 0; i < 720 * 405 / 4; ++i)
+		mask[i] = 200; // the top quarter: a building's shadow
+	head[20] = 0.6f;
+	gLogs.clear();
+	CHECK(rtshadows::Hook_TraceShadows(view, 720, 405, mask, nullptr, nullptr) && gTraces == 3);
+	CHECK(gLogs.size() == 1 && gLogs[0].find("25.0% of the frame shadowed, 78% dark on average") != std::string::npos &&
+	      gLogs[0].find("1.00 1.00 0.60 1.00") != std::string::npos && gLogs[0].find("rtmask-1.pgm") != std::string::npos);
+	FILE *dumped = std::fopen((gDir + "/vcmodernhud/rtmask-1.pgm").c_str(), "rb");
+	char header[16] = {};
+	CHECK(dumped && std::fread(header, 1, 15, dumped) == 15 && std::string(header) == "P5 720 405 255\n");
+	if (dumped) {
+		uint8_t first = 0, last = 0;
+		std::fread(&first, 1, 1, dumped);
+		std::fseek(dumped, -1, SEEK_END);
+		std::fread(&last, 1, 1, dumped);
+		CHECK(first == 55 && last == 255); // the top row shadowed, the bottom lit
+		std::fclose(dumped);
+	}
+	gLogs.clear();
+	CHECK(rtshadows::Hook_TraceShadows(view, 720, 405, mask, nullptr, nullptr) && gLogs.empty()); // not again so soon
+	head[20] = 1;
 
 	// The freeze report: the moving geometry, the scene, the view.
 	gLogs.clear();

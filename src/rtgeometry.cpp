@@ -76,4 +76,22 @@ int BadViewField(const float *head, const float *lights, int count)
 	return -1;
 }
 
+MaskStats Stats(const uint8_t *mask, int pixels)
+{
+	MaskStats s;
+	if (!mask || pixels <= 0)
+		return s;
+	int64_t sum = 0;
+	int any = 0, strong = 0;
+	for (int i = 0; i < pixels; i++) {
+		any += mask[i] > 0;
+		strong += mask[i] >= 128;
+		sum += mask[i];
+	}
+	s.shadowed = float(any) / float(pixels);
+	s.strong = float(strong) / float(pixels);
+	s.darkness = any ? float(sum) / float(any) / 255.0f : 0.0f;
+	return s;
+}
+
 } // namespace rtgeometry

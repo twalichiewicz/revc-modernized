@@ -3,6 +3,7 @@
 // dynamic triangles: peds, vehicles, objects; 9 floats a triangle), checked:
 // Metal's acceleration structures are undefined for non-finite or absurd
 // vertices, and the pass waits on the GPU without a timeout (a freeze).
+#include <cstdint>
 #include <vector>
 
 namespace rtgeometry {
@@ -29,5 +30,13 @@ bool Clean(const float *tris, int count, std::vector<float> &out, Report &report
 // each. The first that isn't finite, counting from `head` through the lights,
 // or -1.
 int BadViewField(const float *head, const float *lights, int count);
+
+// The shadow mask a trace gives back (one byte a pixel: 0 lit, 255 fully
+// shadowed): the share of pixels in any shadow, their mean darkness (0..1),
+// and the share at least half dark.
+struct MaskStats {
+	float shadowed = 0, darkness = 0, strong = 0;
+};
+MaskStats Stats(const uint8_t *mask, int pixels);
 
 } // namespace rtgeometry

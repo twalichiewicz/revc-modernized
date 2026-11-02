@@ -1,4 +1,5 @@
 #include "rtshadows.h"
+#include "config.h"
 #include "hooks.h"
 #include "log.h"
 #include "rtgeometry.h"
@@ -157,6 +158,43 @@ void Hook_AddTranslucentTriangles(const float *tris, int count)
 // Its rays come from the camera and the far plane's corners, and go to the sun
 // and each light: one that isn't finite makes the frame's rays undefined. That
 // frame isn't traced (false: the game's own "no shadows this frame").
+// What the trace made of the frame: every 30 s a line (the sun, its shadow
+// strength and softness as the view gives them, how much of the frame is
+// shadowed and how dark), and with RTShadowDump=1 the mask itself every 10 s
+// (rtmask-N.pgm in the support folder: white lit, black fully shadowed), to
+// set beside a screenshot.
+void Look(const uint8_t *view, int width, int height, const uint8_t *mask)
+{
+	static double lastLine, lastDump;
+	static int dumps;
+	const double now = Now();
+	const bool line = now - lastLine >= kEvery, dump = gConfig.rtShadowDump && now - lastDump >= 10.0;
+	if (!view || !mask || width <= 0 || height <= 0 || width > 8192 || height > 8192 || (!line && !dump))
+		return;
+	const float *p = reinterpret_cast<const float *>(view);
+	const rtgeometry::MaskStats s = rtgeometry::Stats(mask, width * height);
+	char name[64] = "";
+	if (dump) {
+		lastDump = now;
+		std::snprintf(name, sizeof name, "rtmask-%d.pgm", dumps++ % 30 + 1);
+		if (FILE *f = std::fopen((SupportDir() + "/vcmodernhud/" + name).c_str(), "wb")) {
+			std::fprintf(f, "P5 %d %d 255\n", width, height);
+			std::vector<uint8_t> row(static_cast<size_t>(width));
+			for (int y = 0; y < height; y++) { // the trace's rows run down the screen
+				for (int x = 0; x < width; x++)
+					row[size_t(x)] = uint8_t(255 - mask[size_t(y) * width + x]);
+				std::fwrite(row.data(), 1, row.size(), f);
+			}
+			std::fclose(f);
+		}
+	}
+	lastLine = now;
+	Log("rt shadows: the sun (%.2f %.2f %.2f), its four values %.2f %.2f %.2f %.2f; %.1f%% of the frame shadowed, "
+	    "%.0f%% dark on average, %.1f%% at least half dark%s%s",
+	    p[15], p[16], p[17], p[18], p[19], p[20], p[21], 100 * s.shadowed, 100 * s.darkness, 100 * s.strong,
+	    dump ? "; saved as " : "", name);
+}
+
 bool Hook_TraceShadows(const uint8_t *view, int width, int height, uint8_t *a, uint8_t *b, uint8_t *c)
 {
 	if (!view)
@@ -167,8 +205,12 @@ bool Hook_TraceShadows(const uint8_t *view, int width, int height, uint8_t *a, u
 	std::memcpy(gView.sun, head + 15, sizeof gView.sun);
 	gView.lights = lights;
 	const int bad = rtgeometry::BadViewField(head, reinterpret_cast<const float *>(view + kViewLights), lights);
-	if (bad < 0)
-		return orig_TraceShadows(view, width, height, a, b, c);
+	if (bad < 0) {
+		const bool traced = orig_TraceShadows(view, width, height, a, b, c);
+		if (traced)
+			Look(view, width, height, a);
+		return traced;
+	}
 	++gView.skipped;
 	if (gViewLogs < 8 || gView.skipped % 600 == 0) {
 		++gViewLogs;

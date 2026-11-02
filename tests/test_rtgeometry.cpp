@@ -104,6 +104,17 @@ int main()
 	CHECK(BadViewField(view, view + 22, 3) == 22 + 16 * 2 + 5);
 	CHECK(BadViewField(view, view + 22, 2) == -1); // past the lights it has: not looked at
 
+	// The shadow mask it gives back (0 lit .. 255 fully shadowed): how much is in
+	// shadow, how dark that is on average, and how much is at least half dark.
+	std::vector<uint8_t> mask(100, 0);
+	for (int i = 0; i < 30; ++i) mask[i] = 200; // a building's shadow
+	for (int i = 30; i < 40; ++i) mask[i] = 50;  // a faint one
+	const MaskStats m = Stats(mask.data(), int(mask.size()));
+	CHECK(std::fabs(m.shadowed - 0.40f) < 1e-6f && std::fabs(m.strong - 0.30f) < 1e-6f);
+	CHECK(std::fabs(m.darkness - (30 * 200 + 10 * 50) / 40.0f / 255.0f) < 1e-6f);
+	const MaskStats lit = Stats(mask.data() + 40, 60);
+	CHECK(lit.shadowed == 0 && lit.darkness == 0 && lit.strong == 0);
+
 	if (failures)
 		return 1;
 	std::puts("rtgeometry: all ray-traced geometry tests passed");

@@ -196,6 +196,8 @@ void Apply(const char *key, const char *value, const char *section)
 		gConfig.rainDrops = b;
 	else if (!strcasecmp(key, "RainSplashes"))
 		gConfig.rainSplashes = b;
+	else if (!strcasecmp(key, "RTShadowDump"))
+		gConfig.rtShadowDump = b;
 	else if (!strcasecmp(key, "RadioLogo"))
 		gConfig.radioLogo = b;
 	else if (!strcasecmp(key, "Places"))
