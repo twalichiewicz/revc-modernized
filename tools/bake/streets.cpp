@@ -110,6 +110,19 @@ std::vector<uint16_t> Assign(const std::vector<Outline> &outlines, const std::ve
 	return out;
 }
 
+std::vector<std::string> UniqueNames(const std::vector<Outline> &outlines, std::vector<uint16_t> &outlineToName)
+{
+	std::vector<std::string> names;
+	outlineToName.clear();
+	for (const Outline &o : outlines) {
+		const auto found = std::find(names.begin(), names.end(), o.name);
+		outlineToName.push_back(uint16_t(found - names.begin()));
+		if (found == names.end())
+			names.push_back(o.name);
+	}
+	return names;
+}
+
 Coverage Measure(const std::vector<mapdata::Road> &roads, const std::vector<uint16_t> &street, Vec2 lo, Vec2 hi)
 {
 	Coverage c;

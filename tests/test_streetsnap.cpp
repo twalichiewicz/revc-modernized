@@ -78,8 +78,20 @@ static void TestCoverageCountsLength()
 	CHECK(c.named == 10 && c.total == 40); // the third road's outside the box
 }
 
+// One street drawn as several outlines (Ocean Drive's two halves): one name, one index.
+static void TestSameNameOneStreet()
+{
+	const std::vector<Outline> outlines = {{"Ocean Drive", {{0, 0}, {100, 0}}}, {"5th Street", {{50, 0}, {50, 100}}},
+	                                       {"Ocean Drive", {{100, 0}, {200, 50}}}};
+	std::vector<uint16_t> toName;
+	const std::vector<std::string> names = streets::UniqueNames(outlines, toName);
+	CHECK(names.size() == 2 && names[0] == "Ocean Drive" && names[1] == "5th Street");
+	CHECK(toName.size() == 3 && toName[0] == 0 && toName[1] == 1 && toName[2] == 0);
+}
+
 int main()
 {
+	TestSameNameOneStreet();
 	TestCoverageCountsLength();
 	TestParse();
 	TestParseError();

@@ -23,6 +23,10 @@ bool ParseStreets(const std::string &text, std::vector<Outline> &out, std::strin
 // Each road's street: an index into `outlines`, or mapdata::Map::kNoStreet.
 std::vector<uint16_t> Assign(const std::vector<Outline> &outlines, const std::vector<mapdata::Road> &roads);
 
+// The streets' names, each once, in first-seen order; `outlineToName` gives
+// each outline's index among them (a street drawn as several outlines is one).
+std::vector<std::string> UniqueNames(const std::vector<Outline> &outlines, std::vector<uint16_t> &outlineToName);
+
 // Road length named against all road length (m), over roads whose middle is in [lo, hi].
 struct Coverage {
 	float named = 0, total = 0;

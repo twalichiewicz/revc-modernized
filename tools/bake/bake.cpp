@@ -798,9 +798,12 @@ int main(int argc, char **argv)
 				fprintf(stderr, "%s: %s\n", argv[i + 1], in ? error.c_str() : "cannot read");
 				return 1;
 			}
+			std::vector<uint16_t> toName;
+			map.streets = streets::UniqueNames(outlines, toName);
 			map.roadStreet = streets::Assign(outlines, map.roads);
-			for (const streets::Outline &o : outlines)
-				map.streets.push_back(o.name);
+			for (uint16_t &s : map.roadStreet)
+				if (s != mapdata::Map::kNoStreet)
+					s = toName[s];
 			const auto named = std::count_if(map.roadStreet.begin(), map.roadStreet.end(),
 			                                 [](uint16_t s) { return s != mapdata::Map::kNoStreet; });
 			printf("streets: %zu, %ld of %zu roads named\n", outlines.size(), long(named), map.roads.size());
