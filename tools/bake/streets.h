@@ -23,4 +23,10 @@ bool ParseStreets(const std::string &text, std::vector<Outline> &out, std::strin
 // Each road's street: an index into `outlines`, or mapdata::Map::kNoStreet.
 std::vector<uint16_t> Assign(const std::vector<Outline> &outlines, const std::vector<mapdata::Road> &roads);
 
+// Road length named against all road length (m), over roads whose middle is in [lo, hi].
+struct Coverage {
+	float named = 0, total = 0;
+};
+Coverage Measure(const std::vector<mapdata::Road> &roads, const std::vector<uint16_t> &street, Vec2 lo, Vec2 hi);
+
 } // namespace streets

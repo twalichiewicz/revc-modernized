@@ -69,8 +69,18 @@ static void TestDirectionIgnored()
 	CHECK(streets::Assign(outlines, {Road({10, 3}, {40, 3})})[0] == 0);
 }
 
+// Coverage: road length named against all road length, for roads whose middle is in the box.
+static void TestCoverageCountsLength()
+{
+	const std::vector<mapdata::Road> roads = {Road({0, 0}, {10, 0}), Road({0, 5}, {30, 5}), Road({500, 0}, {600, 0})};
+	const std::vector<uint16_t> street = {0, kNone, 0};
+	const streets::Coverage c = streets::Measure(roads, street, {-50, -50}, {100, 100});
+	CHECK(c.named == 10 && c.total == 40); // the third road's outside the box
+}
+
 int main()
 {
+	TestCoverageCountsLength();
 	TestParse();
 	TestParseError();
 	TestParallelRoadSnaps();

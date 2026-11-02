@@ -534,6 +534,70 @@ std::vector<mapdata::Road> Roads(const std::vector<RoadSegment> &segments)
 
 // --- diagnostics ------------------------------------------------------------------
 
+// Street names' coverage (#35), one picture per navigation area (data/navig.zon):
+// roads coloured by street, unnamed ones red; a legend (colour, name) beside
+// it; and the named road length against all of it, printed.
+void StreetPictures(const std::string &dir, const std::string &gameData, const mapdata::Map &map)
+{
+	std::ifstream zon(gameData + "/data/navig.zon");
+	for (std::string line; std::getline(zon, line);) {
+		char name[32] = {};
+		int type = 0;
+		float x1, y1, z1, x2, y2, z2;
+		if (sscanf(line.c_str(), " %31[^,], %d, %f, %f, %f, %f, %f, %f", name, &type, &x1, &y1, &z1, &x2, &y2, &z2) != 8)
+			continue;
+		const float w = x2 - x1, h = y2 - y1, scale = 1200.0f / std::max(w, h);
+		const int pw = std::max(1, int(w * scale)), ph = std::max(1, int(h * scale));
+		std::vector<uint8_t> img(size_t(pw) * ph * 4, 0);
+		for (size_t i = 0; i < img.size(); i += 4)
+			img[i] = img[i + 1] = img[i + 2] = 32, img[i + 3] = 255;
+		auto colour = [&](uint16_t street, uint8_t rgb[3]) {
+			if (street == mapdata::Map::kNoStreet) {
+				rgb[0] = 255, rgb[1] = 40, rgb[2] = 40;
+				return;
+			}
+			uint32_t hash = 2166136261u;
+			for (char c : map.streets[street])
+				hash = (hash ^ uint8_t(c)) * 16777619u;
+			rgb[0] = uint8_t(60 + hash % 160), rgb[1] = uint8_t(90 + (hash >> 8) % 160), rgb[2] = uint8_t(90 + (hash >> 16) % 160);
+		};
+		std::map<uint16_t, bool> seen;
+		for (size_t r = 0; r < map.roads.size(); r++) {
+			const mapdata::Road &road = map.roads[r];
+			const uint16_t street = r < map.roadStreet.size() ? map.roadStreet[r] : mapdata::Map::kNoStreet;
+			uint8_t rgb[3];
+			colour(street, rgb);
+			const float len = hypotf(road.b.x - road.a.x, road.b.y - road.a.y);
+			const int half = std::max(1, int(road.width * scale * 0.5f));
+			for (float t = 0; t <= 1.0f && len > 0; t += 0.5f / (len * scale + 1)) {
+				const int px = int((road.a.x + (road.b.x - road.a.x) * t - x1) * scale);
+				const int py = int((y2 - (road.a.y + (road.b.y - road.a.y) * t)) * scale);
+				for (int dy = -half; dy <= half; dy++)
+					for (int dx = -half; dx <= half; dx++)
+						if (px + dx >= 0 && py + dy >= 0 && px + dx < pw && py + dy < ph) {
+							uint8_t *p = &img[(size_t(py + dy) * pw + px + dx) * 4];
+							p[0] = rgb[0], p[1] = rgb[1], p[2] = rgb[2];
+						}
+			}
+			const Vec2 mid{(road.a.x + road.b.x) / 2, (road.a.y + road.b.y) / 2};
+			if (street != mapdata::Map::kNoStreet && mid.x >= x1 && mid.x <= x2 && mid.y >= y1 && mid.y <= y2)
+				seen[street] = true;
+		}
+		WritePng(dir + "/" + name + ".png", pw, ph, img);
+		std::ofstream legend(dir + "/" + std::string(name) + ".txt");
+		for (const auto &s : seen) {
+			uint8_t rgb[3];
+			colour(s.first, rgb);
+			char hex[8];
+			snprintf(hex, sizeof hex, "%02x%02x%02x", rgb[0], rgb[1], rgb[2]);
+			legend << hex << " " << map.streets[s.first] << "\n";
+		}
+		const streets::Coverage c = streets::Measure(map.roads, map.roadStreet, {x1, y1}, {x2, y2});
+		printf("streets: %-7s %6.0f of %6.0f m named (%.0f%%)\n", name, c.named, c.total,
+		       c.total > 0 ? 100.0f * c.named / c.total : 0.0f);
+	}
+}
+
 void DebugImages(const std::string &dir, const std::vector<uint8_t> &art, const mapdata::Map &map)
 {
 	const uint8_t pal[4][3] = {{40, 82, 120}, {70, 76, 84}, {52, 92, 64}, {150, 140, 110}};
@@ -748,6 +812,9 @@ int main(int argc, char **argv)
 	}
 	const std::string out = argv[2];
 	BakeRadioLogos(gameData, out.substr(0, out.find_last_of('/') + 1) + "radio.bin");
+	for (int i = 3; i + 1 < argc; i++)
+		if (std::string(argv[i]) == "--streets-debug")
+			StreetPictures(argv[i + 1], gameData, map);
 	if (argc > 3 && argv[3][0] != '-')
 		DebugImages(argv[3], art, map);
 	for (int i = 3; i + 4 < argc; i++)

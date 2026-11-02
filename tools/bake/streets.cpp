@@ -110,4 +110,19 @@ std::vector<uint16_t> Assign(const std::vector<Outline> &outlines, const std::ve
 	return out;
 }
 
+Coverage Measure(const std::vector<mapdata::Road> &roads, const std::vector<uint16_t> &street, Vec2 lo, Vec2 hi)
+{
+	Coverage c;
+	for (size_t r = 0; r < roads.size(); r++) {
+		const Vec2 mid{(roads[r].a.x + roads[r].b.x) / 2, (roads[r].a.y + roads[r].b.y) / 2};
+		if (mid.x < lo.x || mid.y < lo.y || mid.x > hi.x || mid.y > hi.y)
+			continue;
+		const float length = Length(Sub(roads[r].b, roads[r].a));
+		c.total += length;
+		if (r < street.size() && street[r] != mapdata::Map::kNoStreet)
+			c.named += length;
+	}
+	return c;
+}
+
 } // namespace streets
