@@ -140,11 +140,11 @@ const Business *SoldAt(const uint8_t *pickup)
 
 int32_t Price(const uint8_t *sign) { return *reinterpret_cast<const int32_t *>(sign + 0x20); } // m_nQuantity
 
-bool Done(const Business &b) { return gInstalled && ScriptGlobal(b.doneVar) != 0; }
+bool Done(const Business &b) { return Active() && ScriptGlobal(b.doneVar) != 0; }
 
 bool Waiting()
 {
-	if (!gInstalled || ScriptGlobal(kVarKenCalled))
+	if (!Active() || ScriptGlobal(kVarKenCalled))
 		return false;
 	if (ScriptGlobal(kVarStorylinesDone) >= kStorylinesForFinale && Done(kPrintWorks) && ScriptGlobal(kVarCopLand))
 		return false; // his call's coming
@@ -160,12 +160,13 @@ bool Needed(const Business &b)
 }
 
 bool ScriptKnown() { return api.scriptSpace && memcmp(api.scriptSpace + kCheckAt, kCheck, sizeof kCheck) == 0; }
+bool Active() { return gInstalled && ScriptKnown(); }
 bool Install()
 {
 	gOnAMission = reinterpret_cast<bool (*)()>(dlsym(RTLD_MAIN_ONLY, "_ZN11CTheScripts18IsPlayerOnAMissionEv"));
-	gInstalled = gOnAMission && ScriptKnown();
+	gInstalled = gOnAMission != nullptr;
 	if (!gInstalled)
-		Log("story: not the main.scm this was made for; no business hints or credit");
+		Log("story: CTheScripts::IsPlayerOnAMission missing; no business hints or credit");
 	return gInstalled;
 }
 
@@ -173,6 +174,15 @@ void Update()
 {
 	if (!gInstalled || !gConfig.storyHints)
 		return;
+	// main.scm is there once a game's running (not at startup): say once if it's another.
+	static bool saidUnknown;
+	if (!ScriptKnown()) {
+		if (!saidUnknown && api.FindPlayerPed && api.FindPlayerPed())
+			Log("story: not the main.scm this was made for; no business hints or credit");
+		saidUnknown |= api.FindPlayerPed && api.FindPlayerPed();
+		return;
+	}
+	saidUnknown = false;
 	const uint32_t now = *api.timeMs;
 	if (now < gLastNow) // a save loaded: start over
 		gHaveState = false;

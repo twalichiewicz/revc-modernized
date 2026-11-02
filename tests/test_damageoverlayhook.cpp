@@ -427,6 +427,45 @@ int main()
 		camera::OnFoot(ped, .02f);
 		CHECK(angle(camera::Row(0x10), look) < .01f);
 	}
+	// #38: the view he's in goes with him into a vehicle. First person in: the seat
+	// view; third person in: a third-person car view, even if his last drive
+	// was in the seat view (the game keeps the car zoom).
+	{
+		int32_t &carZoom = *reinterpret_cast<int32_t *>(cam + camera::kCarZoom);
+		uint8_t car[16];
+		camera::gWasInVehicle = false;
+		camera::gFirstPerson = true;
+		carZoom = 3;
+		camera::Vehicles(car); // in, first person
+		CHECK(carZoom == 0);
+		camera::Vehicles(nullptr); // out in the seat view: first person on foot
+		CHECK(camera::gFirstPerson);
+		camera::gFirstPerson = false; // third person on foot
+		camera::Vehicles(car);
+		CHECK(carZoom == 3); // the third-person view he last drove in
+		carZoom = 1;
+		camera::Vehicles(car);
+		camera::Vehicles(nullptr);
+		CHECK(!camera::gFirstPerson); // out of a third-person view: third person
+		camera::gFirstPerson = true;
+		camera::Vehicles(car);
+		CHECK(carZoom == 0);
+		camera::Vehicles(nullptr);
+		camera::gFirstPerson = false;
+		camera::Vehicles(car);
+		CHECK(carZoom == 1); // not the seat view his last drive ended in
+		// Mid-drive: the far view, then the seat view; out (first person), third
+		// person on foot, back in: the far view he drove in.
+		carZoom = 3;
+		camera::Vehicles(car);
+		carZoom = 0;
+		camera::Vehicles(car);
+		camera::Vehicles(nullptr);
+		CHECK(camera::gFirstPerson);
+		camera::gFirstPerson = false;
+		camera::Vehicles(car);
+		CHECK(carZoom == 3);
+	}
 	if (failures)
 		return 1;
 	std::puts("all accepted-damage camera-frame Im2D overlay tests passed");

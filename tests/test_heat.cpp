@@ -281,6 +281,47 @@ static void TestLocationOnlyUnderApbSearchesAtItsOwnStars()
 	CHECK(m.stars() == 5);
 }
 
+// #33: with no description at all (heard, only where), a cop has nothing to know
+// him by: his meter doesn't fill, however close. With one, a close look still does.
+static void TestNoDescriptionNoRecognition()
+{
+	Model m;
+	m.Reported(nullptr, kHere, 0, 0, 2);
+	CHECK(m.state() == State::Searching && !m.description().haveOutfit && !m.description().haveVehicle);
+	CHECK(m.RecognitionRate({"player"}, 2, false) == 0);
+	CHECK(m.RecognitionRate({"player"}, 2, true) == 0);
+	Model seen;
+	seen.CopSees({"player"}, kHere, 1000, 2);
+	seen.Tick(kHere, 5001);
+	CHECK(seen.state() == State::Searching);
+	CHECK(seen.RecognitionRate({"player2"}, 4, false) > 0); // changed clothes, but right in front of him
+	CHECK(near(seen.RecognitionRate({"player"}, 30, false), heat::FillRate(30, true, false)));
+}
+
+// #27: known only by his clothes, seen in a car they don't know (through glass,
+// under a roof), they take longer to make him out; on a bike, or on foot, or in
+// the car they know, as quick as ever.
+static void TestOutfitInUnknownCarIsSlower()
+{
+	Model m = Escaped(2); // seen on foot: his outfit only
+	CHECK(m.state() == State::Apb && m.description().haveOutfit && !m.description().haveVehicle);
+	Looks foot{"player"}, car{"player", 191, 1, 1, 7}, bike{"player", 191, 1, 1, 7};
+	car.enclosed = true;
+	const float full = heat::FillRate(20, true, false);
+	CHECK(near(m.RecognitionRate(foot, 20, false), full));
+	CHECK(near(m.RecognitionRate(car, 20, false), full * heat::kOutfitThroughGlass));
+	CHECK(heat::kOutfitThroughGlass > 0 && heat::kOutfitThroughGlass < .5f);
+	CHECK(near(m.RecognitionRate(bike, 20, false), full)); // a rider's clothes are in plain view
+	// The car they know: as quick as ever.
+	Model inCar;
+	inCar.CopSees(car, kHere, 1000, 2);
+	inCar.Tick(kHere, 5001);
+	CHECK(near(inCar.RecognitionRate(car, 20, false), full));
+	Looks other = car;
+	other.vehicleModel = 210;
+	CHECK(near(inCar.RecognitionRate(other, 20, false), full * heat::kOutfitThroughGlass));
+}
+
 // Feedback: two stars or more always end in an APB, a description or not.
 static void TestTwoStarsAlwaysApb()
 {
@@ -370,6 +411,8 @@ int main()
 	TestClearForgetsEverything();
 	TestCallingShowsReported();
 	TestFillRates();
+	TestNoDescriptionNoRecognition();
+	TestOutfitInUnknownCarIsSlower();
 	TestResprayKeepsStars();
 	TestOneStarTimeoutKeepsStars();
 	TestMissionClearFollowsScript();

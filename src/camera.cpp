@@ -682,18 +682,30 @@ bool Hook_Fire(uint8_t *weapon, uint8_t *shooter, CVector *source)
 	return fired;
 }
 
-// First person goes with him into vehicles and out again: getting in with it
-// on, the vehicle's camera starts in the seat view; getting out of one in the
-// seat view, it's first person on foot.
+// The view he's in goes with him into vehicles and out again (#38): getting in
+// in first person, the vehicle's camera starts in the seat view; in third
+// person, in the third-person view he last drove in (the game keeps its car
+// zoom, so a drive that ended in the seat view would start the next in it).
+// Getting out of one in the seat view, it's first person on foot.
+int32_t gThirdCarZoom = 2; // the game's own to start with: mid
 void Vehicles(uint8_t *vehicle)
 {
 	int32_t &carZoom = *reinterpret_cast<int32_t *>(api.theCamera + kCarZoom);
-	if (vehicle && !gWasInVehicle && gFirstPerson)
-		carZoom = 0;
+	if (vehicle && !gWasInVehicle) {
+		if (gFirstPerson) {
+			if (carZoom != 0)
+				gThirdCarZoom = carZoom; // the game's, from his last third-person drive
+			carZoom = 0;
+		} else if (carZoom == 0)
+			carZoom = gThirdCarZoom;
+	}
 	if (!vehicle && gWasInVehicle)
 		gFirstPerson = gCarZoomSeen == 0;
-	if (vehicle)
+	if (vehicle) {
 		gCarZoomSeen = carZoom;
+		if (carZoom != 0)
+			gThirdCarZoom = carZoom;
+	}
 	gWasInVehicle = vehicle != nullptr;
 }
 

@@ -122,6 +122,107 @@ void CarKnocksHimDown()
 	Check(Life(gTommy) == 100, "the ragdoll adds no damage of its own");
 }
 
+// Up again (the game's get-up, finished as PedGetupCB does) and his ragdoll let
+// go, so the fixture's shared rig is back as the next case expects it.
+void LetGo()
+{
+	for (int frame = 0, getUps = gGetUps; frame < 2000 && Body(); ++frame) {
+		Tick();
+		if (gGetUps != getUps) {
+			game::SetPedState(gTommy, game::kPedIdle);
+			gTommy[0x18c] &= ~0x20;
+			getUps = gGetUps;
+		}
+	}
+	Check(!Body(), "fixture: up again, his ragdoll let go");
+}
+
+// The game finishes its get-up (CPed::PedGetupCB, 0x10019fe58: his state
+// restored, then bGetUpAnimStarted cleared) while his ragdoll is still
+// recovering, as under fire, when every hit holds its recovery back. That's the
+// end of the knockdown: no second get-up from the lying pose (nor one a car
+// beside him blocks, leaving him in PED_GETUP standing), and his root and
+// controls are the game's at once.
+void TheGameGetsHimUp()
+{
+	Setup();
+	game::EntitySpeed(gTommy) = {0, .08f, 0};
+	reactions::Hook_SetFall(gTommy, 3000, 25, 0);
+	const int before = gGetUps;
+	for (int frame = 0; frame < 900 && Body() && gGetUps == before; ++frame)
+		Tick();
+	const int falls = gFalls;
+	Check(gGetUps == before + 1 && Body() && Body()->physical.State() == reactphysics::Mode::Recovering,
+	      "fixture: his ragdoll recovering, the game's get-up started once");
+	// PedGetupCB: RestorePreviousState, then bGetUpAnimStarted cleared.
+	game::SetPedState(gTommy, game::kPedIdle);
+	gTommy[0x18c] &= ~0x20;
+	Tick();
+	Check(gGetUps == before + 1, "a finished get-up isn't started again");
+	Check(!reactions::PlayerDown() && !reactions::OwnsRoot(Body()), "his controls and root are the game's at once");
+	for (int frame = 0; frame < 300 && Body(); ++frame)
+		Tick();
+	Check(gGetUps == before + 1 && game::PedState(gTommy) == game::kPedIdle, "nor later, as his ragdoll lets go");
+	Check(!Body(), "his ragdoll lets go");
+	Check(gFalls == falls, "and the hand-back doesn't knock him down again");
+
+	// Under fire: every shot holds a ragdoll's recovery back, but the game has him
+	// up. Shots through the hand-back neither knock him down nor stop it.
+	Setup();
+	game::EntitySpeed(gTommy) = {0, .08f, 0};
+	reactions::Hook_SetFall(gTommy, 3000, 25, 0);
+	const int started = gGetUps;
+	for (int frame = 0; frame < 900 && Body() && gGetUps == started; ++frame)
+		Tick();
+	game::SetPedState(gTommy, game::kPedIdle);
+	gTommy[0x18c] &= ~0x20;
+	const int fallsUnderFire = gFalls;
+	bool controls = true;
+	for (int frame = 0; frame < 300 && Body(); ++frame) {
+		if (frame % 6 == 0)
+			reactions::Hit(gTommy, gGunman, 22, 1);
+		Tick();
+		controls &= !reactions::PlayerDown();
+	}
+	Check(controls && gFalls == fallsUnderFire && gGetUps == started + 1,
+	      "under fire, his controls stay his: no knockdown, no second get-up");
+	Check(!Body(), "and his ragdoll still lets go");
+
+	// Knocked down again while his ragdoll fades out: a whole new knockdown.
+	Setup();
+	game::EntitySpeed(gTommy) = {0, .08f, 0};
+	reactions::Hook_SetFall(gTommy, 3000, 25, 0);
+	const int first = gGetUps;
+	for (int frame = 0; frame < 900 && Body() && gGetUps == first; ++frame)
+		Tick();
+	game::SetPedState(gTommy, game::kPedIdle);
+	gTommy[0x18c] &= ~0x20;
+	for (int frame = 0; frame < 10; ++frame)
+		Tick();
+	Check(Body() && Body()->physical.Weight() < 1, "fixture: his ragdoll part faded");
+	game::EntitySpeed(gTommy) = {0, .08f, 0};
+	reactions::Hook_SetFall(gTommy, 3000, 25, 0);
+	Check(Body() && Body()->physical.Weight() == 1 && reactions::PlayerDown(),
+	      "a knockdown during the fade is a whole one, his ragdoll back at full weight");
+	LetGo();
+
+	// Knocked down again while getting up: a whole new fall, not straight back up.
+	Setup();
+	game::EntitySpeed(gTommy) = {0, .08f, 0};
+	reactions::Hook_SetFall(gTommy, 3000, 25, 0);
+	const int rising = gGetUps;
+	for (int frame = 0; frame < 900 && Body() && gGetUps == rising; ++frame)
+		Tick();
+	Check(Body() && Body()->physical.State() == reactphysics::Mode::Recovering, "fixture: getting up");
+	game::EntitySpeed(gTommy) = {0, .08f, 0};
+	reactions::Hook_SetFall(gTommy, 3000, 25, 0);
+	Check(Body() && Body()->physical.State() == reactphysics::Mode::Falling && reactions::OwnsRoot(Body()),
+	      "a knockdown while getting up is a whole new fall");
+	Tick();
+	Check(gGetUps == rising + 1, "and he isn't sent straight back up");
+	LetGo();
+}
+
 // First person (#25, fully attached): the view rides his ragdoll's head,
 // as it looked when he went down (his facing), and rolls with the tumble.
 void HeadView()
@@ -270,6 +371,7 @@ void WastedThenRespawned()
 int main()
 {
 	CarKnocksHimDown();
+	TheGameGetsHimUp();
 	HeadView();
 	GentleKnockdowns();
 	OrdinaryHitsKeepControl();

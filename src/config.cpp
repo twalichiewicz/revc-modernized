@@ -40,6 +40,7 @@ const char kDefaultIni[] = "; VC Modern HUD for macVC. Delete this file to resto
                            "WorldPopulation=1    ; path/zone-based civilians and foot police; station reinforcements\n"
                            "RaceArrows=1         ; an arrow inside a racing checkpoint points to the next one\n"
                            "CarRadios=1          ; on foot, hear car radios muffled: yours after you get out, stopped cars nearby\n"
+                           "PoliceScanner=1      ; hear the police scanner only in a police vehicle (0: anywhere you're wanted)\n"
                            "RadioLogo=1          ; station logo at the bottom centre when it changes, instead of the big name\n"
                            "Places=1             ; map icons: hospitals, police stations, businesses before they're for sale\n"
                            "StoryHints=1         ; Ken texts what the story needs from your businesses; gold rings on the map\n"
@@ -178,6 +179,8 @@ void Apply(const char *key, const char *value, const char *section)
 		gConfig.raceArrows = b;
 	else if (!strcasecmp(key, "CarRadios"))
 		gConfig.carRadios = b;
+	else if (!strcasecmp(key, "PoliceScanner"))
+		gConfig.scannerInPoliceVehicles = b;
 	else if (!strcasecmp(key, "RadioLogo"))
 		gConfig.radioLogo = b;
 	else if (!strcasecmp(key, "Places"))

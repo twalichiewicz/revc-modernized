@@ -190,6 +190,7 @@ void Body::Reset(const Pose &pose, Vec3 velocity, const Vec3 *neck, const Vec3 *
 	sinceHit_ = still_ = accumulator_ = unsupported_ = weight_ = 0;
 	dead_ = active_ = false;
 	nativeContact_ = false;
+	handedBack_ = false;
 	nativeLocomotion_ = false;
 	nativeVelocity_ = velocity;
 	lastSteps_ = 0;
@@ -233,8 +234,13 @@ void Body::Hit(Joint joint, float strength, bool fatal)
 	dead_ |= fatal;
 	active_ = true;
 	sinceHit_ = still_ = 0;
-	weight_ = 1;
-	if (dead_ || balance_ < .25f || strength > 5)
+	// Handed back (Recovered), a hit jolts the fading body but doesn't bring it
+	// back, nor does his balance fell it; a knockdown's force or death does.
+	const bool strong = strength > 5;
+	handedBack_ &= !(dead_ || strong);
+	if (!handedBack_)
+		weight_ = 1;
+	if (dead_ || strong || (!handedBack_ && balance_ < .25f))
 		mode_ = Mode::Falling;
 }
 void Body::Impulse(Joint joint, Vec3 delta, bool fatal)
@@ -285,7 +291,8 @@ void Body::ContactResponse(Joint joint, Vec3 delta, Vec3 normal, Vec3 incomingVe
 	contactJoint_ = joint;
 	active_ = true;
 	sinceHit_ = still_ = 0;
-	weight_ = 1;
+	if (!handedBack_) // fading out, the game's: a hit or contact jolts it, but doesn't bring it back
+		weight_ = 1;
 }
 
 float Body::Radius(Joint j)
@@ -306,14 +313,18 @@ void Body::Momentum(Vec3 delta, bool fatal)
 	balance_ = std::max(0.0f, balance_ - Length(delta) * .2f);
 	active_ = true;
 	sinceHit_ = still_ = 0;
-	weight_ = 1;
-	if (dead_ || balance_ < .25f || Length(velocity_[Pelvis]) > 3.5f)
+	const bool strong = Length(velocity_[Pelvis]) > 3.5f; // as Impact: a knockdown's force
+	handedBack_ &= !(dead_ || strong);
+	if (!handedBack_)
+		weight_ = 1;
+	if (dead_ || strong || (!handedBack_ && balance_ < .25f))
 		mode_ = Mode::Falling;
 }
 void Body::Knockdown(Vec3 delta)
 {
 	if (!std::isfinite(Length(delta)))
 		return;
+	handedBack_ = false; // the game's own knockdown
 	Momentum(delta);
 	balance_ = 0;
 	mode_ = Mode::Falling;
@@ -676,7 +687,7 @@ void Body::Step(const Pose &target, Sweep sweep, void *context, Vec3 targetVeloc
 		// A corrective foot can recruit at most 28 cm of fresh support.
 		// A moving COM whose capture point lies beyond that reach has
 		// actual irrecoverable momentum, even when a stopped foot touches.
-		if (sweep && contactEffort_ > .01f && supportCount && outside > .28f && Length({relative.x,relative.y,0}) > 1.5f)
+		if (!handedBack_ && sweep && contactEffort_ > .01f && supportCount && outside > .28f && Length({relative.x,relative.y,0}) > 1.5f)
 			mode_ = Mode::Falling;
 	}
 	if (mode_ == Mode::Recovering && !dead_) {
@@ -686,7 +697,7 @@ void Body::Step(const Pose &target, Sweep sweep, void *context, Vec3 targetVeloc
 		balance_ = std::clamp(balance_ + kStep * (balanced ? .45f : -.8f), 0.0f, 1.0f);
 	}
 	unsupported_ = supported ? 0 : unsupported_ + kStep;
-	if (!dead_ && !nativeContact_ && upright && (balance_ < .25f || (sweep && unsupported_ > .2f)))
+	if (!dead_ && !nativeContact_ && !handedBack_ && upright && (balance_ < .25f || (sweep && unsupported_ > .2f)))
 		mode_ = Mode::Falling;
 	still_ = motion / Count < .06f ? still_ + kStep : 0;
 	if (mode_ == Mode::Falling && still_ > .55f) {
@@ -722,11 +733,20 @@ void Body::Step(const Pose &target, Sweep sweep, void *context, Vec3 targetVeloc
 		if (highEnough && uprightPose && Length(Sub(position_[Pelvis], recoveryAnchor_)) < .15f)
 			mode_ = Mode::Balanced;
 	}
-	if (mode_ == Mode::Balanced && sinceHit_ > .8f) {
+	if (mode_ == Mode::Balanced && (sinceHit_ > .8f || handedBack_)) {
 		weight_ = std::max(0.0f, weight_ - kStep * 1.5f);
 		if (weight_ <= 0)
-			active_ = false;
+			active_ = handedBack_ = false;
 	}
+}
+
+void Body::Recovered()
+{
+	if (!active_ || dead_ || mode_ != Mode::Recovering)
+		return;
+	mode_ = Mode::Balanced;
+	balance_ = 1;
+	handedBack_ = true;
 }
 
 float Body::Translate(Vec3 delta,Sweep sweep,void *context)

@@ -84,6 +84,8 @@ heat::Looks LooksOf(const uint8_t *player)
 		l.colour1 = v[kColour1];
 		l.colour2 = v[kColour2];
 		l.vehicle = gVehicleRef ? gVehicleRef(v) : -1;
+		const int32_t type = *reinterpret_cast<const int32_t *>(v + 0x348); // m_vehType: car 0, heli 3, plane 4
+		l.enclosed = type == 0 || type == 3 || type == 4;
 	}
 	return l;
 }

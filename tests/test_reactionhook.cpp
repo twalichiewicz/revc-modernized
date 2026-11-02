@@ -991,6 +991,7 @@ int main()
 		}
 		prone.nativeMode = reactphysics::Mode::Falling;
 		prone.heldFall = true;
+		game::SetPedState(gPed, game::kPedFall); // held in the game's fall (its SetFall -1)
 		prone.savedGetUpTimer = 1234;
 		*reinterpret_cast<uint32_t *>(gPed + 0x68c) = UINT32_MAX;
 		*reinterpret_cast<CVector *>(gPed + 0x38) = {0, 0, .18f};

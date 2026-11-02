@@ -37,7 +37,7 @@ int32_t &Money() { return *reinterpret_cast<int32_t *>(const_cast<uint8_t *>(Pla
 // (Hook_SetHelpMessage adds the rest), and if the money went, he bought it.
 bool Hook_PickupUpdate(uint8_t *pickup, uint8_t *ped, uint8_t *vehicle, int player)
 {
-	if (!gConfig.credit || !story::SoldAt(pickup))
+	if (!gConfig.credit || !story::Active() || !story::SoldAt(pickup))
 		return orig_PickupUpdate(pickup, ped, vehicle, player);
 	int32_t &price = *reinterpret_cast<int32_t *>(pickup + 0x20); // m_nQuantity
 	const int32_t full = price, money = Money(), owed = Owed();
@@ -94,11 +94,12 @@ void Hook_SetHelpMessage(uint16_t *text, bool quick, bool forever)
 
 } // namespace
 
-int32_t Owed() { return gInstalled ? std::max(0, ScriptGlobal(kVarOwed)) : 0; }
+// Its variable is this main.scm's (story::Active): another's, nothing's owed.
+int32_t Owed() { return gInstalled && story::Active() ? std::max(0, ScriptGlobal(kVarOwed)) : 0; }
 
 void Update()
 {
-	if (!gInstalled)
+	if (!gInstalled || !story::Active())
 		return;
 	int32_t &owed = ScriptGlobal(kVarOwed);
 	if (owed <= 0)
@@ -118,12 +119,12 @@ void Update()
 		Log("credit: paid off");
 }
 
-bool Install(bool scriptKnown)
+// Installed whatever the script space holds: at startup it holds no main.scm
+// yet. The hooks act only while story::Active().
+bool Install()
 {
 	if (!gConfig.credit)
 		return true;
-	if (!scriptKnown)
-		return false;
 	gInstalled =
 	    hooks::Install("_ZN7CPickup6UpdateEP10CPlayerPedP8CVehiclei", Hook_PickupUpdate, orig_PickupUpdate) &&
 	    hooks::Install("_ZN4CHud14SetHelpMessageEPtbb", Hook_SetHelpMessage, orig_SetHelpMessage);

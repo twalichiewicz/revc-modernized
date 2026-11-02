@@ -18,6 +18,7 @@
 // open, the radar mode is not "map & blips", or the minimap is disabled.
 // The rest of the HUD is in hud.cpp, the pause menu in menu.cpp.
 #include "achievements.h"
+#include "scanner.h"
 #include "statspage.h"
 #include "aimcam.h"
 #include "alert.h"
@@ -691,9 +692,11 @@ __attribute__((constructor)) void Init()
 		Log("drive-by hooks missing; drive-bys left as is (re-run install.sh)");
 	if (!phone::Install())
 		Log("phone functions missing; calls left as they are");
-	const bool scriptKnown = story::Install();
+	story::Install();
 	achievements::Install();
-	if (!credit::Install(scriptKnown))
+	if (!scanner::Install())
+		Log("scanner: hook missing (re-run install.sh); the police scanner is heard anywhere, as in the game");
+	if (!credit::Install())
 		Log("credit: hooks missing (re-run install.sh); businesses sell for the full price");
 	if (!places::Install())
 		Log("places: the game's respawn points are missing; no hospital or police icons");

@@ -1,6 +1,7 @@
 #include "watch.h"
 #include "game.h"
 #include "log.h"
+#include "rtshadows.h"
 
 #include <atomic>
 #include <chrono>
@@ -119,6 +120,7 @@ void Watchdog()
 			LogBacktrace(k);
 			std::this_thread::sleep_for(milliseconds(400));
 		}
+		rtshadows::LogLastGeometry(); // stuck in the ray-traced shadows, what they were given
 	}
 }
 

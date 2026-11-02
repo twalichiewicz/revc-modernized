@@ -217,6 +217,16 @@ void Hunt(uint8_t *h, uint8_t *player, uint32_t now)
 	}
 }
 
+// How it was lost (#30: Hunters seen crashing at six stars), for the log: its
+// health, its rotor, how high it was over him and how far off.
+void Lost(const uint8_t *h, const uint8_t *player, const char *why)
+{
+	const CVector pos = EntityPos(h), him = player ? EntityPos(player) : pos;
+	Log("hunter: down, %s (health %.0f of %.0f, rotor %.2f, %.0f m over him, %.0f m off)", why,
+	    *reinterpret_cast<const float *>(h + kHealth), kToughness, *reinterpret_cast<const float *>(h + kRotor),
+	    pos.z - him.z, std::hypot(pos.x - him.x, pos.y - him.y));
+}
+
 } // namespace
 
 bool Install()
@@ -283,16 +293,19 @@ void Update(uint32_t now)
 	Crew(h);
 	driver=*reinterpret_cast<uint8_t **>(h+0x218);
 	if(!driver && gSoldier>=0){
+		Lost(h, player, "its pilot is out of the seat");
 		h[kMission]=0;gNotInteresting(h);gHunter=gSoldier=-1;return;
 	}
 	if(!driver || gSoldier<0)return; // failed/streaming crew creation retries without another aircraft
 	if(PedState(driver)==kPedDie || PedState(driver)==kPedDead || !std::isfinite(Health(driver)) || Health(driver)<=0 ||
 	   !PedInVehicle(driver) || PedVehicle(driver)!=h){
 		// Stop the direct AI transform controller; native gravity/contact takes over.
+		Lost(h, player, Health(driver) <= 0 || PedState(driver) == kPedDie || PedState(driver) == kPedDead
+		                    ? "its pilot is dead" : "its pilot left it");
 		h[kMission]=0;gNotInteresting(h);gHunter=gSoldier=-1;return;
 	}
 	if (Status(h) == kWrecked || *reinterpret_cast<const float *>(h + kHealth) <= 0.0f) {
-		Log("hunter: down");
+		Lost(h, player, Status(h) == kWrecked ? "wrecked" : "out of health");
 		gNotInteresting(h); // (the game clears the wreck away)
 		gHunter = -1;
 		return;

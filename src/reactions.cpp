@@ -530,10 +530,21 @@ void NativeMode(Person &p, uint8_t *ped)
 		p.heldFall = true;
 		gSetFall(ped, -1, 27, 1); // KO_skid_back; -1 holds native Fall until physical recovery
 	}
-	if (mode == rp::Mode::Recovering && Health(ped) > 0 &&
-		(p.nativeMode != rp::Mode::Recovering || !(ped[0x18c] & 0x20)))
-		StartGetUp(ped); // bGetUpAnimStarted stays clear while a real obstruction prevents the animation
-	p.nativeMode = mode;
+	if (mode == rp::Mode::Recovering && Health(ped) > 0) {
+		// Its get-up only while the game still has him down: held in its fall, or
+		// in PED_GETUP with the animation not started (bGetUpAnimStarted stays
+		// clear while a real obstruction prevents it). Its PedGetupCB clears that
+		// same flag when the get-up finishes, after restoring his state: then the
+		// knockdown's over. Starting it again would replay it from the lying pose
+		// (or, a car beside him, leave him standing in PED_GETUP), and his body
+		// would keep his root and, Tommy's, his controls (#25).
+		const int32_t state = PedState(ped);
+		if (state == kPedFall || (state == kPedGetUp && !(ped[0x18c] & 0x20)))
+			StartGetUp(ped);
+		else if (state != kPedGetUp)
+			p.physical.Recovered();
+	}
+	p.nativeMode = p.physical.State();
 }
 // The side he was hit, as the game's knockdown animations name it (AnimationId:
 // KO front/left/back/right 13-16, shot face/stomach 17-18, spin forward 23-24,
@@ -595,7 +606,10 @@ void Hook_SetFall(uint8_t *ped, int duration, int animation, uint8_t direction)
 		return;
 	}
 	// Tommy knocked down (#25): the game's own knockdown first, then his ragdoll.
-	if (gInstalled && gConfig.npcReactions && api.FindPlayerPed && ped == api.FindPlayerPed() && !Find(ped) &&
+	// Every one, but one while he's already down (Falling, Settled: its own held
+	// fall, -1, re-enters here): getting up, or his ragdoll fading out after,
+	// a knockdown is a whole new one, not the game's animation under his ragdoll.
+	if (gInstalled && gConfig.npcReactions && api.FindPlayerPed && ped == api.FindPlayerPed() && !Physical(Find(ped)) &&
 	    !(gCutscene && *gCutscene) && !PedInVehicle(ped) && playerreact::CanRagdoll(ped)) {
 		const Vec3 incoming = Mul(V(EntitySpeed(ped)), 50);
 		orig_SetFall(ped, duration, animation, direction);

@@ -28,6 +28,7 @@ struct Looks {
 	int vehicleModel = -1;
 	int colour1 = -1, colour2 = -1;
 	int vehicle = -1;
+	bool enclosed = false; // in a car, a helicopter or a plane: his clothes seen through glass
 };
 
 // What the police have on him: the outfit and the last vehicle they saw him in.
@@ -47,6 +48,9 @@ constexpr int kApbStars = 2; // a search over at this many stars or more ends in
 
 // The search area round where they lost him, m.
 float SearchRadius(int stars);
+// Known only by his clothes, enclosed in a vehicle they don't know: how much
+// slower a cop makes him out (#27).
+constexpr float kOutfitThroughGlass = 0.35f;
 // How fast a cop's eye fills, per second, at `distance` m: from far off if he
 // matches the description, only from close up if not; a helicopter sees 2.5
 // times as far but never knows him without a match.

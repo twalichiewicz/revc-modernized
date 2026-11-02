@@ -68,6 +68,11 @@ DEFAULT_HOOKS = [
     "_Z15LoadINISettingsv",
     "_Z15SaveINISettingsv",
     "_psSetVideoMode",
+    # the ray-traced shadows' moving geometry, checked before Metal traces it
+    "_ZN2rw3gl324mtlrtSetDynamicTrianglesEPKfi",
+    "_ZN2rw3gl317mtlrtAddTrianglesEPKfi",
+    "_ZN2rw3gl328mtlrtAddTranslucentTrianglesEPKfi",
+    "_ZN2rw3gl317mtlrtTraceShadowsEPKNS0_9MtlRtViewEiiPhS4_S4_",
     # This exact native build specializes the local RT light-candidate emitter.
     "_ZNSt3__16vectorIZN10CRTShadows6RenderEvE9CandidateNS_9allocatorIS2_EEE9push_backB9nqe210106ERKS2_",
     "_ZN6CRadar12DrawRadarMapEv",
@@ -84,6 +89,8 @@ DEFAULT_HOOKS = [
     # pause menu: tabs, compact map legend
     "_ZN12CMenuManager14DrawBackgroundEb",
     "_ZN12CMenuManager9UserInputEv",
+    # the police scanner, only in a police vehicle (scanner.h)
+    "_ZN13cAudioManager18ServicePoliceRadioEv",
     # the Stats page's own list, under the redrawn one (statspage.h)
     "_ZN12CMenuManager10PrintStatsEv",
     "_ZN9CSprite2d8DrawRectERK5CRectRK5CRGBA",

@@ -28,7 +28,7 @@ using namespace game;
 namespace hud {
 namespace {
 
-enum Site { kNone, kMoney, kClock, kWeapon, kAmmo, kStars };
+enum Site { kNone, kMoney, kClock, kWeapon, kAmmo, kStars, kZone };
 
 // Return addresses of the calls CHud::Draw makes for each element
 // (macVC 1.0.5217, relative to the __TEXT base 0x100000000).
@@ -37,12 +37,14 @@ struct CallSite {
 	Site site;
 };
 constexpr CallSite kPrintSites[] = {{0x1f8284, kMoney}, {0x1fa5b0, kClock}, {0x1f8b00, kAmmo}, {0x1f9674, kStars}};
-constexpr CallSite kScaleSites[] = {{0x1f89dc, kAmmo}, {0x1fa4b8, kClock}};
+// kZone: the area name, bottom right (its PrintStringFromBottom of m_ZoneToPrint follows, 0x1f9f88).
+constexpr CallSite kScaleSites[] = {{0x1f89dc, kAmmo}, {0x1fa4b8, kClock}, {0x1f9e38, kZone}};
 constexpr CallSite kDrawSites[] = {{0x1f8800, kWeapon}, {0x1f8968, kWeapon}};
 // The third-person (free-aim camera) crosshair: the M4, Ruger and M60's, and every other gun's.
 constexpr uint32_t kCrosshairSites[] = {0x1f7be8, 0x1fc714};
 
 constexpr float kWeaponScale = 0.5f;
+constexpr float kZoneScale = 0.6f; // the area name (#35): smaller, its bottom where the game had it
 // Our stars, in the clock's font scale (CHud::Draw gives both 0.7 x 1.25 units).
 constexpr float kStarScale = 0.5f;
 constexpr int kStarSlots = 6;
@@ -238,6 +240,10 @@ __attribute__((noinline)) void Hook_SetScale(float sx, float sy)
 	case kAmmo:
 		sx *= kWeaponScale;
 		sy *= kWeaponScale;
+		break;
+	case kZone:
+		sx *= kZoneScale;
+		sy *= kZoneScale;
 		break;
 	case kClock:
 		gClockScaleXY = {sx, sy};

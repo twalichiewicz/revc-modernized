@@ -357,6 +357,47 @@ int main()
 			break;
 		}
 	}
+	// Recovered (the game has got him up): weak hits and his own balance don't
+	// fell a handed-back body, and it fades out under them; a strong impact (a
+	// car) or a fatal one is a ragdoll again, at full weight.
+	for (int kind = 0; kind < 3; kind++) {
+		Body back;
+		back.Reset(pose);
+		for (int i = 0; i < 4; i++)
+			back.Impulse(KneeL, {0, -1.4f, 0});
+		for (int i = 0; i < 900 && back.State() != Mode::Recovering; i++)
+			back.Advance(1.0f / 60, pose, FloorAndWall, nullptr);
+		back.Recovered();
+		if (back.State() != Mode::Balanced) {
+			printf("FAIL: Recovered left a recovering body in mode %d\n", int(back.State()));
+			fail++;
+			continue;
+		}
+		bool fell = false;
+		float weightAtFall = 0;
+		for (int i = 0; i < 180 && back.Active() && !fell; i++) {
+			if (kind == 0 && i % 6 == 0) // shots to his legs: each drains his balance most
+				back.Impulse(KneeL, {0, .8f, 0});
+			if (kind == 1 && i == 12)
+				back.Impulse(Chest, {0, 8, 0});
+			if (kind == 2 && i == 12)
+				back.Impulse(Chest, {0, .8f, 0}, true);
+			back.Advance(1.0f / 60, pose, FloorAndWall, nullptr);
+			if (back.State() == Mode::Falling) {
+				fell = true;
+				weightAtFall = back.Weight();
+			}
+		}
+		if (kind == 0 && (fell || back.Active())) {
+			printf("FAIL: a handed-back body under weak hits fell=%d or kept on (active=%d)\n", fell, back.Active());
+			fail++;
+		}
+		if (kind > 0 && (!fell || weightAtFall < 1)) {
+			printf("FAIL: a %s hit on a handed-back body: fell=%d weight=%.2f\n", kind == 1 ? "strong" : "fatal", fell,
+			       weightAtFall);
+			fail++;
+		}
+	}
 	Body other;
 	other.Reset(pose);
 	if (other.Dead() || other.Active() || other.Positions()[Pelvis].z != 0.95f) {

@@ -54,6 +54,10 @@ class Body {
 	// A knockdown the game has already decided (CPed::SetFall): the push, and
 	// off his feet at once however gentle it is (a trip falls too).
 	void Knockdown(Vec3 deltaVelocity);
+	// The game has got him up (its get-up finished): a body still recovering is
+	// the game's again. It fades out, under fire too, and no longer falls by its
+	// own balance or a hit: only the game's next knockdown (Knockdown) or death.
+	void Recovered();
 	void Advance(float dt, const Pose &target, Sweep sweep, void *context);
 	const Pose &Positions() const { return position_; }
 	const Pose &Reference() const { return rest_; }
@@ -88,6 +92,7 @@ class Body {
 	float balance_ = 1, sinceHit_ = 0, still_ = 0, accumulator_ = 0, unsupported_ = 0, weight_ = 0;
 	bool dead_ = false, active_ = false;
 	bool nativeContact_ = false;
+	bool handedBack_ = false; // Recovered: fading out, the game's to knock down
 	bool nativeLocomotion_ = false;
 	Vec3 nativeVelocity_{};
 	int lastSteps_ = 0;

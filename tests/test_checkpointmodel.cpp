@@ -1,3 +1,4 @@
+#include <algorithm>
 #include "checkpointmodel.h"
 #include <cassert>
 #include <cmath>
@@ -43,5 +44,33 @@ int main()
 	in.next.z = 23;
 	blips[2].pos.z = 23;
 	assert(Resolve(in, blips, 3).vertices[0].z > in.current.z + 0.35f); // flight checkpoints can lead uphill
+	in.next.z = in.current.z;
+	blips[2].pos.z = in.current.z;
+	// #28: a solid arrow floating in the checkpoint, not painted on the ground:
+	// a top and an underside a thickness apart, closed by its sides.
+	const auto solid = Resolve(in, blips, 3);
+	assert(solid.valid && kArrowVertices == 14);
+	float lowest = 1e9f;
+	for (int i = 0; i < kArrowVertices; i++)
+		lowest = std::min(lowest, solid.vertices[i].z);
+	assert(lowest > in.current.z + 1.0f); // up in the sphere, clear of the road
+	for (int i = 0; i < 7; i++) {
+		const auto top = solid.vertices[i], under = solid.vertices[i + 7];
+		assert(top.x == under.x && top.y == under.y && top.z - under.z > 0.2f);
+	}
+	// Every face, both windings (the cull mode is the engine's): top 5, underside 5, sides 7 x 2.
+	assert(kArrowIndexCount == (5 + 5 + 14) * 3 * 2);
+	int edges[14][14] = {};
+	for (int t = 0; t < kArrowIndexCount; t += 3)
+		for (int k = 0; k < 3; k++) {
+			const int a = kArrowIndices[t + k], b = kArrowIndices[t + (k + 1) % 3];
+			assert(a >= 0 && a < kArrowVertices && b >= 0 && b < kArrowVertices && a != b);
+			edges[a][b]++;
+		}
+	for (int i = 0; i < 7; i++) { // each outline edge on its face, and walled
+		const int j = (i + 1) % 7;
+		assert(edges[i][j] + edges[j][i] >= 2 && edges[i + 7][j + 7] + edges[j + 7][i + 7] >= 2);
+		assert(edges[i][i + 7] + edges[i + 7][i] >= 2);
+	}
 	puts("all checkpoint model tests passed");
 }

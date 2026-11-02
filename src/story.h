@@ -35,7 +35,11 @@ bool Needed(const Business &b);
 
 bool Install();
 // main.scm is the one this mod's script globals are for (achievements share them).
+// The game loads it only when a game starts or loads, after Install: checked
+// as it's needed.
 bool ScriptKnown();
+// Installed, and a game running with that main.scm: hints and credit work.
+bool Active();
 // Every frame from CHud::Draw: Ken's texts, when there's news or it's been a while.
 void Update();
 

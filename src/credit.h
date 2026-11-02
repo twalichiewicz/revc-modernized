@@ -9,8 +9,9 @@
 
 namespace credit {
 
-// `scriptKnown`: main.scm is the one that global was checked against.
-bool Install(bool scriptKnown);
+// Its hooks, whatever the script space holds yet; they act only while
+// story::Active() (a game running with the main.scm its variable is for).
+bool Install();
 int32_t Owed();
 // Every frame from CHud::Draw: income pays off what he owes.
 void Update();

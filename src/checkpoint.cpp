@@ -82,19 +82,20 @@ void Draw()
 	const CVector eye = shaders::CameraPosition();
 	if (std::hypot(input.current.x - eye.x, input.current.y - eye.y) > 220)
 		return;
-	Vertex vertices[7]{};
-	for (int i = 0; i < 7; i++) {
+	// Solid (#28): a lit top, its underside in shade, the sides between the two.
+	Vertex vertices[checkpointmodel::kArrowVertices]{};
+	for (int i = 0; i < checkpointmodel::kArrowVertices; i++) {
+		const bool top = i < 7;
 		vertices[i].x = arrow.vertices[i].x;
 		vertices[i].y = arrow.vertices[i].y;
 		vertices[i].z = arrow.vertices[i].z;
-		vertices[i].nz = 1;
-		vertices[i].r = 255;
-		vertices[i].g = 245;
-		vertices[i].b = 190;
+		vertices[i].nz = top ? 1 : -1;
+		vertices[i].r = top ? 255 : 150;
+		vertices[i].g = top ? 245 : 132;
+		vertices[i].b = top ? 190 : 84;
 		vertices[i].a = 235;
 	}
-	// Both faces are visible without changing the engine's shared cull mode.
-	uint16_t indices[] = {0, 1, 2, 0, 2, 3, 0, 3, 4, 0, 4, 5, 0, 5, 6, 0, 2, 1, 0, 3, 2, 0, 4, 3, 0, 5, 4, 0, 6, 5};
+	auto indices = checkpointmodel::kArrowIndices; // the render takes them as non-const
 	const shaders::SavedStates saved;
 	api.RwRenderStateSet(kStateTextureRaster, nullptr);
 	api.RwRenderStateSet(kStateZTest, reinterpret_cast<void *>(1));
@@ -103,8 +104,8 @@ void Draw()
 	api.RwRenderStateSet(kStateSrcBlend, reinterpret_cast<void *>(kBlendSrcAlpha));
 	api.RwRenderStateSet(kStateDestBlend, reinterpret_cast<void *>(kBlendInvSrcAlpha));
 	api.RwRenderStateSet(kStateFog, nullptr);
-	if (gTransform(vertices, 7, nullptr, 0)) {
-		gRender(3, indices, 30);
+	if (gTransform(vertices, checkpointmodel::kArrowVertices, nullptr, 0)) {
+		gRender(3, indices.data(), checkpointmodel::kArrowIndexCount);
 		gEnd();
 	}
 }

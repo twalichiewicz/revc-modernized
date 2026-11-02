@@ -90,11 +90,18 @@ bool Model::Matches(const Looks &looks) const
 
 float Model::RecognitionRate(const Looks &looks, float distance, bool helicopter) const
 {
-	const bool matches = Matches(looks);
-	// The APB remembers a description, not a face known to every officer.
-	if (state_ == State::Apb && !matches)
+	const Description &d = description_;
+	const bool byOutfit = d.haveOutfit && d.outfit == looks.outfit;
+	const bool byVehicle = d.haveVehicle && looks.vehicleModel == d.vehicleModel && looks.colour1 == d.colour1 &&
+	                       looks.colour2 == d.colour2;
+	const bool matches = byOutfit || byVehicle;
+	// The APB remembers a description, not a face known to every officer; and
+	// with no description at all, they've nothing to know him by (#33).
+	if (!matches && (state_ == State::Apb || (!d.haveOutfit && !d.haveVehicle)))
 		return 0.0f;
-	return FillRate(distance, matches, helicopter);
+	const float rate = FillRate(distance, matches, helicopter);
+	// Known only by his clothes, seen through a car's glass (#27).
+	return byOutfit && !byVehicle && looks.enclosed ? rate * kOutfitThroughGlass : rate;
 }
 
 bool Model::OutfitStruck(const Looks &looks) const
