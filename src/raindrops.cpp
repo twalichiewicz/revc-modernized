@@ -14,7 +14,6 @@
 #include <cmath>
 #include <cstring>
 #include <dlfcn.h>
-#include <unordered_map>
 #include <vector>
 
 using namespace game;
@@ -22,34 +21,13 @@ namespace raindrops {
 namespace {
 
 // CVehicle / CPhysical (macVC 1.0.5217).
-constexpr size_t kRwObject = 0x58, kModelIndex = 0x6a, kMoveSpeed = 0x84, kVehicleType = 0x348;
+constexpr size_t kMoveSpeed = 0x84, kVehicleType = 0x348;
 constexpr uint8_t kNoRainZone = 0x08; // CCullZones' no-rain attribute (as CWeather::AddRain tests it)
 constexpr int kStateCull = 20, kCullNone = 1;
 constexpr int kMaskUnit = 12;         // texture units: librw 0-3, the clouds 4-8, the lighting 9-11
 constexpr int kMaskDown = 2;          // the glass mask at half the frame's resolution
 
-struct V3 {
-	float x, y, z;
-};
-struct Triangle {
-	uint16_t v[3], material;
-};
-struct RW {
-	void *(*ForAllAtomics)(void *clump, void *(*cb)(void *atomic, void *data), void *data);
-	void *(*AtomicFrame)(const void *atomic);
-	void *(*AtomicGeometry)(const void *atomic);
-	float *(*FrameLTM)(void *frame);
-	const char *(*FrameName)(void *frame);
-	int (*NumTriangles)(const void *geometry);
-	const Triangle *(*Triangles)(const void *geometry);
-	void *(*MorphTarget)(const void *geometry, int index);
-	const V3 *(*Vertices)(const void *morphTarget);
-	const void *(*Material)(const void *geometry, int index);
-	const uint8_t *(*Colour)(const void *material); // RwRGBA
-	int (*StateGet)(int state, void *value);
-} rw;
-bool gGeometry; // the car's triangles can be read (the windscreen's mask)
-
+int (*gStateGet)(int state, void *value);
 const int32_t *gArea;
 const uint8_t *gCameraZone, *gPlayerZone;
 dropmodel::Drops gDrops;
@@ -59,62 +37,14 @@ void *gDropShader, *gMaskShader;
 int uFrame;
 shaders::Target gMask;
 Im2DCanvas gCanvas;
+using worlddraw::Face;
 
-// The car's own triangles in the world, glass or not.
-struct Face {
-	Vec3 a, b, c;
-	bool glass;
-};
-struct Collecting {
-	std::vector<Face> *out;
-};
-V3 Apply(const float *m, V3 p) // rw::Matrix: right, up, at and position, each with a pad
-{
-	return {m[0] * p.x + m[4] * p.y + m[8] * p.z + m[12], m[1] * p.x + m[5] * p.y + m[9] * p.z + m[13],
-	        m[2] * p.x + m[6] * p.y + m[10] * p.z + m[14]};
-}
-void *Collect(void *atomic, void *data)
-{
-	constexpr uint8_t kRenders = 0x04; // rw::Atomic's RENDER flag: the game hides the damaged and lower-detail pieces
-	if (!(static_cast<const uint8_t *>(atomic)[2] & kRenders))
-		return atomic;
-	void *frame = rw.AtomicFrame(atomic);
-	const char *name = frame ? rw.FrameName(frame) : nullptr;
-	if (name && strstr(name, "_vlo"))
-		return atomic; // the far version (drawn instead of the near one, never with it)
-	const void *geometry = rw.AtomicGeometry(atomic);
-	void *morph = geometry ? rw.MorphTarget(geometry, 0) : nullptr;
-	const V3 *verts = morph ? rw.Vertices(morph) : nullptr;
-	const Triangle *tris = geometry ? rw.Triangles(geometry) : nullptr;
-	const float *ltm = frame ? rw.FrameLTM(frame) : nullptr;
-	if (!verts || !tris || !ltm)
-		return atomic;
-	std::vector<Face> &out = *static_cast<Collecting *>(data)->out;
-	for (int i = 0, n = rw.NumTriangles(geometry); i < n; i++) {
-		const void *material = rw.Material(geometry, tris[i].material);
-		const uint8_t *colour = material ? rw.Colour(material) : nullptr;
-		const V3 a = Apply(ltm, verts[tris[i].v[0]]), b = Apply(ltm, verts[tris[i].v[1]]), c = Apply(ltm, verts[tris[i].v[2]]);
-		out.push_back({{a.x, a.y, a.z}, {b.x, b.y, b.z}, {c.x, c.y, c.z}, colour && colour[3] < 255});
-	}
-	return atomic;
-}
-std::vector<Face> CarFaces(const uint8_t *car)
-{
-	std::vector<Face> faces;
-	Collecting c{&faces};
-	if (void *clump = gGeometry ? *reinterpret_cast<void *const *>(car + kRwObject) : nullptr)
-		rw.ForAllAtomics(clump, Collect, &c);
-	return faces;
-}
-
-// No roof over his head (a convertible, the top down): drops fall on him, not the glass.
-std::unordered_map<int, bool> gTopDown; // by model
+// No roof over his head (the game's open-top cars, or nothing over his eye):
+// drops fall on him, not the glass. Asked each time (some roofs are extras).
 bool TopDown(const uint8_t *car, const std::vector<Face> &faces, CVector eye)
 {
-	const int model = *reinterpret_cast<const int16_t *>(car + kModelIndex);
-	auto it = gTopDown.find(model);
-	if (it != gTopDown.end())
-		return it->second;
+	if (worlddraw::OpenTop(car))
+		return true;
 	bool roof = false;
 	for (const Face &f : faces) {
 		const float low = std::min({f.a.z, f.b.z, f.c.z});
@@ -123,8 +53,7 @@ bool TopDown(const uint8_t *car, const std::vector<Face> &faces, CVector eye)
 		roof |= !f.glass && low > eye.z && low < eye.z + 0.8f && eye.x > x0 - 0.3f && eye.x < x1 + 0.3f &&
 		        eye.y > y0 - 0.3f && eye.y < y1 + 0.3f;
 	}
-	Log("rain drops: model %d %s", model, roof ? "has a roof: drops on its glass" : "is open: drops on the view");
-	return gTopDown[model] = !roof;
+	return !roof;
 }
 
 const char *const kScreenVertex = R"(
@@ -237,7 +166,7 @@ bool DrawMask(const std::vector<Face> &faces, CVector eye, float w, float h)
 	gCanvas.Quad({0, 0}, {W, 0}, {W, H}, {0, H}, {0, 0, 0, 255});
 	gCanvas.Flush();
 	void *cull = nullptr;
-	rw.StateGet(kStateCull, &cull);
+	gStateGet(kStateCull, &cull);
 	api.RwRenderStateSet(kStateCull, reinterpret_cast<void *>(kCullNone)); // the glass seen from inside: its back
 	api.RwRenderStateSet(kStateZTest, nullptr);
 	{
@@ -276,7 +205,7 @@ void Draw()
 	const CVector eye = shaders::CameraPosition();
 	std::vector<Face> faces;
 	if (car && (type == dropmodel::kCar || type == dropmodel::kHeli || type == dropmodel::kPlane))
-		faces = CarFaces(car);
+		faces = worlddraw::VehicleFaces(car);
 	const bool topDown = type == dropmodel::kCar && !faces.empty() && TopDown(car, faces, eye);
 	const dropmodel::DropMode mode = dropmodel::ModeFor(camera::FirstPersonOnFoot(), car != nullptr, type, topDown, gArea && *gArea != 0);
 	const mapdata::Map *map = minimap::RainMap();
@@ -325,14 +254,6 @@ void Draw()
 	shaders::OverrideIm2D(nullptr);
 }
 
-namespace {
-template <typename T> bool Bind(T &out, const char *name)
-{
-	out = reinterpret_cast<T>(dlsym(RTLD_MAIN_ONLY, name));
-	return out != nullptr;
-}
-} // namespace
-
 bool Install()
 {
 	if (!gConfig.rainDrops)
@@ -340,19 +261,9 @@ bool Install()
 	gArea = static_cast<const int32_t *>(dlsym(RTLD_MAIN_ONLY, "_ZN5CGame8currAreaE"));
 	gCameraZone = static_cast<const uint8_t *>(dlsym(RTLD_MAIN_ONLY, "_ZN10CCullZones19CurrentFlags_CameraE"));
 	gPlayerZone = static_cast<const uint8_t *>(dlsym(RTLD_MAIN_ONLY, "_ZN10CCullZones19CurrentFlags_PlayerE"));
-	gGeometry = Bind(rw.ForAllAtomics, "_Z20RpClumpForAllAtomicsPN2rw5ClumpEPFPNS_6AtomicES3_PvES4_") &&
-	            Bind(rw.AtomicFrame, "_Z16RpAtomicGetFramePKN2rw6AtomicE") &&
-	            Bind(rw.AtomicGeometry, "_Z19RpAtomicGetGeometryPKN2rw6AtomicE") &&
-	            Bind(rw.FrameLTM, "_Z13RwFrameGetLTMPN2rw5FrameE") && Bind(rw.FrameName, "_Z16GetFrameNodeNamePN2rw5FrameE") &&
-	            Bind(rw.NumTriangles, "_Z25RpGeometryGetNumTrianglesPKN2rw8GeometryE") &&
-	            Bind(rw.Triangles, "_Z22RpGeometryGetTrianglesPKN2rw8GeometryE") &&
-	            Bind(rw.MorphTarget, "_Z24RpGeometryGetMorphTargetPKN2rw8GeometryEi") &&
-	            Bind(rw.Vertices, "_Z24RpMorphTargetGetVerticesPKN2rw11MorphTargetE") &&
-	            Bind(rw.Material, "_Z21RpGeometryGetMaterialPKN2rw8GeometryEi") &&
-	            Bind(rw.Colour, "_Z18RpMaterialGetColorPKN2rw8MaterialE") &&
-	            Bind(rw.StateGet, "_Z16RwRenderStateGet13RwRenderStatePv");
-	const bool ready = weather::Install() && worlddraw::Install();
-	Log("rain drops: %s%s", ready ? "on" : "unavailable", ready && !gGeometry ? " (no car geometry: none on windscreens)" : "");
+	gStateGet = reinterpret_cast<int (*)(int, void *)>(dlsym(RTLD_MAIN_ONLY, "_Z16RwRenderStateGet13RwRenderStatePv"));
+	const bool ready = weather::Install() && worlddraw::Install() && gStateGet;
+	Log("rain drops: %s", ready ? "on" : "unavailable");
 	return ready;
 }
 

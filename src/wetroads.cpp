@@ -3,7 +3,9 @@
 #include "game.h"
 #include "hooks.h"
 #include "log.h"
+#include "camera.h"
 #include "minimap.h"
+#include "rainmodel.h"
 #include "shaders.h"
 #include "weather.h"
 #include "wetmodel.h"
@@ -13,6 +15,7 @@
 #include <chrono>
 #include <cmath>
 #include <dlfcn.h>
+#include <unordered_map>
 #include <vector>
 
 using namespace game;
@@ -27,7 +30,11 @@ void (*orig_RenderEverythingBarRoads)();
 const int32_t *gArea;
 
 bool gTried, gReady;
-void *gWet, *gStreak;
+void *gWet, *gStreak, *gSplash;
+constexpr int kDiscSides = 14;
+constexpr int kRoofs = 8; // the nearest cars the rain splashes on
+std::unordered_map<int, std::vector<wetmodel::Puddle>> gPuddles; // by cell: where they stand when full
+std::unordered_map<int, float> gRoofs;                           // by model: the roof over its middle, NAN for none
 int uEye, uState, uSkyTop, uSkyLow, uSun, uSunColour;
 
 // Shared by both: placed on the world just over the ground (the collision the
@@ -76,6 +83,15 @@ void main(void)
 	float glint = pow(max(dot(R, u_wetSun.xyz), 0.0), 180.0) * u_wetSun.w;
 	float wet = u_wetState.x;
 	float fade = v_fog * (1.0 - smoothstep(u_wetEye.w * 0.7, u_wetEye.w, dist));
+	if (v_colour.g < 0.5) {
+		// A puddle (over the wet ground already drawn): a mirror, soft at its edge, rippled by the rain.
+		float edge = smoothstep(1.0, 0.65, v_uv.x);
+		float ripple = 1.0 + 0.1 * sin(v_uv.x * 47.0 - u_wetState.w * 9.0);
+		float mirror = fresnel * 0.9 * edge * wet;
+		vec3 seen = (sky * ripple + u_wetSunColour.rgb * pow(max(dot(R, u_wetSun.xyz), 0.0), 600.0) * u_wetSun.w * 2.0);
+		FRAGCOLOR(vec4(seen * mirror, mirror) * fade);
+		return;
+	}
 	float gloss = wet * fresnel * 0.55;
 	vec3 reflected = sky * gloss + u_wetSunColour.rgb * glint * wet;
 	float alpha = 1.0 - (1.0 - u_wetState.y * wet) * (1.0 - gloss);
@@ -101,6 +117,24 @@ void main(void)
 }
 )";
 
+// Blended ONE, ONE: a drop's crown, spreading and fading through its moment
+// (its age in the vertex alpha).
+const char *const kSplashFragment = R"(
+FSIN vec3 v_world;
+FSIN vec4 v_colour;
+FSIN vec2 v_uv;
+FSIN float v_fog;
+void main(void)
+{
+	float age = v_colour.a;
+	vec2 p = vec2(v_uv.x, v_uv.y * 1.6);
+	float d = length(p) - (0.25 + 0.7 * age);
+	float crown = exp(-d * d * 90.0) * (1.0 - smoothstep(0.5, 1.0, v_uv.y));
+	float k = crown * (1.0 - age) * (1.0 - age) * v_fog;
+	FRAGCOLOR(vec4(v_colour.rgb * k, 1.0));
+}
+)";
+
 bool Prepare()
 {
 	if (gTried)
@@ -116,8 +150,83 @@ bool Prepare()
 	uSunColour = shaders::Uniform("u_wetSunColour");
 	gWet = shaders::Create("wet ground", kVertex, kWetFragment);
 	gStreak = shaders::Create("wet ground (light streaks)", kVertex, kStreakFragment);
-	gReady = gWet && gStreak;
+	gSplash = shaders::Create("rain splashes", kVertex, kSplashFragment);
+	gReady = gWet && gStreak && gSplash;
 	return gReady;
+}
+
+// The roof's height over a car's middle, along its up (found once per model from its own triangles).
+float RoofHeight(const uint8_t *car)
+{
+	const int model = *reinterpret_cast<const int16_t *>(car + 0x6a); // CEntity::m_modelIndex
+	auto it = gRoofs.find(model);
+	if (it != gRoofs.end())
+		return it->second;
+	const worlddraw::Axes ax = worlddraw::VehicleAxes(car);
+	float top = NAN;
+	for (const worlddraw::Face &f : worlddraw::VehicleFaces(car))
+		for (const Vec3 &v : {f.a, f.b, f.c}) {
+			const float dx = v.x - ax.pos.x, dy = v.y - ax.pos.y, dz = v.z - ax.pos.z;
+			const float x = dx * ax.right.x + dy * ax.right.y + dz * ax.right.z;
+			const float y = dx * ax.forward.x + dy * ax.forward.y + dz * ax.forward.z;
+			const float z = dx * ax.up.x + dy * ax.up.y + dz * ax.up.z;
+			if (!f.glass && std::fabs(x) < 0.45f && std::fabs(y) < 0.7f && !(z <= top))
+				top = z;
+		}
+	return gRoofs[model] = top;
+}
+
+// The nearest cars' roofs (not his, from inside; not an open car's).
+std::vector<wetmodel::Roof> Roofs(Vec3 eye)
+{
+	std::vector<std::pair<float, uint8_t *>> near;
+	for (uint8_t *v : worlddraw::Vehicles()) {
+		if (*reinterpret_cast<const int32_t *>(v + 0x348) != 0 || v == camera::SeatVehicle() || worlddraw::OpenTop(v))
+			continue; // cars only (eVehicleType)
+		const Vec3 p = worlddraw::VehicleAxes(v).pos;
+		const float d = std::hypot(p.x - eye.x, p.y - eye.y);
+		if (d < wetmodel::kSplashReach)
+			near.push_back({d, v});
+	}
+	std::sort(near.begin(), near.end(), [](const auto &a, const auto &b) { return a.first < b.first; });
+	std::vector<wetmodel::Roof> out;
+	for (size_t i = 0; i < near.size() && int(i) < kRoofs; i++) {
+		const float h = RoofHeight(near[i].second);
+		if (std::isnan(h))
+			continue;
+		const worlddraw::Axes ax = worlddraw::VehicleAxes(near[i].second);
+		out.push_back({{ax.pos.x + ax.up.x * h, ax.pos.y + ax.up.y * h, ax.pos.z + ax.up.z * h}, ax.right, ax.forward});
+	}
+	return out;
+}
+
+void DrawSplashes(const mapdata::Map &map, Vec3 eye, const rainmodel::Weather &w, const shaders::Sky &sky,
+                  const std::vector<worlddraw::Light> &lights)
+{
+	const wetmodel::GroundIndex index(map, eye, wetmodel::kSplashReach);
+	const wetmodel::GroundAt ground = [&](Vec3 p, float &z) { return index.At(p, z); };
+	const std::vector<wetmodel::Splash> splashes = wetmodel::Splashes(eye, w.rain, shaders::Seconds(), ground, Roofs(eye));
+	std::vector<rainmodel::Lamp> lamps;
+	for (const worlddraw::Light &l : lights)
+		if (std::hypot(l.pos.x - eye.x, l.pos.y - eye.y) < wetmodel::kSplashReach + l.radius && lamps.size() < 8)
+			lamps.push_back({l.pos, l.colour, l.radius * 1.5f});
+	const Vec3 skyLight{(sky.top.x + sky.bottom.x) * 0.4f, (sky.top.y + sky.bottom.y) * 0.4f, (sky.top.z + sky.bottom.z) * 0.4f};
+	worlddraw::Batch batch(gSplash);
+	for (const wetmodel::Splash &s : splashes) {
+		const float tx = eye.x - s.pos.x, ty = eye.y - s.pos.y, flat = std::hypot(tx, ty);
+		if (flat < 0.5f)
+			continue;
+		const float rx = -ty / flat * s.size, ry = tx / flat * s.size, up = s.size * 0.8f; // facing him, standing up
+		const Vec3 c = rainmodel::Lit(s.pos, skyLight, lamps);
+		const float k = 0.55f;
+		const uint8_t r = worlddraw::Byte(c.x * k), g = worlddraw::Byte(c.y * k), b = worlddraw::Byte(c.z * k);
+		const uint8_t age = worlddraw::Byte(s.age);
+		const Vec3 q[4] = {{s.pos.x - rx, s.pos.y - ry, s.pos.z}, {s.pos.x + rx, s.pos.y + ry, s.pos.z},
+		                   {s.pos.x + rx, s.pos.y + ry, s.pos.z + up}, {s.pos.x - rx, s.pos.y - ry, s.pos.z + up}};
+		const float u[4] = {-1, 1, 1, -1}, v[4] = {0, 0, 1, 1};
+		for (int i : {0, 1, 2, 0, 2, 3})
+			batch.Put(q[i], r, g, b, u[i], v[i], age);
+	}
 }
 
 struct Stats {
@@ -158,19 +267,38 @@ void Draw()
 	api.RwRenderStateSet(kStateSrcBlend, reinterpret_cast<void *>(kBlendOne));
 	api.RwRenderStateSet(kStateDestBlend, reinterpret_cast<void *>(kBlendInvSrcAlpha));
 	size_t triangles = 0;
+	const std::vector<int> cells = wetmodel::CellsNear(*map, {eye.x, eye.y, eye.z}, kRadius);
 	{
 		worlddraw::Batch ground(gWet);
-		for (int c : wetmodel::CellsNear(*map, {eye.x, eye.y, eye.z}, kRadius)) {
+		for (int c : cells) {
 			const std::vector<Vec3> &tris = map->wet[size_t(c)].tris;
 			for (const Vec3 &p : tris)
 				ground.Put(p, 255, 255, 255, 0, 0);
 			triangles += tris.size() / 3;
 		}
+		ground.Flush();
+		// The puddles over it: discs, their radius growing with how long it's rained.
+		if (w.puddles > 0.05f)
+			for (int c : cells) {
+				auto it = gPuddles.find(c);
+				if (it == gPuddles.end())
+					it = gPuddles.emplace(c, wetmodel::Puddles(map->wet[size_t(c)], 1)).first;
+				for (const wetmodel::Puddle &p : it->second) {
+					const float r = p.radius * std::min(w.puddles, 1.0f);
+					for (int k = 0; k < kDiscSides; k++) {
+						const float a0 = 6.2831853f * k / kDiscSides, a1 = 6.2831853f * (k + 1) / kDiscSides;
+						ground.Put(p.centre, 255, 0, 255, 0, 0);
+						ground.Put({p.centre.x + std::cos(a0) * r, p.centre.y + std::sin(a0) * r, p.centre.z}, 255, 0, 255, 1, 0);
+						ground.Put({p.centre.x + std::cos(a1) * r, p.centre.y + std::sin(a1) * r, p.centre.z}, 255, 0, 255, 1, 0);
+					}
+				}
+			}
 	}
 
 	const wetmodel::GroundAt ground = [&](Vec3 p, float &z) { return wetmodel::WetGroundAt(*map, p, z); };
+	const std::vector<worlddraw::Light> pointLights = worlddraw::PointLights();
 	std::vector<wetmodel::Light> lights;
-	for (const worlddraw::Light &l : worlddraw::PointLights())
+	for (const worlddraw::Light &l : pointLights)
 		lights.push_back({l.pos, l.colour, l.radius});
 	const std::vector<wetmodel::Reflection> streaks = wetmodel::Reflections(lights, {eye.x, eye.y, eye.z}, ground);
 	api.RwRenderStateSet(kStateDestBlend, reinterpret_cast<void *>(kBlendOne));
@@ -184,6 +312,8 @@ void Draw()
 				batch.Put(s.quad[k], r, g, b, u[k], v[k]);
 		}
 	}
+	if (gConfig.rainSplashes && w.rain >= rainmodel::kRaining)
+		DrawSplashes(*map, {eye.x, eye.y, eye.z}, w, sky, pointLights);
 
 	gStats.ms += std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - start).count();
 	gStats.triangles += triangles;

@@ -26,7 +26,7 @@ public:
 	~Batch() { Flush(); }
 	Batch(const Batch &) = delete;
 	Batch &operator=(const Batch &) = delete;
-	void Put(Vec3 p, uint8_t r, uint8_t g, uint8_t b, float u, float v);
+	void Put(Vec3 p, uint8_t r, uint8_t g, uint8_t b, float u, float v, uint8_t a = 255);
 	void Flush();
 
 private:
@@ -43,5 +43,20 @@ struct Light {
 std::vector<Light> PointLights();
 
 uint8_t Byte(float x); // 0..1 to 0..255, clamped
+
+// Vehicles: every live one (CPools::ms_pVehiclePool), its axes, its drawn
+// triangles in the world (glass or not; not the hidden damaged pieces or the
+// far versions), and whether it's a car with its top off.
+std::vector<uint8_t *> Vehicles();
+struct Axes {
+	Vec3 right, forward, up, pos;
+};
+Axes VehicleAxes(const uint8_t *vehicle);
+struct Face {
+	Vec3 a, b, c;
+	bool glass;
+};
+std::vector<Face> VehicleFaces(const uint8_t *vehicle); // empty if the geometry can't be read
+bool OpenTop(const uint8_t *car);                       // CAutomobile::IsOpenTopCar
 
 } // namespace worlddraw
