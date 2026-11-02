@@ -16,6 +16,7 @@
 #include "roofgeometry.h"
 #include "streets.h"
 #include "visualmodel.h"
+#include "wetground.h"
 
 #include <algorithm>
 #include <array>
@@ -217,8 +218,10 @@ void RasterTriangle(std::vector<float> &grid, Vec3f a, Vec3f b, Vec3f c)
 }
 
 // Calls f(instanceIndex, a, b, c, surface) for every collision triangle of
-// every exterior map instance, in world space. Boxes contribute their top face.
-template <typename F>
+// every exterior map instance, in world space. Boxes contribute their top face:
+// counter-clockwise seen from above, or with kMeshWinding as the meshes wind a
+// floor (clockwise), for callers that tell floors from ceilings by winding.
+template <bool kMeshWinding = false, typename F>
 void ForEachFace(const std::vector<Instance> &insts, const std::map<std::string, ColModel> &cols, F f)
 {
 	for (size_t idx = 0; idx < insts.size(); idx++) {
@@ -239,8 +242,13 @@ void ForEachFace(const std::vector<Instance> &insts, const std::map<std::string,
 				continue; // props
 			const Vec3f c[4] = {xf({b.min.x, b.min.y, b.max.z}), xf({b.max.x, b.min.y, b.max.z}),
 			                    xf({b.max.x, b.max.y, b.max.z}), xf({b.min.x, b.max.y, b.max.z})};
-			f(idx, c[0], c[1], c[2], b.surface);
-			f(idx, c[0], c[2], c[3], b.surface);
+			if (kMeshWinding) {
+				f(idx, c[0], c[2], c[1], b.surface);
+				f(idx, c[0], c[3], c[2], b.surface);
+			} else {
+				f(idx, c[0], c[1], c[2], b.surface);
+				f(idx, c[0], c[2], c[3], b.surface);
+			}
 		}
 	}
 }
@@ -808,6 +816,20 @@ int main(int argc, char **argv)
 			                                 [](uint16_t s) { return s != mapdata::Map::kNoStreet; });
 			printf("streets: %zu, %ld of %zu roads named\n", outlines.size(), long(named), map.roads.size());
 		}
+	{ // The rain (#32): the paved ground that gets wet and the cover over everything, from the collision.
+		std::vector<wetground::Face> faces;
+		ForEachFace<true>(insts, cols, [&](size_t, Vec3f a, Vec3f b, Vec3f c, uint8_t s) {
+			faces.push_back({{a.x, a.y, a.z}, {b.x, b.y, b.z}, {c.x, c.y, c.z}, s});
+		});
+		map.covers = wetground::CoverTiles(faces);
+		map.IndexCovers();
+		map.wet = wetground::WetGround(faces, map);
+		size_t tris = 0;
+		for (const mapdata::WetCell &cell : map.wet)
+			tris += cell.tris.size() / 3;
+		printf("rain: %zu wet cells, %zu wet triangles; cover heights over %zu tiles\n", map.wet.size(), tris,
+		       map.covers.size());
+	}
 
 	if (!map.Save(argv[2])) {
 		fprintf(stderr, "cannot write %s\n", argv[2]);
