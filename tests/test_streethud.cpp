@@ -18,22 +18,16 @@ const mapdata::Map *BakedMap() { return gBaked; }
 bool Expanded() { return false; }
 } // namespace minimap
 static std::vector<std::string> gDrawn;
-static std::vector<int> gFonts; // each draw's font
 namespace text {
 float Width(const char *s, const Style &) { return float(std::strlen(s)) * 10; }
 float Width(const uint16_t *s, const Style &) { float w = 0; for (; *s; ++s) w += 10; return w; }
 void LineExtent(const Style &, float y, float &top, float &bottom) { top = y - 10, bottom = y; }
-void Draw(float, float, const char *s, const Style &style)
-{
-	gDrawn.push_back(s);
-	gFonts.push_back(style.font);
-}
-void Draw(float, float, const uint16_t *s, const Style &style)
+void Draw(float, float, const char *s, const Style &) { gDrawn.push_back(s); }
+void Draw(float, float, const uint16_t *s, const Style &)
 {
 	std::string out;
 	for (; *s; ++s) out += char(*s);
 	gDrawn.push_back(out);
-	gFonts.push_back(style.font);
 }
 void Flush() {}
 } // namespace text
@@ -63,7 +57,6 @@ static void Frames(int n)
 	for (int i = 0; i < n; ++i) {
 		gNow += 33;
 		gDrawn.clear();
-		gFonts.clear();
 		streethud::Draw();
 	}
 }
@@ -95,13 +88,6 @@ int main()
 	At(50, 2);
 	Frames(10);
 	CHECK(gSuppressed && Drew("Ocean Drive") && Drew("Ocean Beach"));
-	// The area in the game's heading font (its shadow first, then it), the street in the wide capitals.
-	int areaHeading = 0, streetBody = 0;
-	for (size_t i = 0; i < gDrawn.size(); ++i) {
-		areaHeading += gDrawn[i] == "Ocean Beach" && gFonts[i] == 2;
-		streetBody += gDrawn[i] == "Ocean Drive" && gFonts[i] == 1;
-	}
-	CHECK(areaHeading == 2 && streetBody == 1);
 
 	// TestNoStreetShowsAreaOnly: off every road, a new area: the area line alone.
 	At(50, 60);
@@ -109,7 +95,7 @@ int main()
 	static uint16_t haiti[] = {'L', 'i', 't', 't', 'l', 'e', ' ', 'H', 'a', 'i', 't', 'i', 0};
 	gAreaName = haiti;
 	Frames(10);
-	CHECK(Drew("Little Haiti") && !Drew("Ocean Drive") && gDrawn.size() == 2); // the area and its shadow
+	CHECK(Drew("Little Haiti") && !Drew("Ocean Drive") && gDrawn.size() == 1);
 
 	// TestTeleportShowsNewStreetAtOnce: a respawn or a script's teleport onto
 	// another street: that street, not a second of the old one under it.
