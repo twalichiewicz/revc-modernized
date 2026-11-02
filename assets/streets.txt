@@ -1,0 +1,2 @@
+# Street names for the HUD (#35): one street a line, "Name" x,y x,y ... (world metres)
+# along its centreline; the baker snaps each onto the game's own roads.

@@ -42,7 +42,7 @@ if [ ! -f "$BACKUP" ]; then
 fi
 
 echo "==> Baking map data from your game files"
-"$HERE/build/vcmm-bake" "$APP/Contents/Resources/GameData" "$DATA/map.bin"
+"$HERE/build/vcmm-bake" "$APP/Contents/Resources/GameData" "$DATA/map.bin" --streets "$HERE/assets/streets.txt"
 
 echo "==> Patching and re-signing the game binary"
 TMP="$(mktemp -d)"

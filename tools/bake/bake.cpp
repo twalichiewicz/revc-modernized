@@ -9,11 +9,12 @@
 //              covers and that stand well above the street, welded into
 //              connected roofs whose outline edges become walls.
 //
-// usage: vcmm-bake <GameData dir> <out map.bin> [debug dir] [--area x y size out.png]...
+// usage: vcmm-bake <GameData dir> <out map.bin> [debug dir] [--streets streets.txt] [--area x y size out.png]...
 #include "../../src/mapdata.h"
 #include "../../src/radiologos.h"
 #include "gamefiles.h"
 #include "roofgeometry.h"
+#include "streets.h"
 #include "visualmodel.h"
 
 #include <algorithm>
@@ -687,7 +688,7 @@ void BakeRadioLogos(const std::string &gameData, const std::string &out)
 int main(int argc, char **argv)
 {
 	if (argc < 3) {
-		fprintf(stderr, "usage: %s <GameData dir> <out map.bin> [debug dir] [--area x y size out.png]...\n", argv[0]);
+		fprintf(stderr, "usage: %s <GameData dir> <out map.bin> [debug dir] [--streets streets.txt] [--area x y size out.png]...\n", argv[0]);
 		return 2;
 	}
 	const std::string gameData = argv[1];
@@ -719,6 +720,27 @@ int main(int argc, char **argv)
 	const Extracted ex = ExtractBuildings(insts, cols, ground);
 	map.buildings = VisualBuildings(insts, cols, ground, ex, img, SeaLevel(gameData));
 	map.roads = Roads(segments);
+	for (const RoadSegment &s : segments) { // each road's height at its two ends (street names)
+		map.roadZ.push_back(s.a.z);
+		map.roadZ.push_back(s.b.z);
+	}
+	map.roadStreet.assign(map.roads.size(), mapdata::Map::kNoStreet);
+	for (int i = 3; i + 1 < argc; i++)
+		if (std::string(argv[i]) == "--streets") {
+			std::ifstream in(argv[i + 1]);
+			std::vector<streets::Outline> outlines;
+			std::string error;
+			if (!in || !streets::ParseStreets(std::string(std::istreambuf_iterator<char>(in), {}), outlines, error)) {
+				fprintf(stderr, "%s: %s\n", argv[i + 1], in ? error.c_str() : "cannot read");
+				return 1;
+			}
+			map.roadStreet = streets::Assign(outlines, map.roads);
+			for (const streets::Outline &o : outlines)
+				map.streets.push_back(o.name);
+			const auto named = std::count_if(map.roadStreet.begin(), map.roadStreet.end(),
+			                                 [](uint16_t s) { return s != mapdata::Map::kNoStreet; });
+			printf("streets: %zu, %ld of %zu roads named\n", outlines.size(), long(named), map.roads.size());
+		}
 
 	if (!map.Save(argv[2])) {
 		fprintf(stderr, "cannot write %s\n", argv[2]);
