@@ -207,6 +207,8 @@ DEFAULT_HOOKS = [
     "_ZN8CWeather7AddRainEv",
     # ...and heavy rain closes the view in
     "_ZN10CTimeCycle6UpdateEv",
+    # soaked ground under a car's wheels
+    "_ZN8CVehicle12ProcessWheelER7CVectorS1_S1_S1_ifffaPfP11tWheelStatet",
     # police come by car, not made on foot near a wanted player
     "_ZN11CPopulation15AddToPopulationEffff",
     # his car's door: opened only at a crawl; faster, they hang on to it

@@ -33,6 +33,7 @@
 #include "wetroads.h"
 #include "rainstreaks.h"
 #include "raindrops.h"
+#include "rainvehicles.h"
 #include "carlights.h"
 #include "carradio.h"
 #include "combat.h"
@@ -800,6 +801,7 @@ __attribute__((constructor)) void Init()
 	wetroads::Install();
 	rainstreaks::Install();
 	raindrops::Install();
+	rainvehicles::Install(); // (after flightmodel's flying hook: chained over it)
 	if (!rtshadows::Install())
 		Log("rt shadows: no re3_debug hook (re-run install.sh); their reports stay in the terminal");
 }
