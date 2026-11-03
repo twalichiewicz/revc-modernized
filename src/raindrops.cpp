@@ -4,6 +4,7 @@
 #include "draw.h"
 #include "dropmodel.h"
 #include "gamedrops.h"
+#include "hooks.h"
 #include "game.h"
 #include "log.h"
 #include "minimap.h"
@@ -32,6 +33,16 @@ const uint8_t *gCameraZone, *gPlayerZone;
 dropmodel::Drops gDrops;
 bool gInstalled;
 uint32_t gLastMs;
+const uint32_t *gFrameCounter;
+void (*orig_RenderFirstPersonVehicle)();
+// This frame's (Step, once a frame): the car he's in, its triangles, the mode.
+struct Now {
+	uint32_t frame = ~0u;
+	const uint8_t *car = nullptr;
+	std::vector<worlddraw::Face> faces;
+	dropmodel::DropMode mode = dropmodel::DropMode::None;
+	CVector eye{};
+} gNow;
 bool gTried, gReady;
 void *gDropShader, *gGlassShader;
 int uFrame;
@@ -218,31 +229,48 @@ struct Stats {
 	std::chrono::steady_clock::time_point since = std::chrono::steady_clock::now();
 } gStats;
 
+// The cost, every 20 s.
+void Noted(const char *mode, std::chrono::steady_clock::time_point start)
+{
+	gStats.ms += std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - start).count();
+	gStats.drops += gDrops.All().size();
+	if (++gStats.frames && std::chrono::steady_clock::now() - gStats.since > std::chrono::seconds(20)) {
+		Log("rain drops: on the %s, %zu a frame, %.3f ms a frame to send", mode, gStats.drops / gStats.frames,
+		    gStats.ms / double(gStats.frames));
+		gStats = {};
+	}
+}
+
 bool Sheltered()
 {
 	return (gArea && *gArea != 0) || (gCameraZone && (*gCameraZone & kNoRainZone)) ||
 	       (gPlayerZone && (*gPlayerZone & kNoRainZone));
 }
 
-} // namespace
-
-void Draw()
+// Once a frame, on the first of the two calls: what he's in, how it's raining
+// on it, and the drops moved on.
+bool Step()
 {
 	if (!gConfig.rainDrops || !gInstalled || !api.timeMs)
-		return;
+		return false;
+	if (gFrameCounter && *gFrameCounter == gNow.frame)
+		return !gDrops.All().empty();
+	gNow.frame = gFrameCounter ? *gFrameCounter : gNow.frame + 1;
 	const uint32_t now = *api.timeMs;
 	const float dt = gLastMs && now >= gLastMs ? std::min(0.25f, float(now - gLastMs) / 1000.0f) : 0.0f;
 	gLastMs = now;
 	const rainmodel::Weather &w = weather::Now();
+	gNow.faces.clear();
+	gNow.car = nullptr;
+	gNow.mode = dropmodel::DropMode::None;
 	if (w.rain < rainmodel::kRaining && gDrops.All().empty())
-		return; // dry, and nothing left on the glass
+		return false; // dry, and nothing left on the glass
 	const uint8_t *car = camera::InSeat() ? camera::SeatVehicle() : nullptr;
 	const int type = car ? *reinterpret_cast<const int32_t *>(car + kVehicleType) : -1;
 	const CVector eye = shaders::CameraPosition();
-	std::vector<Face> faces;
 	if (car && (type == dropmodel::kCar || type == dropmodel::kHeli || type == dropmodel::kPlane))
-		faces = worlddraw::VehicleFaces(car);
-	const bool topDown = type == dropmodel::kCar && !faces.empty() && TopDown(car, faces, eye);
+		gNow.faces = worlddraw::VehicleFaces(car);
+	const bool topDown = type == dropmodel::kCar && !gNow.faces.empty() && TopDown(car, gNow.faces, eye);
 	const dropmodel::DropMode mode = dropmodel::ModeFor(camera::FirstPersonOnFoot(), car != nullptr, type, topDown, gArea && *gArea != 0);
 	const mapdata::Map *map = minimap::RainMap();
 	const bool exposed = !Sheltered() && !(map && mapdata::CoveredAt(*map, {eye.x, eye.y, eye.z + 0.3f}));
@@ -252,26 +280,44 @@ void Draw()
 		speed = std::sqrt(v.x * v.x + v.y * v.y + v.z * v.z) * 50.0f; // a frame's worth at 50 a second
 	}
 	gDrops.Update(w.rain, exposed, speed, mode, dt);
-	if (gDrops.All().empty() || !Prepare())
+	gNow.car = car;
+	gNow.mode = mode;
+	gNow.eye = eye;
+	return !gDrops.All().empty() && Prepare();
+}
+
+// A windscreen's drops, as soon as the frame has the car in it (its depth
+// hides those behind the dash, pillars and roof; after the lighting pass the
+// frame's depth is no longer the scene's).
+void Hook_RenderFirstPersonVehicle()
+{
+	orig_RenderFirstPersonVehicle();
+	if (!Step() || gNow.mode != dropmodel::DropMode::Windscreen || gNow.faces.empty() || !gNow.car)
+		return;
+	float fw, fh;
+	shaders::FrameSize(fw, fh);
+	const shaders::SavedStates saved;
+	void *frame = shaders::GrabFrame();
+	if (!frame)
+		return;
+	shaders::Set(uFrame, fw, fh, 1.0f, fw / float(ScreenWidth()));
+	const auto start = std::chrono::steady_clock::now();
+	DrawOnGlass(gNow.faces, gNow.car, gNow.eye, frame);
+	Noted("windscreen", start);
+}
+
+} // namespace
+
+// The lens's drops (bikes, boats, open cars): over the graded frame, under the HUD.
+void Draw()
+{
+	if (!Step() || gNow.mode != dropmodel::DropMode::Lens)
 		return;
 	const auto start = std::chrono::steady_clock::now();
 	struct Timed {
 		std::chrono::steady_clock::time_point start;
-		const char *mode;
-		~Timed()
-		{
-			gStats.ms += std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - start).count();
-			gStats.drops += gDrops.All().size();
-			if (++gStats.frames && std::chrono::steady_clock::now() - gStats.since > std::chrono::seconds(20)) {
-				Log("rain drops: on the %s, %zu a frame, %.3f ms a frame to send", mode, gStats.drops / gStats.frames,
-				    gStats.ms / double(gStats.frames));
-				gStats = {};
-			}
-		}
-	} timed{start, mode == dropmodel::DropMode::Windscreen ? "windscreen" : "lens"};
-	const bool onGlass = mode == dropmodel::DropMode::Windscreen;
-	if (onGlass && faces.empty())
-		return; // no glass to put them on
+		~Timed() { Noted("lens", start); }
+	} timed{start};
 	float fw, fh;
 	shaders::FrameSize(fw, fh);
 	const float W = float(ScreenWidth()), H = float(ScreenHeight());
@@ -279,11 +325,7 @@ void Draw()
 	void *frame = shaders::GrabFrame();
 	if (!frame)
 		return;
-	shaders::Set(uFrame, fw, fh, onGlass ? 1.0f : 0.0f, fw / W);
-	if (onGlass) {
-		DrawOnGlass(faces, car, eye, frame);
-		return;
-	}
+	shaders::Set(uFrame, fw, fh, 0.0f, fw / W);
 	SetHudRenderStates();
 	shaders::OverrideIm2D(gDropShader);
 	gCanvas.SetTexture(frame);
@@ -312,7 +354,12 @@ bool Install()
 	gArea = static_cast<const int32_t *>(dlsym(RTLD_MAIN_ONLY, "_ZN5CGame8currAreaE"));
 	gCameraZone = static_cast<const uint8_t *>(dlsym(RTLD_MAIN_ONLY, "_ZN10CCullZones19CurrentFlags_CameraE"));
 	gPlayerZone = static_cast<const uint8_t *>(dlsym(RTLD_MAIN_ONLY, "_ZN10CCullZones19CurrentFlags_PlayerE"));
+	gFrameCounter = static_cast<const uint32_t *>(dlsym(RTLD_MAIN_ONLY, "_ZN6CTimer14m_FrameCounterE"));
 	gInstalled = weather::Install() && worlddraw::Install();
+	// After the game draws the car he's in (the gun's hook there, if it's on, first).
+	if (gInstalled && !(orig_RenderFirstPersonVehicle = reinterpret_cast<void (*)()>(
+	                        hooks::Chain("_ZN9CRenderer24RenderFirstPersonVehicleEv", reinterpret_cast<void *>(Hook_RenderFirstPersonVehicle)))))
+		Log("rain drops: the car's hook is missing (re-run install.sh); none on windscreens");
 	if (gInstalled && !gamedrops::Install())
 		Log("rain drops: the game's own screen drops can't be turned off (re-run install.sh); both show");
 	const bool ready = gInstalled;

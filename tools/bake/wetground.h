@@ -3,6 +3,7 @@
 // gets wet, and the top of the solid things over every 2 m (where no rain falls).
 #include "../../src/mapdata.h"
 
+#include <functional>
 #include <vector>
 
 namespace wetground {
@@ -21,11 +22,15 @@ bool Paved(uint8_t surface);
 bool Covers(uint8_t surface);
 
 std::vector<mapdata::CoverTile> CoverTiles(const std::vector<Face> &faces);
-// Paved faces facing up (the collision winds a floor clockwise seen from above;
-// the other way is a ceiling), with no roof over them in `covered` (cover at
-// least kRoofClearance up: a bench or a wall beside it doesn't keep it dry),
-// by 64 m cell; the biggest kWetTrisPerCell per cell.
+// Faces facing up (the collision winds a floor clockwise seen from above; the
+// other way is a ceiling) that are paved, or anything under a road `onRoad`
+// says is one (the game's roads are often "default", grass or sand
+// underneath), not mostly under a roof in `covered` (cover at least
+// kRoofClearance up: a bench or a wall beside it doesn't keep it dry; a sign
+// over a bit of a big triangle doesn't either), by 64 m cell; the biggest
+// kWetTrisPerCell per cell.
 constexpr float kRoofClearance = 2.5f;
-std::vector<mapdata::WetCell> WetGround(const std::vector<Face> &faces, const mapdata::Map &covered);
+std::vector<mapdata::WetCell> WetGround(const std::vector<Face> &faces, const mapdata::Map &covered,
+                                        const std::function<bool(Vec3)> &onRoad = {});
 
 } // namespace wetground

@@ -129,6 +129,37 @@ static void TestRainUpToTheWall()
 	CHECK(!CoveredAt(m, {45, 20.1f, 1}));  // under the arm: rain
 }
 
+// A road gets wet whatever its collision calls it (the game's roads are
+// often "default", grass or sand underneath); off the roads only paving does.
+static void TestRoadsOfAnySurfaceGetWet()
+{
+	std::vector<Face> faces;
+	Square(faces, 0, 0, 10, 10, 0, kGrass);  // a dirt road (grass in its collision)
+	Square(faces, 20, 0, 30, 10, 0, kWall);  // a road whose collision is "default"
+	Square(faces, 40, 0, 50, 10, 0, kGrass); // a lawn, no road on it
+	const auto onRoad = [](Vec3 p) { return p.x < 32; };
+	CHECK(Tris(WetGround(faces, Covered(faces), onRoad)) == 4);
+	CHECK(Tris(WetGround(faces, Covered(faces))) == 0); // no roads given: paving only
+}
+
+// A big road triangle with a sign (or a porch) over a bit of it stays wet:
+// only dropped when most of it is under cover.
+static void TestPartlyCoveredStaysWet()
+{
+	std::vector<Face> faces;
+	faces.push_back({{0, 0, 0}, {0, 40, 0}, {40, 0, 0}, kTarmac});  // a big one
+	Square(faces, 9, 9, 17, 17, 6, kWall);                            // a canopy over its middle
+	faces.push_back({{60, 0, 0}, {60, 10, 0}, {70, 0, 0}, kTarmac}); // one wholly under a roof...
+	Square(faces, 55, -5, 75, 15, 6, kWall);                          // ...this one
+	const std::vector<mapdata::WetCell> wet = WetGround(faces, Covered(faces));
+	CHECK(Tris(wet) == 1);
+	bool big = true;
+	for (const mapdata::WetCell &c : wet)
+		for (const Vec3 &v : c.tris)
+			big &= v.x <= 40;
+	CHECK(big);
+}
+
 static std::string Dir()
 {
 	const char *tmp = std::getenv("TMPDIR");
@@ -185,6 +216,8 @@ int main()
 	TestCellsBounded();
 	TestCoverBelowRoof();
 	TestRainUpToTheWall();
+	TestRoadsOfAnySurfaceGetWet();
+	TestPartlyCoveredStaysWet();
 	TestRoundTrip();
 	TestLoadsVersion5();
 	if (failures)

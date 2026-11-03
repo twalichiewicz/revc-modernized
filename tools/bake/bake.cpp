@@ -502,30 +502,26 @@ std::vector<Building> VisualBuildings(const std::vector<Instance> &insts,
 	return result;
 }
 
-// What buildings show over the street that their collision leaves out (porches,
-// eaves, balconies): their visible triangles, for the rain's cover. Buildings
-// are the models with solid collision; not the far versions, nor trees and
-// bushes (rain falls through their leaves).
-std::vector<wetground::Face> BuildingVisuals(const std::vector<Instance> &insts, const std::map<std::string, ColModel> &cols,
-                                             ImgArchive &img)
+// What the map shows over the street that its collision leaves out (porches,
+// eaves, balconies, the Ocean Drive hotels' awnings, a parked jumbo's wings):
+// the visible triangles of every model but the far versions, trees, bushes and
+// hedges (rain falls through their leaves), the sea bed and beaches, and wires
+// (the cover's whole-metre rule leaves out what's thin anyway).
+std::vector<wetground::Face> BuildingVisuals(const std::vector<Instance> &insts, ImgArchive &img)
 {
 	std::vector<wetground::Face> out;
 	std::map<std::string, visualmodel::Mesh> cache;
 	std::set<std::string> skip;
 	auto leafy = [](const std::string &n) {
-		return n.find("lod") != std::string::npos || n.find("veg") != std::string::npos || n.find("palm") != std::string::npos ||
-		       n.find("tree") != std::string::npos || n.find("bush") != std::string::npos;
+		for (const char *part : {"lod", "veg", "palm", "tree", "bush", "hedge", "sea", "beach", "island", "wire", "cable"})
+			if (n.find(part) != std::string::npos)
+				return true;
+		return false;
 	};
 	size_t models = 0;
 	for (const Instance &in : insts) {
 		if ((in.interior != 0 && in.interior != 13) || skip.count(in.model) || leafy(in.model) || !visualmodel::ActiveAt(in, 12))
 			continue;
-		auto col = cols.find(in.model);
-		if (col == cols.end() || std::none_of(col->second.faces.begin(), col->second.faces.end(),
-		                                       [](const ColFace &f) { return Kind(f.surface) == kSolid; })) {
-			skip.insert(in.model);
-			continue;
-		}
 		auto it = cache.find(in.model);
 		if (it == cache.end()) {
 			std::vector<uint8_t> bytes;
@@ -868,11 +864,34 @@ int main(int argc, char **argv)
 			faces.push_back({{a.x, a.y, a.z}, {b.x, b.y, b.z}, {c.x, c.y, c.z}, s});
 		});
 		std::vector<wetground::Face> over = faces;
-		const std::vector<wetground::Face> shown = BuildingVisuals(insts, cols, img);
+		const std::vector<wetground::Face> shown = BuildingVisuals(insts, img);
 		over.insert(over.end(), shown.begin(), shown.end());
 		map.covers = wetground::CoverTiles(over);
 		map.IndexCovers();
-		map.wet = wetground::WetGround(faces, map);
+		// Under a road (a car path), within its width and a few metres of its height.
+		std::map<std::pair<int, int>, std::vector<size_t>> near;
+		for (size_t r = 0; r < map.roads.size(); r++) {
+			const mapdata::Road &road = map.roads[r];
+			const float pad = road.width / 2 + 2;
+			for (int y = int(std::floor((std::min(road.a.y, road.b.y) - pad) / 16)); y <= int(std::floor((std::max(road.a.y, road.b.y) + pad) / 16)); y++)
+				for (int x = int(std::floor((std::min(road.a.x, road.b.x) - pad) / 16)); x <= int(std::floor((std::max(road.a.x, road.b.x) + pad) / 16)); x++)
+					near[{x, y}].push_back(r);
+		}
+		const auto onRoad = [&](Vec3 p) {
+			auto it = near.find({int(std::floor(p.x / 16)), int(std::floor(p.y / 16))});
+			if (it == near.end())
+				return false;
+			for (size_t r : it->second) {
+				const mapdata::Road &road = map.roads[r];
+				const float dx = road.b.x - road.a.x, dy = road.b.y - road.a.y, l2 = dx * dx + dy * dy;
+				const float t = l2 > 0 ? std::clamp(((p.x - road.a.x) * dx + (p.y - road.a.y) * dy) / l2, 0.0f, 1.0f) : 0.0f;
+				const float z = map.roadZ[r * 2] + t * (map.roadZ[r * 2 + 1] - map.roadZ[r * 2]);
+				if (std::hypot(p.x - road.a.x - t * dx, p.y - road.a.y - t * dy) <= road.width / 2 + 1.5f && std::fabs(p.z - z) < 3)
+					return true;
+			}
+			return false;
+		};
+		map.wet = wetground::WetGround(faces, map, onRoad);
 		size_t tris = 0;
 		for (const mapdata::WetCell &cell : map.wet)
 			tris += cell.tris.size() / 3;

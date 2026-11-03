@@ -83,17 +83,29 @@ std::vector<mapdata::CoverTile> CoverTiles(const std::vector<Face> &faces)
 	return out;
 }
 
-std::vector<mapdata::WetCell> WetGround(const std::vector<Face> &faces, const mapdata::Map &covered)
+std::vector<mapdata::WetCell> WetGround(const std::vector<Face> &faces, const mapdata::Map &covered,
+                                        const std::function<bool(Vec3)> &onRoad)
 {
+	// Points across a triangle (barycentric): its middle and six more about it.
+	static const float kSamples[7][3] = {{1 / 3.0f, 1 / 3.0f, 1 / 3.0f}, {0.66f, 0.17f, 0.17f}, {0.17f, 0.66f, 0.17f},
+	                                     {0.17f, 0.17f, 0.66f}, {0.5f, 0.25f, 0.25f}, {0.25f, 0.5f, 0.25f}, {0.25f, 0.25f, 0.5f}};
 	std::map<std::pair<int, int>, std::vector<std::pair<float, const Face *>>> cells;
 	for (const Face &f : faces) {
 		float nz;
 		const float area2 = Area2(f, nz);
-		if (!Paved(f.surface) || !(area2 > 1e-6f) || -nz / area2 < kUpright)
-			continue; // not paved, a wall, or a ceiling
+		if (!(area2 > 1e-6f) || -nz / area2 < kUpright)
+			continue; // a wall, or a ceiling
 		const Vec3 mid{(f.a.x + f.b.x + f.c.x) / 3, (f.a.y + f.b.y + f.c.y) / 3, (f.a.z + f.b.z + f.c.z) / 3};
-		if (mapdata::CoveredAt(covered, {mid.x, mid.y, mid.z + kRoofClearance}))
-			continue; // a roof or a deck over it
+		if (!Paved(f.surface) && !(onRoad && onRoad(mid)))
+			continue; // not paved, and no road on it
+		int under = 0;
+		for (const auto &w : kSamples) {
+			const Vec3 p{w[0] * f.a.x + w[1] * f.b.x + w[2] * f.c.x, w[0] * f.a.y + w[1] * f.b.y + w[2] * f.c.y,
+			             w[0] * f.a.z + w[1] * f.b.z + w[2] * f.c.z + kRoofClearance};
+			under += mapdata::CoveredAt(covered, p);
+		}
+		if (under * 2 >= 7)
+			continue; // mostly under a roof or a deck
 		const int cx = int(std::floor((mid.x - mapdata::kWorldMin) / mapdata::kRainTile));
 		const int cy = int(std::floor((mid.y - mapdata::kWorldMin) / mapdata::kRainTile));
 		if (cx < 0 || cy < 0 || cx >= mapdata::kRainTiles || cy >= mapdata::kRainTiles)

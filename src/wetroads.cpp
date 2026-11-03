@@ -24,7 +24,7 @@ namespace wetroads {
 namespace {
 
 constexpr uint32_t kFromRenderScene = 0x1418c4; // RenderScene's call (not the cars' environment maps)
-constexpr float kRadius = 150.0f;                // m of wet ground drawn around the camera
+constexpr float kRadius = 400.0f;                // m of wet ground drawn around him (as far as heavy rain lets him see)
 constexpr float kDarken = 0.65f;                 // the albedo, darker by this much when soaked
 
 void (*orig_RenderEverythingBarRoads)();
