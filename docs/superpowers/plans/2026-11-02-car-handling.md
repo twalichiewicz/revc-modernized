@@ -303,3 +303,14 @@ In first person Tommy's view rolls with the car, while his head levels itself a 
   - Traffic and police chases: no rollovers in normal driving.
   - Bikes, boats, helicopters and the airport jets: unchanged.
 - [ ] **Step 6: Tune** from that play and the drive log: values only in `handlingmodel.cpp`'s table and `headbalance.cpp`. Commit with the log lines quoted.
+
+## After the whole-branch review
+
+- **Drive log:** `CAutomobile::ProcessControl` ends by copying the spring ratios to +0x590 and resetting +0x580 to 1, so the log reads +0x590. Before this, body roll and pitch always read 0. The log also starts afresh after a gap of over 0.5 s or a clock that goes back (a save loaded).
+- **Springs, per axle:**
+  - The game scales the front springs by the suspension bias and the rear by 1 − bias, so each axle's rest sag is `travel / (8 · force · bias)` (centre of mass midway).
+  - Each car is softened only as far as both axles stay within 0.4 of their travel at rest (or no worse than before) and within 1 cm of their height.
+  - So the ZEBRA (bias 0.30) softens to 0.99, the OCEANIC to 0.60 and the CUBAN to 0.62, where 0.55 was wanted. Every other car softens as its type says.
+- **Head balance:**
+  - `Step(State &, viewRoll, bodyPitch, facing, Mode, dt)`: the quick pitch comes from the car body's own pitch, projected by where he looks in the car (the cosine of his look about the car's up). So looking around, R3 and the end of a drive-by no longer leave the view drifting.
+  - `Mode::Drop` (during a drive-by) zeroes it at once; `Mode::EaseOut` (a bike, an aircraft, a car on its side) eases it out.

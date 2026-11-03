@@ -6,7 +6,7 @@
 namespace drivelog {
 namespace {
 
-constexpr float kAtRest = 0.5f, k100 = 100.0f / 3.6f, kWindow = 30.0f; // m/s, m/s, s
+constexpr float kAtRest = 0.5f, k100 = 100.0f / 3.6f, kWindow = 30.0f, kLongestGap = 0.5f; // m/s, m/s, s, s
 
 float Dot(const float a[3], const float b[3]) { return a[0] * b[0] + a[1] * b[1] + a[2] * b[2]; }
 
@@ -14,6 +14,10 @@ float Dot(const float a[3], const float b[3]) { return a[0] * b[0] + a[1] * b[1]
 
 void Add(State &s, const Sample &x)
 {
+	// Back after a while (out of the car, a pause) or the clock gone back
+	// (a save loaded): a new log, nothing timed across it.
+	if (s.any && (x.t < s.lastT || x.t - s.lastT > kLongestGap))
+		s = State{};
 	if (s.startedAt < 0)
 		s.startedAt = x.t;
 	s.window.top = std::max(s.window.top, x.speed);

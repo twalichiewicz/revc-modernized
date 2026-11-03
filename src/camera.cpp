@@ -606,9 +606,16 @@ void InVehicle(uint8_t *ped, uint8_t *vehicle, float dt)
 	{
 		const CVector front = Row(0x10), top = Row(0x20), screenRight = Cross(front, top);
 		const bool car = *reinterpret_cast<const int32_t *>(vehicle + 0x348) == 0 && !IsAircraft(vehicle);
-		const bool active = gConfig.headBalance && car && !driveby::Aiming() && Axis(vehicle, 0x20).z >= 0.35f;
+		const headbalance::Mode mode = driveby::Aiming() ? headbalance::Mode::Drop
+		                               : gConfig.headBalance && car && Axis(vehicle, 0x20).z >= 0.35f
+		                                   ? headbalance::Mode::Balance
+		                                   : headbalance::Mode::EaseOut;
+		// Where he looks about the car: the body's quick pitching shows as the view's pitch ahead, reversed behind.
+		const CVector &ahead = Axis(vehicle, 0x10), &side = Axis(vehicle, 0x00);
+		const float along = Dot(front, ahead), across = Dot(front, side), flat = std::sqrt(along * along + across * across);
 		const headbalance::Turn turn = headbalance::Step(balance, std::atan2(-screenRight.z, top.z),
-		                                                 std::asin(std::clamp(front.z, -1.0f, 1.0f)), active, dt);
+		                                                 std::asin(std::clamp(ahead.z, -1.0f, 1.0f)),
+		                                                 flat > 1e-3f ? along / flat : 1.0f, mode, dt);
 		if (turn.pitch != 0.0f || turn.roll != 0.0f)
 			TurnCamera(0.0f, turn.pitch, turn.roll);
 	}

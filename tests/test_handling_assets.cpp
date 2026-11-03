@@ -9,6 +9,7 @@
 #include <cstdlib>
 #include <cstring>
 #include <fstream>
+#include <initializer_list>
 #include <set>
 #include <sstream>
 #include <string>
@@ -128,18 +129,34 @@ static void TestEveryCarPlausible()
 		}
 }
 
+// Each axle at rest, the centre of mass midway (as the model has it): the share
+// of its travel compressed, and its height.
+static float AxleCompression(const Record &r, bool front)
+{
+	return 1.0f / (8 * r.suspensionForce * (front ? r.suspensionBias : 1 - r.suspensionBias));
+}
+static float AxleHeight(const Record &r, bool front)
+{
+	return -r.suspensionLower - AxleCompression(r, front) * (r.suspensionUpper - r.suspensionLower);
+}
+
 static void TestEveryCarsSuspension()
 {
 	for (const Line &l : gLines) {
 		if (!Find(l.name.c_str()))
 			continue;
 		const Record was = l.raw, r = Retuned(l);
-		const float travel = r.suspensionUpper - r.suspensionLower, sag = travel / (4 * r.suspensionForce);
-		const float wasSag = (was.suspensionUpper - was.suspensionLower) / (4 * was.suspensionForce);
-		const bool ok = sag < 0.55f * travel && 4 * r.suspensionForce - 1 >= 1.5f &&
-		                std::fabs((-r.suspensionLower - sag) - (-was.suspensionLower - wasSag)) <= 0.001f;
-		if (!ok)
-			std::printf("  %s: sag %.3f of %.3f m, force %.2f\n", l.name.c_str(), sag, travel, r.suspensionForce);
+		bool ok = std::fabs(AxleHeight(r, true) + AxleHeight(r, false) - AxleHeight(was, true) - AxleHeight(was, false)) <=
+		          0.002f; // the car as a whole, to 1 mm
+		for (bool front : {true, false})
+			ok = ok && AxleCompression(r, front) <= std::max(0.4f, AxleCompression(was, front)) + 1e-4f &&
+			     std::fabs(AxleHeight(r, front) - AxleHeight(was, front)) <= 0.01f + 1e-4f;
+		const float springs = (r.suspensionForce / (r.suspensionUpper - r.suspensionLower)) /
+		                      (was.suspensionForce / (was.suspensionUpper - was.suspensionLower));
+		if (!ok || springs > For(KindOf(l)).springs + 0.005f)
+			std::printf("  %-9s bias %.2f: springs %.2f of %.2f wanted, compressed front %.2f rear %.2f (was %.2f %.2f)\n",
+			            l.name.c_str(), was.suspensionBias, springs, For(KindOf(l)).springs, AxleCompression(r, true),
+			            AxleCompression(r, false), AxleCompression(was, true), AxleCompression(was, false));
 		CHECK(ok);
 	}
 }

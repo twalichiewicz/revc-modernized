@@ -97,6 +97,27 @@ static void TestWindow()
 	CHECK(!Due(s, 159.9f) && Due(s, 160.0f));
 }
 
+// Back in the car after a while, or the clock reset by loading a save: a new
+// log, not a 0-100 timed across the gap or a window that never comes due.
+static void TestGapRestarts()
+{
+	State s;
+	for (int i = 0; i < 30; ++i)
+		Add(s, {i * kDt, 0, true, 0, 0});
+	Drive(s, 100, 0, 5, 30); // a minute later, off from rest at 5 m/s^2
+	NEAR(s.window.zeroTo100, 5.556f, 0.05f);
+	State rolling;
+	for (int i = 0; i < 30; ++i)
+		Add(rolling, {i * kDt, 0, true, 0, 0});
+	Drive(rolling, 100, 3, 5, 30); // first seen again already moving: not timed from before the gap
+	CHECK(rolling.window.zeroTo100 == -1);
+	State back;
+	Add(back, {500, 5, true, 0, 0});
+	Add(back, {2, 5, true, 0, 0}); // the clock went back
+	CHECK(!Due(back, 31.9f));
+	CHECK(Due(back, 32.0f));
+}
+
 int main()
 {
 	TestTopAndZeroTo100();
@@ -105,6 +126,7 @@ int main()
 	TestAnglesOnlyAllDown();
 	TestBodyAngles();
 	TestWindow();
+	TestGapRestarts();
 	if (failures)
 		std::printf("%d failure(s)\n", failures);
 	else

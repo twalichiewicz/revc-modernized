@@ -72,9 +72,11 @@ void Hook_Convert(void *manager, Record *record)
 
 // CAutomobile (macVC 1.0.5217): its matrix's rows (right, forward, up) from +0x8,
 // its move speed (per 1/50 s), handling, wheels' contact points (CColPoint,
-// point first) and spring ratios (1: the wheel hangs free).
+// point first) and spring ratios (1: the wheel hangs free). ProcessControl ends
+// by copying this frame's ratios (+0x580) to +0x590 and resetting them to 1, so
+// after it they're read from +0x590.
 constexpr size_t kMatrix = 0x8, kMoveSpeed = 0x84, kHandling = 0x160, kWheelContacts = 0x4e0, kContactStride = 0x28,
-                 kSpringRatios = 0x580;
+                 kSpringRatios = 0x590;
 constexpr float kRadToDeg = 57.2957795f;
 
 void (*orig_Control)(uint8_t *car);

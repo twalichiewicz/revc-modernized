@@ -4,6 +4,7 @@
 #include "../src/config.h"
 #include "../src/game.h"
 #include <cmath>
+#include <cstdarg>
 #include <cstdio>
 #include <algorithm>
 #include <cstring>
@@ -15,7 +16,15 @@
 namespace game { Api api{}; }
 Config gConfig;
 static int gLogs;
-void Log(const char *, ...) { ++gLogs; }
+static char gLastLog[256];
+void Log(const char *format, ...)
+{
+	++gLogs;
+	va_list args;
+	va_start(args, format);
+	std::vsnprintf(gLastLog, sizeof gLastLog, format, args);
+	va_end(args);
+}
 
 using handlingmodel::Record;
 static int failures;
@@ -56,7 +65,13 @@ static void *TestSymbol(void *, const char *name)
 }
 static int gChains, gControls;
 static void *gConvertHook, *gControlHook;
-static void NativeControl(uint8_t *) { ++gControls; }
+static void NativeControl(uint8_t *car)
+{
+	++gControls;
+	float *ratio = reinterpret_cast<float *>(car + 0x580); // as the game ends it: this frame's to +0x590, reset to 1
+	for (int w = 0; w < 4; ++w)
+		ratio[4 + w] = ratio[w], ratio[w] = 1.0f;
+}
 namespace hooks {
 void *Chain(const char *name, void *replacement)
 {
@@ -113,9 +128,9 @@ static void TestDriveLogHisCar()
 	float *m = reinterpret_cast<float *>(gCar + 0x8);
 	m[0] = 1, m[5] = 1, m[10] = 1; // right, forward, up
 	for (int w = 0; w < 4; ++w) {
-		reinterpret_cast<float *>(gCar + 0x580)[w] = 0.6f; // all four wheels down
 		float *contact = reinterpret_cast<float *>(gCar + 0x4e0 + w * 0x28);
-		contact[0] = w < 2 ? -0.8f : 0.8f, contact[1] = w % 2 ? -1.3f : 1.3f, contact[2] = -0.5f;
+		// The road under the right wheels 0.112 m higher in the body's frame: rolled 4 deg, right side down.
+		contact[0] = w < 2 ? -0.8f : 0.8f, contact[1] = w % 2 ? -1.3f : 1.3f, contact[2] = w < 2 ? -0.5f : -0.388f;
 	}
 	*reinterpret_cast<uint8_t **>(gPed + 0x4b8) = gCar;
 	gPed[0x4c0] = 1;
@@ -126,11 +141,14 @@ static void TestDriveLogHisCar()
 	for (int frame = 0; frame <= 31 * 50; ++frame) {
 		gNow = 1000 + frame * 20;
 		reinterpret_cast<float *>(gCar + 0x84)[1] = std::min(frame, 600) * 0.0005f; // speeding up (per 1/50 s)
+		for (int w = 0; w < 4; ++w)
+			reinterpret_cast<float *>(gCar + 0x580)[w] = 0.6f; // the wheels found the ground this frame
 		reinterpret_cast<Control>(gControlHook)(gCar);
 		reinterpret_cast<Control>(gControlHook)(gOther);
 	}
 	CHECK(gControls == controls + 2 * (31 * 50 + 1)); // the game's own ran for both
 	CHECK(gLogs == logs + 1);                         // one 30 s line, for his car only
+	CHECK(std::strstr(gLastLog, "body roll up to 4.0 deg") != nullptr);
 }
 
 static void TestOffInstallsNothing()

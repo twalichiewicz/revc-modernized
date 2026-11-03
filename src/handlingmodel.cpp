@@ -1,5 +1,6 @@
 #include "handlingmodel.h"
 
+#include <algorithm>
 #include <cmath>
 #include <cstring>
 
@@ -21,6 +22,44 @@ constexpr Factors kSports{1.00f, 0.85f, 0.92f, 0.65f}, kCar{1.00f, 0.85f, 0.90f,
 constexpr float kAccelUnits = 0.0004f, kVelocityUnits = 0.0055556f, kSearchStep = 0.01f, kKmhPerUnit = 180.0f;
 
 bool In(float v, float lo, float hi) { return v >= lo && v <= hi; }
+
+// At rest each axle may be compressed this share of its travel at most (so it
+// takes 2.5x its static load before bottoming), or no more than it was; and it
+// may stand this far (m) from where it stood.
+constexpr float kMostCompression = 0.4f, kMostAxleShift = 0.01f, kSofteningStep = 0.01f;
+
+// How far each axle's wheels sag at rest (m), the centre of mass midway between
+// the axles: each wheel carries a quarter, and the game scales the front springs
+// by the bias, the rear ones by 1 - bias (CAutomobile::ProcessControl).
+struct Sag {
+	float front, rear;
+};
+Sag RestSag(const Record &r)
+{
+	const float travel = r.suspensionUpper - r.suspensionLower, force = r.suspensionForce, bias = r.suspensionBias;
+	return {travel / (8.0f * force * bias), travel / (8.0f * force * (1.0f - bias))};
+}
+
+// Softer by `springs` per metre, the lower limit moved down by the axles' mean
+// extra sag: does each axle stay within the limits?
+bool Fits(const Record &r, float springs)
+{
+	const float travel = r.suspensionUpper - r.suspensionLower;
+	const Sag sag = RestSag(r);
+	const float worst = std::max(sag.front, sag.rear), extra = 0.5f * (sag.front + sag.rear) * (1.0f / springs - 1.0f);
+	const float compressed = worst / (springs * (travel + extra));
+	const float shift = 0.5f * std::fabs(sag.front - sag.rear) * (1.0f / springs - 1.0f);
+	return compressed <= std::max(kMostCompression, worst / travel) + 1e-6f && shift <= kMostAxleShift + 1e-6f;
+}
+
+// The softening a type wants, or as near it as this car's springs allow (1: none).
+float Softening(const Record &r, float wanted)
+{
+	for (float springs = wanted; springs < 1.0f; springs += kSofteningStep)
+		if (Fits(r, springs))
+			return springs;
+	return 1.0f;
+}
 
 } // namespace
 
@@ -100,15 +139,17 @@ void BeforeConversion(Record &r, Kind kind)
 	r.tractionLoss = 1.0f - kSlideLossKept * (1.0f - r.tractionLoss);
 	r.tractionMultiplier *= kTraction;
 	r.brakeDeceleration *= kBrakes;
-	if (f.springs < 1.0f) {
-		// A wheel sags (upper - lower) / (4 force) at rest. Softer per metre it
-		// sags 1/springs as far; the lower limit moves down by the difference,
-		// so the car stands as high as it did with the same travel left above.
-		const float travel = r.suspensionUpper - r.suspensionLower, sag = travel / (4.0f * r.suspensionForce);
-		r.suspensionLower -= sag * (1.0f / f.springs - 1.0f);
-		r.suspensionForce *= f.springs * (r.suspensionUpper - r.suspensionLower) / travel;
+	const float springs = Softening(r, f.springs);
+	if (springs < 1.0f) {
+		// Softer per metre, a wheel sags 1/springs as far; the lower limit moves
+		// down by the axles' mean difference, so the car stands as high as it
+		// did with the same travel left above.
+		const float travel = r.suspensionUpper - r.suspensionLower;
+		const Sag sag = RestSag(r);
+		r.suspensionLower -= 0.5f * (sag.front + sag.rear) * (1.0f / springs - 1.0f);
+		r.suspensionForce *= springs * (r.suspensionUpper - r.suspensionLower) / travel;
 		// The damping ratio goes as damping x sqrt(travel / force).
-		r.suspensionDamping *= kDampingRatio * std::sqrt(f.springs);
+		r.suspensionDamping *= kDampingRatio * std::sqrt(springs);
 	} else {
 		r.suspensionDamping *= kDampingRatio;
 	}

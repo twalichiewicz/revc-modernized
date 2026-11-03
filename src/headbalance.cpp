@@ -16,16 +16,21 @@ float Ease(float dt, float tau) { return 1.0f - std::exp(-dt / tau); }
 
 } // namespace
 
-Turn Step(State &s, float viewRoll, float viewPitch, bool active, float dt)
+Turn Step(State &s, float viewRoll, float bodyPitch, float facing, Mode mode, float dt)
 {
+	const bool active = mode == Mode::Balance;
 	dt = std::clamp(dt, 0.0f, kLongestStep);
 	if (!s.primed) {
-		s.slowPitch = viewPitch;
+		s.slowPitch = bodyPitch;
 		s.primed = true;
 	}
-	s.slowPitch += (viewPitch - s.slowPitch) * Ease(dt, kSlowPitch);
+	s.slowPitch += (bodyPitch - s.slowPitch) * Ease(dt, kSlowPitch);
+	facing = std::clamp(facing, -1.0f, 1.0f);
 	const float roll = active ? std::clamp(-kRollShare * viewRoll, -kRollMost, kRollMost) : 0.0f;
-	const float pitch = active ? std::clamp(-kPitchShare * (viewPitch - s.slowPitch), -kPitchMost, kPitchMost) : 0.0f;
+	const float pitch =
+	    active ? std::clamp(-kPitchShare * (bodyPitch - s.slowPitch) * facing, -kPitchMost, kPitchMost) : 0.0f;
+	if (mode == Mode::Drop)
+		s.roll = s.pitch = 0.0f;
 	s.roll += (roll - s.roll) * Ease(dt, kRollLag);
 	s.pitch += (pitch - s.pitch) * Ease(dt, kPitchLag);
 	return {s.pitch, s.roll};

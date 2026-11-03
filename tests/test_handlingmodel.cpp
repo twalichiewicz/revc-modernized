@@ -1,6 +1,7 @@
 // The car handling retune (#37), without the game: a handling.cfg line as the
 // loader leaves it, retuned by its vehicle type before the game converts it.
 #include "handlingmodel.h"
+#include <algorithm>
 #include <cmath>
 #include <cstddef>
 #include <cstdio>
@@ -56,6 +57,16 @@ static Record Rhino()
 	r.engineAcceleration = 2.4f, r.driveType = '4';
 	r.suspensionForce = 1.0f, r.suspensionDamping = 0.10f, r.suspensionUpper = 0.35f, r.suspensionLower = -0.10f;
 	return r;
+}
+// Each axle at rest, the centre of mass midway between them: each wheel carries
+// a quarter, its spring scaled by the bias (front) or 1 - bias (rear).
+static float AxleCompression(const Record &r, bool front)
+{
+	return 1.0f / (8 * r.suspensionForce * (front ? r.suspensionBias : 1 - r.suspensionBias));
+}
+static float AxleRideHeight(const Record &r, bool front)
+{
+	return -r.suspensionLower - AxleCompression(r, front) * (r.suspensionUpper - r.suspensionLower);
 }
 static float Sag(const Record &r) { return (r.suspensionUpper - r.suspensionLower) / (4 * r.suspensionForce); }
 static float RideHeight(const Record &r) { return -r.suspensionLower - Sag(r); }
@@ -146,6 +157,24 @@ static void TestDampingRatio()
 	}
 }
 
+// ZEBRA: its front springs carry 30% of the force. Softened as an even car is,
+// its front would sit 5 cm down and bottom out on every kerb; it's softened only
+// as far as each axle stays within the limits.
+static void TestUnevenBiasLimited()
+{
+	Record r = Infernus();
+	r.mass = 1900, r.suspensionForce = 1.05f, r.suspensionDamping = 0.13f;
+	r.suspensionUpper = 0.25f, r.suspensionLower = -0.15f, r.suspensionBias = 0.30f;
+	const Record was = r;
+	BeforeConversion(r, Kind::Car);
+	for (bool front : {true, false}) {
+		CHECK(AxleCompression(r, front) <= std::max(0.4f, AxleCompression(was, front)) + 1e-5f);
+		CHECK(std::fabs(AxleRideHeight(r, front) - AxleRideHeight(was, front)) <= 0.01f + 1e-5f);
+	}
+	// and the car as a whole as high as it was
+	NEAR(AxleRideHeight(r, true) + AxleRideHeight(r, false), AxleRideHeight(was, true) + AxleRideHeight(was, false), 2e-5f);
+}
+
 static void TestTank()
 {
 	Record r = Rhino();
@@ -204,6 +233,7 @@ int main()
 	TestRollSofter();
 	TestDampingRatio();
 	TestTank();
+	TestUnevenBiasLimited();
 	TestAfterConversion();
 	TestFind();
 	TestPlausible();
