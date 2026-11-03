@@ -8,6 +8,7 @@ namespace gamedrops {
 namespace {
 constexpr int kRaindrop2D = 0x50; // tParticleType PARTICLE_RAINDROP_2D (as AddRain adds and removes it)
 void (*orig_AddRain)();
+void (*orig_ScreenDropletsRender)();
 void (*gRemovePSystem)(int type);
 } // namespace
 
@@ -20,12 +21,19 @@ void Hook_AddRain()
 	orig_AddRain();
 }
 
+void Hook_ScreenDropletsRender()
+{
+	if (!gConfig.rainDrops)
+		orig_ScreenDropletsRender();
+}
+
 bool Install()
 {
 	if (!gConfig.rainDrops)
 		return true;
 	gRemovePSystem = reinterpret_cast<void (*)(int)>(dlsym(RTLD_MAIN_ONLY, "_ZN9CParticle13RemovePSystemE13tParticleType"));
-	return gRemovePSystem && hooks::Install("_ZN8CWeather7AddRainEv", Hook_AddRain, orig_AddRain);
+	return gRemovePSystem && hooks::Install("_ZN8CWeather7AddRainEv", Hook_AddRain, orig_AddRain) &&
+	       hooks::Install("_ZN14ScreenDroplets6RenderEv", Hook_ScreenDropletsRender, orig_ScreenDropletsRender);
 }
 
 } // namespace gamedrops

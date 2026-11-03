@@ -205,6 +205,7 @@ DEFAULT_HOOKS = [
     "_ZN8CWeather17RenderRainStreaksEv",
     # ...and its drops on the screen give way to the mod's
     "_ZN8CWeather7AddRainEv",
+    "_ZN14ScreenDroplets6RenderEv",
     # ...and heavy rain closes the view in
     "_ZN10CTimeCycle6UpdateEv",
     # soaked ground under a car's wheels

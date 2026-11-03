@@ -166,14 +166,15 @@ bool Prepare()
 // car's glass, lying on it, a little in front; drawn in the world, depth-tested,
 // so the dash, pillars and roof hide what's behind them. With the frame (for
 // the view through them) as the texture.
-void DrawOnGlass(const std::vector<Face> &faces, const uint8_t *car, CVector eye, void *frame)
+size_t DrawOnGlass(const std::vector<Face> &faces, const uint8_t *car, CVector eye, void *frame)
 {
 	std::vector<dropmodel::Pane> glass;
 	for (const Face &f : faces)
 		if (f.glass)
 			glass.push_back({f.a, f.b, f.c});
 	if (glass.empty())
-		return;
+		return 0;
+	size_t placed = 0;
 	const worlddraw::Axes axes = worlddraw::VehicleAxes(car);
 	auto world = [&](Vec3 d) {
 		return Vec3{axes.right.x * d.x + axes.forward.x * d.y + axes.up.x * d.z, axes.right.y * d.x + axes.forward.y * d.y + axes.up.y * d.z,
@@ -203,6 +204,7 @@ void DrawOnGlass(const std::vector<Face> &faces, const uint8_t *car, CVector eye
 			continue;
 		up = {up.x / ul, up.y / ul, up.z / ul};
 		const Vec3 across{up.y * n.z - up.z * n.y, up.z * n.x - up.x * n.z, up.x * n.y - up.y * n.x};
+		++placed;
 		const float r = dropmodel::WindscreenAngle(d.radius) * t;
 		const Vec3 c{from.x + dir.x * (t - kOffGlass), from.y + dir.y * (t - kOffGlass), from.z + dir.z * (t - kOffGlass)};
 		auto at = [&](float a, float b) { // across, up (m) from its middle
@@ -221,22 +223,24 @@ void DrawOnGlass(const std::vector<Face> &faces, const uint8_t *car, CVector eye
 		for (int i : {0, 1, 2, 0, 2, 3})
 			batch.Put(q[i], 0, 0, uint8_t(d.seed * 255), u[i], v[i], strength);
 	}
+	return placed;
 }
 
 struct Stats {
 	double ms = 0;
-	size_t drops = 0, frames = 0;
+	size_t drops = 0, placed = 0, frames = 0;
 	std::chrono::steady_clock::time_point since = std::chrono::steady_clock::now();
 } gStats;
 
 // The cost, every 20 s.
-void Noted(const char *mode, std::chrono::steady_clock::time_point start)
+void Noted(const char *mode, std::chrono::steady_clock::time_point start, size_t placed)
 {
 	gStats.ms += std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - start).count();
 	gStats.drops += gDrops.All().size();
+	gStats.placed += placed;
 	if (++gStats.frames && std::chrono::steady_clock::now() - gStats.since > std::chrono::seconds(20)) {
-		Log("rain drops: on the %s, %zu a frame, %.3f ms a frame to send", mode, gStats.drops / gStats.frames,
-		    gStats.ms / double(gStats.frames));
+		Log("rain drops: on the %s, %zu a frame (%zu drawn), %.3f ms a frame to send", mode, gStats.drops / gStats.frames,
+		    gStats.placed / gStats.frames, gStats.ms / double(gStats.frames));
 		gStats = {};
 	}
 }
@@ -302,8 +306,8 @@ void Hook_RenderFirstPersonVehicle()
 		return;
 	shaders::Set(uFrame, fw, fh, 1.0f, fw / float(ScreenWidth()));
 	const auto start = std::chrono::steady_clock::now();
-	DrawOnGlass(gNow.faces, gNow.car, gNow.eye, frame);
-	Noted("windscreen", start);
+	const size_t placed = DrawOnGlass(gNow.faces, gNow.car, gNow.eye, frame);
+	Noted("windscreen", start, placed);
 }
 
 } // namespace
@@ -316,7 +320,7 @@ void Draw()
 	const auto start = std::chrono::steady_clock::now();
 	struct Timed {
 		std::chrono::steady_clock::time_point start;
-		~Timed() { Noted("lens", start); }
+		~Timed() { Noted("lens", start, gDrops.All().size()); }
 	} timed{start};
 	float fw, fh;
 	shaders::FrameSize(fw, fh);
