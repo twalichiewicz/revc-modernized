@@ -53,6 +53,22 @@ static void TestDropsLandWithRain()
 	CHECK(light.All().size() < wet.All().size());
 }
 
+// On a windscreen they're beads: many more, a third the size (a lens's drops
+// are close to the eye; a windscreen's an arm's length off, and small).
+static void TestWindscreenBeads()
+{
+	Drops glass, lens;
+	Run(glass, 1, true, 0, DropMode::Windscreen, 2);
+	Run(lens, 1, true, 0, DropMode::Lens, 2);
+	float biggest = 0;
+	for (const Drop &d : glass.All())
+		biggest = std::fmax(biggest, d.radius);
+	CHECK(glass.All().size() > 3 * lens.All().size() && biggest < 0.016f);
+	Drops full;
+	Run(full, 1, true, 0, DropMode::Windscreen, 30);
+	CHECK(full.All().size() > 300 && full.All().size() <= 600);
+}
+
 static void TestNoDropsWhenCovered()
 {
 	Drops d;
@@ -87,12 +103,12 @@ static void TestSpeedPushesUp()
 {
 	Drops d;
 	d.Update(0, true, 30, DropMode::Windscreen, 0);
-	d.Land({0.3f, 0.5f}, 0.012f);
+	d.Land({0.3f, 0.5f}, 0.004f); // a bead: too light to run down by itself
 	Run(d, 0, true, 30, DropMode::Windscreen, 0.5f);
 	CHECK(d.All().size() == 1 && d.All()[0].pos.y < 0.47f && d.All()[0].pos.x < 0.3f); // up, and aside
 	Drops parked;
 	parked.Update(0, true, 0, DropMode::Windscreen, 0);
-	parked.Land({0.3f, 0.5f}, 0.012f);
+	parked.Land({0.3f, 0.5f}, 0.004f);
 	Run(parked, 0, true, 0, DropMode::Windscreen, 0.5f);
 	CHECK(parked.All().size() == 1 && parked.All()[0].pos.y == 0.5f);
 }
@@ -152,6 +168,7 @@ int main()
 {
 	TestModeFor();
 	TestDropsLandWithRain();
+	TestWindscreenBeads();
 	TestNoDropsWhenCovered();
 	TestMergeAndTrickle();
 	TestSpeedPushesUp();

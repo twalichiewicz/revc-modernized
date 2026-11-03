@@ -168,14 +168,18 @@ bool Prepare()
 // the view through them) as the texture.
 size_t DrawOnGlass(const std::vector<Face> &faces, const uint8_t *car, CVector eye, void *frame)
 {
+	// Only the glass ahead of him can be the windscreen (hundreds of beads each try it).
+	const worlddraw::Axes axes = worlddraw::VehicleAxes(car);
 	std::vector<dropmodel::Pane> glass;
-	for (const Face &f : faces)
-		if (f.glass)
+	for (const Face &f : faces) {
+		const float ahead = ((f.a.x + f.b.x + f.c.x) / 3 - eye.x) * axes.forward.x + ((f.a.y + f.b.y + f.c.y) / 3 - eye.y) * axes.forward.y +
+		                    ((f.a.z + f.b.z + f.c.z) / 3 - eye.z) * axes.forward.z;
+		if (f.glass && ahead > 0.1f)
 			glass.push_back({f.a, f.b, f.c});
+	}
 	if (glass.empty())
 		return 0;
 	size_t placed = 0;
-	const worlddraw::Axes axes = worlddraw::VehicleAxes(car);
 	auto world = [&](Vec3 d) {
 		return Vec3{axes.right.x * d.x + axes.forward.x * d.y + axes.up.x * d.z, axes.right.y * d.x + axes.forward.y * d.y + axes.up.y * d.z,
 		            axes.right.z * d.x + axes.forward.z * d.y + axes.up.z * d.z};

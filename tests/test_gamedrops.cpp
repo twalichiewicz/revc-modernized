@@ -12,6 +12,11 @@ static void *Symbol(void *, const char *);
 #undef dlsym
 
 Config gConfig;
+static bool gFirstPerson, gSeat;
+namespace camera {
+bool FirstPersonOnFoot() { return gFirstPerson; }
+bool InSeat() { return gSeat; }
+} // namespace camera
 static int gFailures, gNative, gRemoved, gRemovedType = -1, gDroplets;
 #define CHECK(c)                                                                                                       \
 	do {                                                                                                           \
@@ -47,13 +52,23 @@ int main()
 	CHECK(gamedrops::Install());
 	gamedrops::Hook_AddRain();
 	CHECK(gNative == 0 && gRemoved == 1 && gRemovedType == 0x50); // RAINDROP_2D
+	// In third person the camera's a thing in the world, rained on: the port's droplets show.
 	gamedrops::Hook_ScreenDropletsRender();
-	CHECK(gDroplets == 0);
+	CHECK(gDroplets == 1);
+	// His own eyes, or a seat behind glass: the mod's (or none), not the port's.
+	gFirstPerson = true;
+	gamedrops::Hook_ScreenDropletsRender();
+	gFirstPerson = false;
+	gSeat = true;
+	gamedrops::Hook_ScreenDropletsRender();
+	gSeat = false;
+	CHECK(gDroplets == 1);
 	gConfig.rainDrops = false;                                      // (as the INI has it at start)
 	gamedrops::Hook_AddRain();
 	CHECK(gNative == 1 && gRemoved == 1);
+	gFirstPerson = true;
 	gamedrops::Hook_ScreenDropletsRender();
-	CHECK(gDroplets == 1);
+	CHECK(gDroplets == 2);
 	if (gFailures)
 		return 1;
 	std::puts("gamedrops: all screen drop tests passed");

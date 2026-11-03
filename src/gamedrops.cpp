@@ -1,4 +1,5 @@
 #include "gamedrops.h"
+#include "camera.h"
 #include "config.h"
 #include "hooks.h"
 
@@ -23,7 +24,9 @@ void Hook_AddRain()
 
 void Hook_ScreenDropletsRender()
 {
-	if (!gConfig.rainDrops)
+	// In third person the camera's a thing in the world, and rained on: the port's droplets show.
+	// Through his own eyes (none) or from a seat (the mod's, on the glass or the lens): not.
+	if (!gConfig.rainDrops || (!camera::FirstPersonOnFoot() && !camera::InSeat()))
 		orig_ScreenDropletsRender();
 }
 

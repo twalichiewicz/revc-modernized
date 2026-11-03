@@ -6,15 +6,23 @@
 namespace dropmodel {
 namespace {
 
-constexpr float kLandRate = 22.0f;        // drops a second on a lens in a downpour
-constexpr float kSmallest = 0.010f, kBiggest = 0.026f; // as they land (11 to 28 pixels at 1080)
-constexpr float kHeavy = 0.032f;          // from here they run down
+// A lens's drops (close to the eye: 11 to 28 pixels at 1080) and a
+// windscreen's (an arm's length off: beads a third the size, four times as
+// many). Sizes are fractions of the view's (or the window's) height.
+struct Sizes {
+	float smallest, biggest; // as they land
+	float heavy;             // from here they run down
+	float rate;              // landing a second in a downpour
+	size_t most;
+};
+constexpr Sizes kLens{0.010f, 0.026f, 0.032f, 22.0f, 150};
+constexpr Sizes kGlass{0.0033f, 0.0087f, 0.0107f, 88.0f, 600};
+const Sizes &SizesFor(DropMode mode) { return mode == DropMode::Windscreen ? kGlass : kLens; }
 constexpr float kRun = 0.08f;             // screens a second a heavy drop runs
-constexpr float kDryOut = 0.0012f;        // radius a second lost under cover
+constexpr float kDryOut = 0.0012f;        // radius a second lost under cover (a lens's; in proportion for beads)
 constexpr float kDryIn = 0.0002f;         // ...and out in the rain
 constexpr float kTrailFade = 0.06f;       // a second
 constexpr float kLongestTrail = 0.18f;
-constexpr size_t kMost = 150;
 
 // How hard the air pushes them off a windscreen, 0..1, by speed (m/s).
 float Push(float speed) { return std::clamp((speed - 4.0f) / 26.0f, 0.0f, 1.0f); }
@@ -121,15 +129,16 @@ void Drops::Update(float rain, bool exposed, float speed, DropMode mode, float d
 	if (mode == DropMode::None)
 		return;
 	const bool windscreen = mode == DropMode::Windscreen;
+	const Sizes &size = SizesFor(mode);
 	const float push = windscreen ? Push(speed) : 0.0f;
 	// Driving into it, more land.
 	if (exposed && rain > 0) {
-		pending_ += kLandRate * std::clamp(rain, 0.0f, 1.0f) * (windscreen ? 1.0f + speed / 15.0f : 1.0f) * dt;
+		pending_ += size.rate * std::clamp(rain, 0.0f, 1.0f) * (windscreen ? 1.0f + speed / 15.0f : 1.0f) * dt;
 		while (pending_ >= 1.0f) {
 			pending_ -= 1.0f;
-			if (drops_.size() >= kMost)
+			if (drops_.size() >= size.most)
 				drops_.erase(drops_.begin()); // the oldest
-			Land({Random(), Random()}, kSmallest + (kBiggest - kSmallest) * Random() * Random());
+			Land({Random(), Random()}, size.smallest + (size.biggest - size.smallest) * Random() * Random());
 		}
 	} else if (!exposed) {
 		pending_ = 0;
@@ -137,12 +146,12 @@ void Drops::Update(float rain, bool exposed, float speed, DropMode mode, float d
 	std::vector<Drop> kept;
 	kept.reserve(drops_.size());
 	for (Drop d : drops_) {
-		d.radius -= (exposed ? kDryIn : kDryOut) * dt;
-		if (d.radius < kSmallest * 0.5f)
+		d.radius -= (exposed ? kDryIn : kDryOut) * (size.smallest / kLens.smallest) * dt;
+		if (d.radius < size.smallest * 0.5f)
 			continue;
 		float dy = 0, dx = 0;
-		if (d.radius >= kHeavy)
-			dy += kRun * (d.radius / kHeavy) * dt; // it runs down
+		if (d.radius >= size.heavy)
+			dy += kRun * (d.radius / size.heavy) * dt; // it runs down
 		if (push > 0) {                            // the air's stronger: up and aside
 			dy -= 0.45f * push * dt;
 			dx += (d.pos.x < 0.5f ? -1.0f : 1.0f) * 0.25f * push * dt;
