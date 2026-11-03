@@ -116,6 +116,12 @@ $(BUILD)/test_vehiclerain: tests/test_vehiclerain.cpp src/vehiclerain.cpp src/ve
 $(BUILD)/test_rainvehicles: tests/test_rainvehicles.cpp src/rainvehicles.cpp src/rainvehicles.h src/vehiclerain.cpp src/rainmodel.cpp src/mapdata.cpp | $(BUILD)
 	$(CXX) $(CXXFLAGS) -Isrc -o $@ tests/test_rainvehicles.cpp src/vehiclerain.cpp src/rainmodel.cpp src/mapdata.cpp
 
+$(BUILD)/test_handlingmodel: tests/test_handlingmodel.cpp src/handlingmodel.cpp src/handlingmodel.h | $(BUILD)
+	$(CXX) $(CXXFLAGS) -Isrc -o $@ tests/test_handlingmodel.cpp src/handlingmodel.cpp
+
+$(BUILD)/test_handling_assets: tests/test_handling_assets.cpp src/handlingmodel.cpp src/handlingmodel.h | $(BUILD)
+	$(CXX) $(CXXFLAGS) -Isrc -o $@ tests/test_handling_assets.cpp src/handlingmodel.cpp
+
 $(BUILD)/test_rainmodel: tests/test_rainmodel.cpp src/rainmodel.cpp src/rainmodel.h | $(BUILD)
 	$(CXX) $(CXXFLAGS) -Isrc -o $@ tests/test_rainmodel.cpp src/rainmodel.cpp
 
@@ -293,8 +299,9 @@ $(BUILD)/test_estateassets: tests/test_estateassets.cpp src/estatelighting.cpp s
 $(BUILD)/test_mapassets: tests/test_mapassets.cpp tools/bake/bake.cpp $(GAMEFILES) $(wildcard tools/bake/*.h) src/mapdata.cpp src/mapdata.h src/radiologos.cpp | $(BUILD)
 	$(CXX) $(CXXFLAGS) -Isrc -o $@ tests/test_mapassets.cpp $(GAMEFILES) src/mapdata.cpp src/radiologos.cpp -lz
 
-test-game-assets: $(BUILD)/test_estateassets $(BUILD)/test_mapassets $(BUILD)/test_shotcollision $(BUILD)/test_rotorassets $(BUILD)/test_planeflight_assets $(BUILD)/test_flightpath_assets $(BUILD)/test_planeflight_nativecaller $(BUILD)/test_airportjets_assets $(BUILD)/test_planestream $(BUILD)/test_airportjetmodel $(BUILD)/test_airworld_native $(BUILD)/test_learjetseat_assets $(BUILD)/test_jetwash_assets $(BUILD)/test_trafficweave $(BUILD)/test_towercollision_assets $(BUILD)/test_towercollision_native $(BUILD)/test_jetboarding_assets $(BUILD)/test_jetboarding_native $(BUILD)/test_jetshadow_assets $(BUILD)/test_jetshadow_native $(BUILD)/test_jetboardingpose $(BUILD)/test_airportjetspawners_native $(BUILD)/test_jetcrouchgait
+test-game-assets: $(BUILD)/test_estateassets $(BUILD)/test_handling_assets $(BUILD)/test_mapassets $(BUILD)/test_shotcollision $(BUILD)/test_rotorassets $(BUILD)/test_planeflight_assets $(BUILD)/test_flightpath_assets $(BUILD)/test_planeflight_nativecaller $(BUILD)/test_airportjets_assets $(BUILD)/test_planestream $(BUILD)/test_airportjetmodel $(BUILD)/test_airworld_native $(BUILD)/test_learjetseat_assets $(BUILD)/test_jetwash_assets $(BUILD)/test_trafficweave $(BUILD)/test_towercollision_assets $(BUILD)/test_towercollision_native $(BUILD)/test_jetboarding_assets $(BUILD)/test_jetboarding_native $(BUILD)/test_jetshadow_assets $(BUILD)/test_jetshadow_native $(BUILD)/test_jetboardingpose $(BUILD)/test_airportjetspawners_native $(BUILD)/test_jetcrouchgait
 	GAMEDATA="$(GAMEDATA)" $(BUILD)/test_estateassets
+	GAMEDATA="$(GAMEDATA)" $(BUILD)/test_handling_assets
 	GAMEDATA="$(GAMEDATA)" $(BUILD)/test_mapassets
 	GAMEDATA="$(GAMEDATA)" $(BUILD)/test_shotcollision --assets
 	GAMEDATA="$(GAMEDATA)" $(BUILD)/test_rotorassets
@@ -384,6 +391,8 @@ $(BUILD)/vcmm-towercollision: tools/bake/towercollision.cpp $(GAMEFILES) $(wildc
 
 $(BUILD)/test_trafficweave: tests/test_trafficweave.cpp tests/nativeweavearm.h src/trafficweave.cpp $(wildcard src/*.h) | $(BUILD)
 	$(CXX) $(CXXFLAGS) -Isrc -o $@ tests/test_trafficweave.cpp
+
+FEEDBACK_TESTS += test_handlingmodel
 
 test-feedback: $(addprefix $(BUILD)/,$(FEEDBACK_TESTS))
 	@set -e; for test in $(FEEDBACK_TESTS); do $(BUILD)/$$test; done
