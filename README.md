@@ -137,6 +137,8 @@ Vice City's story, missions and world stay as they are. Every feature can be swi
     you and of the roof's front edge coming down over the road.
   - The right stick looks around the cabin, and the view recentres when you let go. R3 looks back.
   - Getting in and out stays in first person.
+  - In a car the view leans with the body as it rolls and dives, and Tommy's head comes back a little
+    towards level against it (`HeadBalance`).
   - On a motorcycle the view leans with you.
   - Drive-bys aim from the seat, through first person's crosshair: Counter-Strike's four lines, opening
     as you fire and when the car's moving fast, as the shots spread.
@@ -539,6 +541,7 @@ updated after that. To pick up settings added by a newer version, delete it and 
 | `Clouds`, `ModernLighting`, `LightGlow` | The new sky, the camera look, and cars' lights glowing on the model |
 | `Planes` | The airliners up in the clouds, lit by the sky, with their lights |
 | `CarHandling` | GTA IV-style weight: mass by type, gentler acceleration, softer springs that lean, longer braking |
+| `HeadBalance` | First person in a car: the view leans with the car, his head levelling a little against it |
 
 If something looks wrong, the log next to the settings file (`vcmodernhud.log`) usually says why. The
 last three sessions are kept as `vcmodernhud.1.log` to `.3.log`, so a session that crashed isn't lost when

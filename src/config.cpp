@@ -47,6 +47,7 @@ const char kDefaultIni[] = "; VC Modern HUD for macVC. Delete this file to resto
                            "RainDrops=1          ; drops on the view in first person, on the windscreen in a car's seat view\n"
                            "RainSplashes=1       ; splashes on the wet ground and car roofs, as the rain is heavy\n"
                            "RainHaze=1           ; heavy rain closes the view in: the fog nearer, the far clip shorter\n"
+                           "HeadBalance=1        ; first person in a car: his head levels a little against the car's roll\n"
                            "CarHandling=1        ; GTA IV-style weight: heavier trucks, slower cars, softer springs that lean, longer braking\n"
                            "RainVehicles=1       ; soaked grass, dirt and sand bog cars down; aircraft are thrown about in the rain\n"
                            "RadioLogo=1          ; station logo at the bottom centre when it changes, instead of the big name\n"
@@ -201,6 +202,8 @@ void Apply(const char *key, const char *value, const char *section)
 		gConfig.rainSplashes = b;
 	else if (!strcasecmp(key, "RainHaze"))
 		gConfig.rainHaze = b;
+	else if (!strcasecmp(key, "HeadBalance"))
+		gConfig.headBalance = b;
 	else if (!strcasecmp(key, "CarHandling"))
 		gConfig.carHandling = b;
 	else if (!strcasecmp(key, "RainVehicles"))

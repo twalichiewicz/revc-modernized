@@ -30,7 +30,7 @@ PLUGIN += src/trafficweave.cpp
 PLUGIN += src/towercollision.cpp
 PLUGIN += src/jetshadow.cpp
 PLUGIN += src/jetboardingpose.cpp
-PLUGIN += src/handlingmodel.cpp src/handling.cpp src/drivelog.cpp
+PLUGIN += src/handlingmodel.cpp src/handling.cpp src/drivelog.cpp src/headbalance.cpp
 GUNS      ?= $(wildcard assets/guns/*.vmg)  # every gun built (GUNS="..." to build in only some)
 CXXFLAGS  += -I$(BUILD)
 BLENDER   ?= blender
@@ -128,6 +128,9 @@ $(BUILD)/test_handlinghook: tests/test_handlinghook.cpp src/handling.cpp src/han
 
 $(BUILD)/test_drivelog: tests/test_drivelog.cpp src/drivelog.cpp src/drivelog.h | $(BUILD)
 	$(CXX) $(CXXFLAGS) -Isrc -o $@ tests/test_drivelog.cpp src/drivelog.cpp
+
+$(BUILD)/test_headbalance: tests/test_headbalance.cpp src/headbalance.cpp src/headbalance.h | $(BUILD)
+	$(CXX) $(CXXFLAGS) -Isrc -o $@ tests/test_headbalance.cpp src/headbalance.cpp
 
 $(BUILD)/test_rainmodel: tests/test_rainmodel.cpp src/rainmodel.cpp src/rainmodel.h | $(BUILD)
 	$(CXX) $(CXXFLAGS) -Isrc -o $@ tests/test_rainmodel.cpp src/rainmodel.cpp
@@ -234,14 +237,14 @@ $(BUILD)/test_aimfire: tests/test_aimfire.cpp src/aimcam.cpp src/body.cpp src/fp
 $(BUILD)/test_aimposehook: tests/test_aimposehook.cpp src/aimcam.cpp src/body.cpp src/fpfeedback.cpp $(wildcard src/*.h) | $(BUILD)
 	$(CXX) $(CXXFLAGS) -Isrc -Wl,-dead_strip -o $@ tests/test_aimposehook.cpp src/fpfeedback.cpp
 
-$(BUILD)/test_aimspreadhook: tests/test_aimspreadhook.cpp tests/test_damageoverlayhook.cpp src/player.cpp src/camera.cpp src/fpfeedback.cpp src/draw.cpp src/canvas.cpp src/fpbob.cpp src/scope.cpp src/game.cpp $(wildcard src/*.h) | $(BUILD)
-	$(CXX) $(CXXFLAGS) -Isrc -Wl,-dead_strip -o $@ tests/test_aimspreadhook.cpp src/fpfeedback.cpp src/draw.cpp src/canvas.cpp src/fpbob.cpp src/scope.cpp src/game.cpp
+$(BUILD)/test_aimspreadhook: tests/test_aimspreadhook.cpp tests/test_damageoverlayhook.cpp src/player.cpp src/camera.cpp src/headbalance.cpp src/headbalance.h src/fpfeedback.cpp src/draw.cpp src/canvas.cpp src/fpbob.cpp src/scope.cpp src/game.cpp $(wildcard src/*.h) | $(BUILD)
+	$(CXX) $(CXXFLAGS) -Isrc -Wl,-dead_strip -o $@ tests/test_aimspreadhook.cpp src/fpfeedback.cpp src/draw.cpp src/canvas.cpp src/headbalance.cpp src/fpbob.cpp src/scope.cpp src/game.cpp
 
-$(BUILD)/test_damageoverlayhook: tests/test_damageoverlayhook.cpp src/player.cpp src/camera.cpp src/fpfeedback.cpp src/draw.cpp src/canvas.cpp src/fpbob.cpp src/scope.cpp src/game.cpp $(wildcard src/*.h) | $(BUILD)
-	$(CXX) $(CXXFLAGS) -Isrc -Wl,-dead_strip -o $@ tests/test_damageoverlayhook.cpp src/fpfeedback.cpp src/draw.cpp src/canvas.cpp src/fpbob.cpp src/scope.cpp src/game.cpp
+$(BUILD)/test_damageoverlayhook: tests/test_damageoverlayhook.cpp src/player.cpp src/camera.cpp src/headbalance.cpp src/headbalance.h src/fpfeedback.cpp src/draw.cpp src/canvas.cpp src/fpbob.cpp src/scope.cpp src/game.cpp $(wildcard src/*.h) | $(BUILD)
+	$(CXX) $(CXXFLAGS) -Isrc -Wl,-dead_strip -o $@ tests/test_damageoverlayhook.cpp src/fpfeedback.cpp src/draw.cpp src/canvas.cpp src/headbalance.cpp src/fpbob.cpp src/scope.cpp src/game.cpp
 
-$(BUILD)/test_aircraftcamerahook: tests/test_aircraftcamerahook.cpp tests/test_damageoverlayhook.cpp src/player.cpp src/camera.cpp src/planeflight.h src/flightinput.h src/fpfeedback.cpp src/draw.cpp src/canvas.cpp src/fpbob.cpp src/scope.cpp src/game.cpp $(wildcard src/*.h) | $(BUILD)
-	$(CXX) $(CXXFLAGS) -Isrc -Wl,-dead_strip -o $@ tests/test_aircraftcamerahook.cpp src/fpfeedback.cpp src/draw.cpp src/canvas.cpp src/fpbob.cpp src/scope.cpp src/game.cpp
+$(BUILD)/test_aircraftcamerahook: tests/test_aircraftcamerahook.cpp tests/test_damageoverlayhook.cpp src/player.cpp src/camera.cpp src/headbalance.cpp src/headbalance.h src/planeflight.h src/flightinput.h src/fpfeedback.cpp src/draw.cpp src/canvas.cpp src/fpbob.cpp src/scope.cpp src/game.cpp $(wildcard src/*.h) | $(BUILD)
+	$(CXX) $(CXXFLAGS) -Isrc -Wl,-dead_strip -o $@ tests/test_aircraftcamerahook.cpp src/fpfeedback.cpp src/draw.cpp src/canvas.cpp src/headbalance.cpp src/fpbob.cpp src/scope.cpp src/game.cpp
 
 $(BUILD)/test_helihook: tests/test_helihook.cpp src/heli.cpp src/helizones.cpp src/aircraft.cpp $(wildcard src/*.h) | $(BUILD)
 	$(CXX) $(CXXFLAGS) -Isrc -o $@ tests/test_helihook.cpp src/helizones.cpp src/aircraft.cpp
@@ -399,7 +402,7 @@ $(BUILD)/vcmm-towercollision: tools/bake/towercollision.cpp $(GAMEFILES) $(wildc
 $(BUILD)/test_trafficweave: tests/test_trafficweave.cpp tests/nativeweavearm.h src/trafficweave.cpp $(wildcard src/*.h) | $(BUILD)
 	$(CXX) $(CXXFLAGS) -Isrc -o $@ tests/test_trafficweave.cpp
 
-FEEDBACK_TESTS += test_handlingmodel test_handlinghook test_drivelog
+FEEDBACK_TESTS += test_handlingmodel test_handlinghook test_drivelog test_headbalance
 
 test-feedback: $(addprefix $(BUILD)/,$(FEEDBACK_TESTS))
 	@set -e; for test in $(FEEDBACK_TESTS); do $(BUILD)/$$test; done
@@ -466,8 +469,8 @@ $(BUILD)/test_planeengine: tests/test_planeengine.cpp tests/test_planeflight.cpp
 $(BUILD)/test_planeglide: tests/test_planeglide.cpp tests/test_planeengine.cpp tests/test_planeflight.cpp src/planeflight.cpp $(wildcard src/*.h) | $(BUILD)
 	$(CXX) $(CXXFLAGS) -Isrc -o $@ tests/test_planeglide.cpp
 
-$(BUILD)/test_airworld: tests/test_airworld.cpp tests/fixtures/airworld_camera_consumer.cpp tests/test_aircraftcamerahook.cpp src/camera.cpp src/airworld.cpp src/canvas.cpp $(wildcard src/*.h) | $(BUILD)
-	$(CXX) $(CXXFLAGS) -Isrc -Wl,-dead_strip -o $@ tests/test_airworld.cpp tests/fixtures/airworld_camera_consumer.cpp src/canvas.cpp
+$(BUILD)/test_airworld: tests/test_airworld.cpp tests/fixtures/airworld_camera_consumer.cpp tests/test_aircraftcamerahook.cpp src/camera.cpp src/headbalance.cpp src/headbalance.h src/airworld.cpp src/canvas.cpp $(wildcard src/*.h) | $(BUILD)
+	$(CXX) $(CXXFLAGS) -Isrc -Wl,-dead_strip -o $@ tests/test_airworld.cpp tests/fixtures/airworld_camera_consumer.cpp src/canvas.cpp src/headbalance.cpp
 
 $(BUILD)/test_airworld_native: tests/test_airworld_native.cpp $(GAMEFILES) $(wildcard tools/bake/*.h) src/mapdata.cpp src/mapdata.h | $(BUILD)
 	$(CXX) $(CXXFLAGS) -Isrc -o $@ tests/test_airworld_native.cpp $(GAMEFILES) src/mapdata.cpp -lz
@@ -478,8 +481,8 @@ $(BUILD)/test_jetwash: tests/test_jetwash.cpp tests/test_airportjets.cpp tests/t
 $(BUILD)/test_jetwash_assets: tests/test_jetwash_assets.cpp tests/test_airworld_native.cpp $(GAMEFILES) $(wildcard tools/bake/*.h) src/mapdata.cpp src/mapdata.h | $(BUILD)
 	$(CXX) $(CXXFLAGS) -Isrc -o $@ tests/test_jetwash_assets.cpp $(GAMEFILES) src/mapdata.cpp -lz
 
-$(BUILD)/test_learjetseat_assets: tests/test_learjetseat_assets.cpp tests/test_aircraftcamerahook.cpp tests/test_damageoverlayhook.cpp src/player.cpp src/camera.cpp src/fpfeedback.cpp src/draw.cpp src/canvas.cpp src/fpbob.cpp src/scope.cpp src/game.cpp tools/bake/gamefiles.cpp $(wildcard src/*.h tools/bake/*.h) | $(BUILD)
-	$(CXX) $(CXXFLAGS) -Isrc -Wl,-dead_strip -o $@ tests/test_learjetseat_assets.cpp src/fpfeedback.cpp src/draw.cpp src/canvas.cpp src/fpbob.cpp src/scope.cpp src/game.cpp tools/bake/gamefiles.cpp -lz
+$(BUILD)/test_learjetseat_assets: tests/test_learjetseat_assets.cpp tests/test_aircraftcamerahook.cpp tests/test_damageoverlayhook.cpp src/player.cpp src/camera.cpp src/headbalance.cpp src/headbalance.h src/fpfeedback.cpp src/draw.cpp src/canvas.cpp src/fpbob.cpp src/scope.cpp src/game.cpp tools/bake/gamefiles.cpp $(wildcard src/*.h tools/bake/*.h) | $(BUILD)
+	$(CXX) $(CXXFLAGS) -Isrc -Wl,-dead_strip -o $@ tests/test_learjetseat_assets.cpp src/fpfeedback.cpp src/draw.cpp src/canvas.cpp src/headbalance.cpp src/fpbob.cpp src/scope.cpp src/game.cpp tools/bake/gamefiles.cpp -lz
 
 $(BUILD)/test_jetground: tests/test_jetground.cpp tests/test_jetwheels.cpp src/jetwheels.cpp src/planeflight.cpp $(wildcard src/*.h) | $(BUILD)
 	$(CXX) $(CXXFLAGS) -Isrc -o $@ tests/test_jetground.cpp

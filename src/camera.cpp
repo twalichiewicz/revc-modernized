@@ -14,6 +14,7 @@
 #include "canvas.h"
 #include "wheel.h"
 #include "game.h"
+#include "headbalance.h"
 #include "heli.h"
 #include "flightmodel.h"
 #include "planeflight.h"
@@ -591,6 +592,25 @@ void InVehicle(uint8_t *ped, uint8_t *vehicle, float dt)
 		Row(0x10) = front;
 		Row(0x20) = top;
 		Row(0x00) = Cross(top, front);
+	}
+	// He balances his head: the view comes back a little towards level against
+	// the car's roll and its quick pitching (headbalance), whichever way he looks.
+	static headbalance::State balance;
+	static const uint8_t *balanced;
+	static uint32_t balancedAt;
+	const uint32_t now = api.timeMs ? *api.timeMs : 0;
+	if (vehicle != balanced || now < balancedAt || now - balancedAt > 250) // another car, or back in the seat
+		balance = headbalance::State{};
+	balanced = vehicle;
+	balancedAt = now;
+	{
+		const CVector front = Row(0x10), top = Row(0x20), screenRight = Cross(front, top);
+		const bool car = *reinterpret_cast<const int32_t *>(vehicle + 0x348) == 0 && !IsAircraft(vehicle);
+		const bool active = gConfig.headBalance && car && !driveby::Aiming() && Axis(vehicle, 0x20).z >= 0.35f;
+		const headbalance::Turn turn = headbalance::Step(balance, std::atan2(-screenRight.z, top.z),
+		                                                 std::asin(std::clamp(front.z, -1.0f, 1.0f)), active, dt);
+		if (turn.pitch != 0.0f || turn.roll != 0.0f)
+			TurnCamera(0.0f, turn.pitch, turn.roll);
 	}
 	NearClip(kNearClipVehicle);
 	gCockpit = vehicle;
