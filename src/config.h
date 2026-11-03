@@ -33,6 +33,7 @@ struct Config {
 	bool streetNames = true;    // the street he's on over the area, bottom right (#35)
 	bool wetGround = true;      // wet streets in the rain: darker, glossy, the lights streaked on them (#32)
 	bool rainStreaks = true;    // dense, lit, wind-blown rain, none under cover (#32)
+	bool carHandling = true;    // GTA IV-style weight: mass by type, slower, softer springs, longer braking (#37)
 	bool rainVehicles = true;   // soaked ground bogs cars down; aircraft thrown about in the rain (#32)
 	bool rainHaze = true;       // heavy rain closes the view in: the fog nearer, the far clip shorter (#32)
 	bool rainSplashes = true;   // splashes on the wet ground and car roofs, as the rain is heavy (#32)

@@ -30,6 +30,7 @@ PLUGIN += src/trafficweave.cpp
 PLUGIN += src/towercollision.cpp
 PLUGIN += src/jetshadow.cpp
 PLUGIN += src/jetboardingpose.cpp
+PLUGIN += src/handlingmodel.cpp src/handling.cpp
 GUNS      ?= $(wildcard assets/guns/*.vmg)  # every gun built (GUNS="..." to build in only some)
 CXXFLAGS  += -I$(BUILD)
 BLENDER   ?= blender
@@ -121,6 +122,9 @@ $(BUILD)/test_handlingmodel: tests/test_handlingmodel.cpp src/handlingmodel.cpp 
 
 $(BUILD)/test_handling_assets: tests/test_handling_assets.cpp src/handlingmodel.cpp src/handlingmodel.h | $(BUILD)
 	$(CXX) $(CXXFLAGS) -Isrc -o $@ tests/test_handling_assets.cpp src/handlingmodel.cpp
+
+$(BUILD)/test_handlinghook: tests/test_handlinghook.cpp src/handling.cpp src/handling.h src/handlingmodel.cpp src/handlingmodel.h | $(BUILD)
+	$(CXX) $(CXXFLAGS) -Isrc -o $@ tests/test_handlinghook.cpp src/handlingmodel.cpp
 
 $(BUILD)/test_rainmodel: tests/test_rainmodel.cpp src/rainmodel.cpp src/rainmodel.h | $(BUILD)
 	$(CXX) $(CXXFLAGS) -Isrc -o $@ tests/test_rainmodel.cpp src/rainmodel.cpp
@@ -392,7 +396,7 @@ $(BUILD)/vcmm-towercollision: tools/bake/towercollision.cpp $(GAMEFILES) $(wildc
 $(BUILD)/test_trafficweave: tests/test_trafficweave.cpp tests/nativeweavearm.h src/trafficweave.cpp $(wildcard src/*.h) | $(BUILD)
 	$(CXX) $(CXXFLAGS) -Isrc -o $@ tests/test_trafficweave.cpp
 
-FEEDBACK_TESTS += test_handlingmodel
+FEEDBACK_TESTS += test_handlingmodel test_handlinghook
 
 test-feedback: $(addprefix $(BUILD)/,$(FEEDBACK_TESTS))
 	@set -e; for test in $(FEEDBACK_TESTS); do $(BUILD)/$$test; done

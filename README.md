@@ -363,6 +363,11 @@ know you by your description, and getting away leaves you under an APB until you
   day. (The game's only showed within 120 m.)
 - Story phone calls ring anywhere, even while driving. A 1980s brick phone slides up with the caller's
   name, D-pad up answers, and Tommy keeps moving.
+- Cars have GTA IV's weight. Trucks and buses weigh what such vehicles weigh, so a car that hits one
+  gives way. Cars accelerate more gently and top out a little lower, turn in heavier, slide gradually
+  instead of snapping, and take longer to stop. Softer springs roll the body in corners, dive it under
+  braking and squat it under power, at the same ride height. Each car keeps its place among the others
+  (`CarHandling`).
 - Car radios can be heard from the street, muffled through the bodywork and coming from where the car is.
   Your own car keeps playing after you get out, and so do stopped cars nearby. Getting into a car, you
   hear only that car's radio, and a police car plays the police scanner, not the station you just heard.
@@ -533,6 +538,7 @@ updated after that. To pick up settings added by a newer version, delete it and 
 | `WorldPopulation` | Path/zone-based civilians and foot patrols, with shared station replenishment |
 | `Clouds`, `ModernLighting`, `LightGlow` | The new sky, the camera look, and cars' lights glowing on the model |
 | `Planes` | The airliners up in the clouds, lit by the sky, with their lights |
+| `CarHandling` | GTA IV-style weight: mass by type, gentler acceleration, softer springs that lean, longer braking |
 
 If something looks wrong, the log next to the settings file (`vcmodernhud.log`) usually says why. The
 last three sessions are kept as `vcmodernhud.1.log` to `.3.log`, so a session that crashed isn't lost when

@@ -56,6 +56,8 @@ def name_hash(name):
 
 # Hooks used by the minimap plugin (mangled names, without the leading '_').
 DEFAULT_HOOKS = [
+    # Car handling (#37): each car's line retuned by type as the game converts it to game units.
+    "_ZN16cHandlingDataMgr22ConvertDataToGameUnitsEP13tHandlingData",
     # Supplement verified missing upper-tower surfaces through native collision.
     "_ZN9CPhysical22ProcessEntityCollisionEP7CEntityP9CColPoint",
     "_ZN11CAutomobile22ProcessEntityCollisionEP7CEntityP9CColPoint",
