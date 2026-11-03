@@ -5,6 +5,7 @@
 #include "../src/game.h"
 #include <cmath>
 #include <cstdio>
+#include <algorithm>
 #include <cstring>
 [[maybe_unused]] static void *TestSymbol(void *, const char *);
 #define dlsym TestSymbol
@@ -53,8 +54,9 @@ static void *TestSymbol(void *, const char *name)
 		return reinterpret_cast<void *>(FakeGetHandlingId);
 	return nullptr;
 }
-static int gChains;
-static void *gConvertHook;
+static int gChains, gControls;
+static void *gConvertHook, *gControlHook;
+static void NativeControl(uint8_t *) { ++gControls; }
 namespace hooks {
 void *Chain(const char *name, void *replacement)
 {
@@ -62,6 +64,10 @@ void *Chain(const char *name, void *replacement)
 	if (!std::strcmp(name, "_ZN16cHandlingDataMgr22ConvertDataToGameUnitsEP13tHandlingData")) {
 		gConvertHook = replacement;
 		return reinterpret_cast<void *>(NativeConvert);
+	}
+	if (!std::strcmp(name, "_ZN11CAutomobile14ProcessControlEv")) {
+		gControlHook = replacement;
+		return reinterpret_cast<void *>(NativeControl);
 	}
 	return nullptr;
 }
@@ -89,6 +95,43 @@ static Record With(int32_t id)
 }
 using Convert = void (*)(void *, Record *);
 static void Run(Record &r) { reinterpret_cast<Convert>(gConvertHook)(nullptr, &r); }
+
+// His car: the drive log samples it after the game's ProcessControl and logs
+// every 30 s; a car he isn't driving isn't sampled.
+alignas(16) static uint8_t gCar[0x800], gOther[0x800], gPed[0x900];
+static Record gCarHandling;
+static uint32_t gNow;
+static uint8_t *Player() { return gPed; }
+static void TestDriveLogHisCar()
+{
+	CHECK(gControlHook != nullptr);
+	if (!gControlHook)
+		return;
+	gCarHandling.id = 4; // the Infernus, a retuned car
+	*reinterpret_cast<Record **>(gCar + 0x160) = &gCarHandling;
+	*reinterpret_cast<Record **>(gOther + 0x160) = &gCarHandling;
+	float *m = reinterpret_cast<float *>(gCar + 0x8);
+	m[0] = 1, m[5] = 1, m[10] = 1; // right, forward, up
+	for (int w = 0; w < 4; ++w) {
+		reinterpret_cast<float *>(gCar + 0x580)[w] = 0.6f; // all four wheels down
+		float *contact = reinterpret_cast<float *>(gCar + 0x4e0 + w * 0x28);
+		contact[0] = w < 2 ? -0.8f : 0.8f, contact[1] = w % 2 ? -1.3f : 1.3f, contact[2] = -0.5f;
+	}
+	*reinterpret_cast<uint8_t **>(gPed + 0x4b8) = gCar;
+	gPed[0x4c0] = 1;
+	game::api.FindPlayerPed = Player;
+	game::api.timeMs = &gNow;
+	using Control = void (*)(uint8_t *);
+	const int logs = gLogs, controls = gControls;
+	for (int frame = 0; frame <= 31 * 50; ++frame) {
+		gNow = 1000 + frame * 20;
+		reinterpret_cast<float *>(gCar + 0x84)[1] = std::min(frame, 600) * 0.0005f; // speeding up (per 1/50 s)
+		reinterpret_cast<Control>(gControlHook)(gCar);
+		reinterpret_cast<Control>(gControlHook)(gOther);
+	}
+	CHECK(gControls == controls + 2 * (31 * 50 + 1)); // the game's own ran for both
+	CHECK(gLogs == logs + 1);                         // one 30 s line, for his car only
+}
 
 static void TestOffInstallsNothing()
 {
@@ -158,6 +201,7 @@ int main()
 	TestOthersUntouched();
 	TestReconvertFromFresh();
 	TestImplausiblePassesThrough();
+	TestDriveLogHisCar();
 	if (failures)
 		std::printf("%d failure(s)\n", failures);
 	else
