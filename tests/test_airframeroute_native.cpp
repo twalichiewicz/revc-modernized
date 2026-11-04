@@ -1,0 +1,27 @@
+#define main OwnerChecks
+#include "test_airframedamage.cpp"
+#undef main
+#include "nativejetshadowarm.h"
+namespace routefixture {
+using namespace nativejetshadowtest;using namespace fixture;
+uint8_t player[0x900]{},wanted[0x40]{};uint8_t *Player(){*reinterpret_cast<void **>(player+0x778)=wanted;return player;}
+uint64_t guard=0x12345678;int updates=0;uintptr_t Zero(...){return 0;}void Ignore(...){}float Ground(...){return 0;}bool No(...){return false;}CVector PlayerCoors(){return {100,100,100};}int ObjectType(const void *){return 1;}
+void Update(...){++updates;}void Normalize(CVector *p){const float l=std::sqrt(p->x*p->x+p->y*p->y+p->z*p->z);if(l>1e-7f){p->x/=l;p->y/=l;p->z/=l;}}
+CVector Cross(const CVector &a,const CVector &b){return {a.y*b.z-a.z*b.y,a.z*b.x-a.x*b.z,a.x*b.y-a.y*b.x};}
+struct Pair {float s,c;};Pair SinCos(float a){return {std::sin(a),std::cos(a)};}float Atan(float a,float b){return std::atan2(a,b);}float Fmod(float a,float b){return std::pow(a,b);}
+struct Node {Vec3 p;float distance;uint32_t ground;};Node path[4]{{{-100,-100,100},0,0},{{0,0,100},100,0},{{100,-100,100},200,0},{{0,-200,100},300,0}};
+void Bind(Code &code,uint64_t first,uint64_t last){for(auto pc=first;pc<last;pc+=4){const auto w=code.image.Word(pc);if((w&0xfc000000)==0x94000000){const auto target=uint64_t(int64_t(pc)+(int64_t(int32_t(w<<6))>>4));if(target<first||target>=last)code.bindings[target]=reinterpret_cast<void *>(Ignore);}}
+ code.bindings[0x10010c0f4]=reinterpret_cast<void *>(Player);code.bindings[0x100172e50]=reinterpret_cast<void *>(Normalize);code.bindings[0x100172e94]=reinterpret_cast<void *>(Cross);code.bindings[0x10016f5a0]=reinterpret_cast<void *>(ObjectType);code.bindings[0x10017196c]=reinterpret_cast<void *>(Update);code.bindings[0x100153020]=reinterpret_cast<void *>(Update);code.bindings[0x10010c118]=reinterpret_cast<void *>(PlayerCoors);code.bindings[0x100131830]=reinterpret_cast<void *>(Ground);code.bindings[0x1001310c4]=reinterpret_cast<void *>(Zero);code.bindings[0x10012e488]=reinterpret_cast<void *>(No);code.bindings[0x1002f4ef0]=reinterpret_cast<void *>(SinCos);code.bindings[0x1002f50e8]=reinterpret_cast<void *>(Atan);code.bindings[0x1002f570c]=reinterpret_cast<void *>(Fmod);code.Finish();Store(code.Page(0x100344610),&guard);}
+void SetupRoute(int model,int kind){Setup();*reinterpret_cast<int16_t *>(car+0x6a)=model;*reinterpret_cast<int *>(car+0x348)=kind;*reinterpret_cast<Vec3 *>(car+0x38)={0,0,100};models[model]=info;airframedamage::gHistory={};}
+}
+int main(){if(OwnerChecks())return 1;using namespace routefixture;Code plane;plane.Add(0x10027643c,0x10027761c);Bind(plane,0x10027643c,0x10027761c);Store(plane.Page(0x1007ab020),path);Store(plane.Page(0x1007ab040),int32_t(4));Store(plane.Page(0x1007ab050),400.f);Store(plane.Page(0x1007ab070),500.f);Store(plane.Page(0x1007ab074),500.f);Store(plane.Page(0x1007ab108),60.f);
+ SetupRoute(180,4);airframedamage::gPlane=reinterpret_cast<void (*)(uint8_t *)>(plane.Address(0x10027643c));airframedamage::BeginBullet(car);game::api.AirframeCollision(car,{-8,0,0},20);
+ for(int i=0;i<150;i++){now+=20;Store(plane.Page(0x1007ab0f0),float(100+i));reinterpret_cast<void (*)(uint8_t *)>(entries.at("_ZN6CPlane14ProcessControlEv"))(car);}
+ Check(updates>0&&std::isfinite(reinterpret_cast<Vec3 *>(car+0x38)->z)&&reinterpret_cast<Vec3 *>(car+0x38)->z<95,"actual full native CPlane route controller consumes lost wing lift across frames");
+ game::api.ProcessVerticalLine=+[](const CVector &from,float to,uint8_t *point,uint8_t *&,bool,bool,bool,bool,bool,bool,void *){*reinterpret_cast<Vec3 *>(point)={from.x,from.y,80};return from.z>=80&&to<80;};
+ for(int i=0;i<10;i++){now+=20;Store(plane.Page(0x1007ab0f0),float(250+i));reinterpret_cast<void (*)(uint8_t *)>(entries.at("_ZN6CPlane14ProcessControlEv"))(car);}Check(game::Wrecked(car)&&std::fabs(reinterpret_cast<Vec3 *>(car+0x38)->z-81)<.001f,"native route damage settles at actual ground contact across later route updates");game::api.ProcessVerticalLine=nullptr;
+ const auto nativePlane=airframedamage::gPlane;airframedamage::gPlane=Native;car[0x384]=1;*reinterpret_cast<Vec3 *>(car+0x38)={500,200,123};reinterpret_cast<void (*)(uint8_t *)>(entries.at("_ZN6CPlane14ProcessControlEv"))(car);Check(reinterpret_cast<Vec3 *>(car+0x38)->z==123,"explicit native scripted crash state retains its pose owner");airframedamage::gPlane=nativePlane;
+ Code heli;heli.Add(0x100272fe0,0x10027447c);Bind(heli,0x100272fe0,0x10027447c);SetupRoute(165,3);Store(heli.Page(0x10058d674),1.f);for(int i=0;i<150;i++){now+=20;Store(heli.Page(0x10058d660),now);reinterpret_cast<void (*)(uint8_t *)>(heli.Address(0x100272fe0))(car);}const float healthyHeliZ=reinterpret_cast<Vec3 *>(car+0x38)->z;SetupRoute(165,3);game::api.AirframeCollision(car,{0,0,1.9f},20);auto entry=entries.find("_ZN5CHeli14ProcessControlEv");if(entry!=entries.end())airframedamage::gHeli=reinterpret_cast<void (*)(uint8_t *)>(heli.Address(0x100272fe0));
+ for(int i=0;i<150;i++){now+=20;Store(heli.Page(0x10058d660),now);if(entry!=entries.end())reinterpret_cast<void (*)(uint8_t *)>(entry->second)(car);else reinterpret_cast<void (*)(uint8_t *)>(heli.Address(0x100272fe0))(car);}
+ Check(entry!=entries.end()&&std::isfinite(reinterpret_cast<Vec3 *>(car+0x38)->z)&&reinterpret_cast<Vec3 *>(car+0x38)->z<healthyHeliZ-5,"actual full native CHeli controller consumes failed rotor and advances systems");printf("airframe native controllers: %s\n",bad?"FAILED":"all passed");return bad?1:0;
+}

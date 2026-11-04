@@ -66,7 +66,7 @@ void NativePlaneControl(uint8_t *){}
 void NativeDispatch(){++dispatches;}
 void *Native(const char *s){
  if(strstr(s,"TellOccupantsToLeaveCar"))return reinterpret_cast<void *>(CrewLeave);
- if(strstr(s,"CPlane14ProcessControl")||strstr(s,"CBoat14ProcessControl"))return reinterpret_cast<void *>(NativePlaneControl);
+ if(strstr(s,"CHeli14ProcessControl")||strstr(s,"CPlane14ProcessControl")||strstr(s,"CBoat14ProcessControl"))return reinterpret_cast<void *>(NativePlaneControl);
  if(strstr(s,"FireTruckControl"))return reinterpret_cast<void *>(NativeCannon);if(strstr(s,"FindFurthestFire"))return reinterpret_cast<void *>(Furthest);
  if(strstr(s,"CAutomobile14ProcessControl"))return reinterpret_cast<void *>(NativeControl);if(strstr(s,"CAutomobile13VehicleDamage"))return reinterpret_cast<void *>(NativeDamage);
  if(strstr(s,"CVehicle13InflictDamage"))return reinterpret_cast<void *>(NativeHit);if(strstr(s,"CFire11ProcessFire"))return reinterpret_cast<void *>(NativeProcess);if(strstr(s,"CFire10Extinguish"))return reinterpret_cast<void *>(NativeExtinguish);
@@ -114,7 +114,11 @@ int main(){using namespace fixture;*reinterpret_cast<void **>(pool)=cars;*reinte
  carmechanics::sample.running=true;carmechanics::sample.electrical=.9f;carmechanics::sample.breach=.4f;std::memset(cars[0]+0x34c,0xaa,0x388-0x34c);
  for(int i=0;i<100;i++){now+=100;if(entries.count("_ZN6CPlane14ProcessControlEv"))Entry<Fn>("_ZN6CPlane14ProcessControlEv")(cars[0]);for(int j=0;j<40;j++)if(manager[8+j*0x38])Process()(manager+8+j*0x38);}
  Check(starts==1&&carfire::Burning(cars[0],false)&&carmechanics::exposure>0,"mission CPlane uses the same localized fire and module burn owner");
+ Extinguish()(*reinterpret_cast<uint8_t **>(cars[0]+0x280));for(int i=0;i<84;i++){now+=100;if(entries.count("_ZN6CPlane14ProcessControlEv"))Entry<Fn>("_ZN6CPlane14ProcessControlEv")(cars[0]);}Check(starts==1,"unchanged aircraft component damage stays suppressed after water");
+ if(game::api.RearmVehicleFire)game::api.RearmVehicleFire(cars[0]);for(int i=0;i<84;i++){now+=100;if(entries.count("_ZN6CPlane14ProcessControlEv"))Entry<Fn>("_ZN6CPlane14ProcessControlEv")(cars[0]);}Check(starts==2,"new independent aircraft component damage re-arms normal eight-second ignition after water");
  bool intact=true;for(int i=0x34c;i<0x388;i++)intact&=cars[0][i]==0xaa;Check(intact,"CPlane fire never reads or writes an automobile engine damage manager");
+ Reset();*reinterpret_cast<int16_t *>(cars[0]+0x6a)=165;*reinterpret_cast<int *>(cars[0]+0x348)=3;game::api.AirframeEffects=+[](const uint8_t *){airframemodel::Effects e;e.managed=true;return e;};game::api.AirframeFire=+[](const uint8_t *){return carmechanics::sample;};carmechanics::sample.running=true;carmechanics::sample.electrical=.9f;carmechanics::sample.breach=.4f;
+ for(int i=0;i<84;i++){now+=100;if(entries.count("_ZN5CHeli14ProcessControlEv"))Entry<Fn>("_ZN5CHeli14ProcessControlEv")(cars[0]);}Check(starts==1,"native CHeli controller advances progressive fire in missions");
  printf("carfire: %s\n",failures?"FAILED":"all passed");return failures?1:0;
 }
 #else

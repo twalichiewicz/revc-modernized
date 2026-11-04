@@ -381,7 +381,7 @@ void Crash(uint8_t *v,uint8_t *by)
 void Hook_Damage(uint8_t *v,uint8_t *by,int weapon,float damage,CVector point)
 {
 	orig_Damage(v,by,weapon,damage,point);
-	if(Owned(v)&&VehicleHealth(v)<=0&&!(weapon==31&&api.AirframeEffects&&api.AirframeEffects(v).managed))Crash(v,by);
+	if(Owned(v)&&VehicleHealth(v)<=0&&!(weapon==31&&api.VehicleFireManaged&&api.VehicleFireManaged(v)))Crash(v,by);
 }
 void Hook_Control(uint8_t *v)
 {
@@ -399,7 +399,7 @@ void Hook_Control(uint8_t *v)
 	if(!Wrecked(v)&&std::isfinite(impact)&&impact>4)
 		roster.damage(v,nullptr,39,std::min(1500.0f,(impact-4)*(impact-4)*12),EntityPos(v));
 	const uint32_t now=api.timeMs?*api.timeMs:gPrevious;
-	if(!Wrecked(v)&&VehicleHealth(v)<250&&!(api.AirframeEffects&&api.AirframeEffects(v).managed)){
+	if(!Wrecked(v)&&VehicleHealth(v)<250&&!(api.VehicleFireManaged&&api.VehicleFireManaged(v))){
 		if(!gPlane.burning)gPlane.burning=now;
 		else if(now-gPlane.burning>5000)Crash(v,nullptr);
 	}else gPlane.burning=0;

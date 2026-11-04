@@ -309,6 +309,8 @@ struct Api {
  void (*AirframeBurn)(uint8_t *,float);
  void (*AirframeFlightUsed)(uint8_t *);
  void (*AirframeCollision)(uint8_t *,Vec3,float);
+ bool (*VehicleFireManaged)(const uint8_t *);
+ void (*RearmVehicleFire)(uint8_t *);
  void (*RepairVehicleFire)(uint8_t *);
  bool (*VehicleBurning)(const uint8_t *vehicle); // installed fire owner, or native-health fallback
 	bool (*VehicleFireService)(const uint8_t *vehicle); // active native cannon crew owns its behavior

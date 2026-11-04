@@ -43,7 +43,7 @@ Native fire pool40 x0x38, 256 bounded actor slots; original geometry and unrelat
 
 ### Task 4: Completion
 
-- [ ] Full all/test/test-game-assets, focused sanitizers, one fresh review/one tested fix pass.
+- [x] Full all/test/test-game-assets, focused sanitizers, one fresh review/one tested fix pass.
 - [ ] Authorized closed-game install, byte/signature checks, verification record and commit; clean only this workspace.
 
 ## Execution record
@@ -52,3 +52,5 @@ Native fire pool40 x0x38, 256 bounded actor slots; original geometry and unrelat
 - RED reproductions: normal side glass receives zero-position native damage without windscreen-only prepass; cold aggregate health100 ignites without any leaking/hot/electrical system. Native arrival exit at50810 confirmed, service-cycle regression next.
 
 - Task1: native regression proves crew/cannon through extinction and native cleanup; added scoped0.5m cannon minimum. Cold global health no longer ignites; real localized interaction requires8s. Empty side impacts certify the actual zero-position damage call. All focused suites/assets/capacity checks passed.
+
+- Independent whole-branch review: four Important findings, no Critical/Minor. One tested fix pass corrected native pose-controller consumers (full pristine CPlane and CHeli execution),65-layer armor fallback, disabled/uninstalled progressive-fire fallback and independent aircraft rearming after water. Complete all/test/test-game-assets and final four ASAN/UBSAN binaries passed; real librw skin builder passed. Native controllers retain their mission state while calibrated component losses affect actual progress, altitude and attitude. Exact coefficients/component locations and live presentation/navigation remain refinements, not claims of full War Thunder fidelity.

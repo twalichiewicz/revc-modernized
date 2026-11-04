@@ -228,7 +228,7 @@ bool Hook_Narrow(const Line &line,const void *matrix,void *model,Point &point,fl
   return gNarrow(line,matrix,model,point,closest,a,b);
  const uintptr_t address=reinterpret_cast<uintptr_t>(matrix);auto *car=address>=8?reinterpret_cast<uint8_t *>(address-8):nullptr;
  const int ref=Ref(car,gVehiclePool,0x6f0,game::api.PoolsGetVehicle);
- if(ref<0||(game::EntityFlags(car)&7)!=2||((*reinterpret_cast<int *>(car+0x348)!=0||game::IsAircraft(car))&&!airframedamage::Enabled(car))||!game::EntityClump(car))
+ if(ref<0||(game::EntityFlags(car)&7)!=2||((*reinterpret_cast<int *>(car+0x348)!=0||game::IsAircraft(car))&&!airframedamage::Enabled(car))||!game::EntityClump(car)||rw.objectType(game::EntityClump(car))!=2)
   return gNarrow(line,matrix,model,point,closest,a,b);
  MeshQuery q{line,closest,car};q.ignoreSee=a;q.collect=!gShot->readOnly&&(carmechanics::Enabled()||carparts::Enabled()||airframedamage::Enabled(car)||projectilemodel::Armored(game::EntityModel(car)));
  if(q.collect){q.pending.actor=Capture(car,ref);q.pending.token=carmechanics::BeginBullet(car);q.pending.partToken=carparts::BeginBullet(car);q.pending.airToken=airframedamage::BeginBullet(car);}
@@ -410,7 +410,9 @@ void Hook_VehicleDamage(uint8_t *car,uint8_t *by,int weapon,float damage,CVector
    }
   }return;
  }
- const float transmission=certified?SurfaceRatio(car,receipt.point,receipt.from,receipt.to,damage):1;
+ const Certified nearest=gShot?gShot->last:Certified{};
+ const bool certifiedSurface=gReady&&gShot&&gShot->active&&!gShot->readOnly&&DamageMetadata(weapon,by)&&nearest.car==car&&Ref(car,gVehiclePool,0x6f0,game::api.PoolsGetVehicle)==nearest.ref&&((zero&&ZeroPosition(car,weapon,by))||!std::memcmp(&at,&nearest.point.p,sizeof at));
+ const float transmission=certified?SurfaceRatio(car,receipt.point,receipt.from,receipt.to,damage):certifiedSurface?SurfaceRatio(car,nearest.point,nearest.from,nearest.to,damage):1;
  if(transmission<=0)return;
  const Certified hit=gShot?gShot->last:Certified{};
  // These two exact native fire scopes pass a zero damage position despite

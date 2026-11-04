@@ -212,6 +212,11 @@ int main()
 	control(gDodo);const float collisionHealth=game::VehicleHealth(gDodo);
 	CHECK(gDamage==1&&collisionHealth<1000&&collisionHealth>250&&gExplosions==0);
 	control(gDodo);CHECK(game::VehicleHealth(gDodo)==collisionHealth&&gDamage==1); // native ProcessControl clears consumed contact
+	for(int mode=0;mode<3;mode++){
+  const auto flags=*reinterpret_cast<uint32_t *>(gDodo+0x60);const auto health=game::VehicleHealth(gDodo);const auto kills=gKills,explosions=gExplosions;
+  game::api.AirframeEffects=+[](const uint8_t *){airframemodel::Effects e;e.managed=true;return e;};game::api.VehicleFireManaged=mode==2?+[](const uint8_t *){return true;}:nullptr;gConfig.carFire=mode!=0;planeflight::gPlane.burning=0;*reinterpret_cast<float *>(gDodo+0x2a0)=200;planeflight::gPrevious=10000;control(gDodo);planeflight::gPrevious+=6001;control(gDodo);CHECK(game::Wrecked(gDodo)==(mode<2));
+  *reinterpret_cast<uint32_t *>(gDodo+0x60)=flags;*reinterpret_cast<float *>(gDodo+0x2a0)=health;gKills=kills;gExplosions=explosions;planeflight::gPlane.burning=0;
+ }game::api.VehicleFireManaged=nullptr;game::api.AirframeEffects=nullptr;gConfig.carFire=true;
 	auto damage=Hook<void (*)(uint8_t *,uint8_t *,int,float,CVector)>("InflictDamage");CHECK(damage);
 	if(damage){
 		damage(gDodo,nullptr,24,2000,{});CHECK(gDamage==2&&gExplosions==1&&gKills==1&&game::Wrecked(gDodo));

@@ -371,6 +371,7 @@ test-game-assets: $(BUILD)/test_glass_assets $(BUILD)/test_estateassets $(BUILD)
 	GAMEDATA="$(GAMEDATA)" $(BUILD)/test_jetcrouchgait
 	GAMEDATA="$(GAMEDATA)" MACVC_NATIVE="$(MACVC_NATIVE)" $(BUILD)/test_airportjetspawners_native
 	GAMEDATA="$(GAMEDATA)" $(BUILD)/test_airframe_assets
+	MACVC_NATIVE="$(MACVC_NATIVE)" $(BUILD)/test_airframeroute_native
 	python3 -I tests/test_patchcapacity.py
 
 $(BUILD)/test_airportjets_assets: tests/test_airportjets_assets.cpp $(GAMEFILES) $(wildcard tools/bake/*.h) src/mapdata.cpp src/mapdata.h | $(BUILD)
@@ -802,3 +803,7 @@ $(BUILD)/test_airframedamage: tests/test_airframedamage.cpp src/airframedamage.c
 $(BUILD)/test_airframe_assets: tests/test_airframe_assets.cpp tests/test_mechanical_assets.cpp src/airframemodel.cpp src/projectilemodel.cpp src/mechanicalmodel.cpp tools/bake/gamefiles.cpp $(wildcard src/*.h) | $(BUILD)
 	$(CXX) $(CXXFLAGS) -Isrc -o $@ tests/test_airframe_assets.cpp src/airframemodel.cpp src/projectilemodel.cpp src/mechanicalmodel.cpp tools/bake/gamefiles.cpp -lz
 test-game-assets: $(BUILD)/test_airframe_assets
+
+$(BUILD)/test_airframeroute_native: tests/test_airframeroute_native.cpp tests/test_airframedamage.cpp src/airframedamage.cpp src/airframemodel.cpp src/projectilemodel.cpp src/mechanicalmodel.cpp src/partsmodel.cpp $(wildcard src/*.h) | $(BUILD)
+	$(CXX) $(CXXFLAGS) -Isrc -o $@ tests/test_airframeroute_native.cpp src/airframemodel.cpp src/projectilemodel.cpp src/mechanicalmodel.cpp src/partsmodel.cpp
+test-game-assets: $(BUILD)/test_airframeroute_native
