@@ -44,7 +44,7 @@ Native fire pool40 x0x38, 256 bounded actor slots; original geometry and unrelat
 ### Task 4: Completion
 
 - [x] Full all/test/test-game-assets, focused sanitizers, one fresh review/one tested fix pass.
-- [ ] Authorized closed-game install, byte/signature checks, verification record and commit; clean only this workspace.
+- [x] Authorized closed-game install, byte/signature checks, verification record and commit; clean only this workspace.
 
 ## Execution record
 
@@ -54,3 +54,13 @@ Native fire pool40 x0x38, 256 bounded actor slots; original geometry and unrelat
 - Task1: native regression proves crew/cannon through extinction and native cleanup; added scoped0.5m cannon minimum. Cold global health no longer ignites; real localized interaction requires8s. Empty side impacts certify the actual zero-position damage call. All focused suites/assets/capacity checks passed.
 
 - Independent whole-branch review: four Important findings, no Critical/Minor. One tested fix pass corrected native pose-controller consumers (full pristine CPlane and CHeli execution),65-layer armor fallback, disabled/uninstalled progressive-fire fallback and independent aircraft rearming after water. Complete all/test/test-game-assets and final four ASAN/UBSAN binaries passed; real librw skin builder passed. Native controllers retain their mission state while calibrated component losses affect actual progress, altitude and attitude. Exact coefficients/component locations and live presentation/navigation remain refinements, not claims of full War Thunder fidelity.
+
+- Installation completed with game closed:163 hooks/10 skips. Built/installed plugin bytes match (SHA256 f21d6de07dd4abe0a3ece94d0971963d47e10893973b9ec07184018ca2847e6c); strict dylib signature and strict executable signature with --ignore-resources passed. Original supported binary backup SHA unchanged. Verification logs remain in build/vehicle-damage-followup (verification-reviewed.log, sanitizers-reviewed.log, librw-release.log, install.log). No live play session was launched. Branch retained locally; no merge or push.
+
+Execution rulings retained from the temporary ledger:
+- Explicit mission/aircraft request supersedes old blanket exclusions; explicit script/proof/config commands remain authoritative.
+- Ignition requires localized sources for8s; close-range native cannon targeting reaches0.5m only for healthy certified service crews. Cost: ignition timing and close water presentation need play feedback.
+- Enforcer/Securicar layers use calibrated native budget100 body/65 glazing; ballistic native parts need180 localized budget per stage. Cost: balancing requires driving/shooting feedback, without a claimed ballistic rating.
+- Aircraft internals are14 authored volumes normalized to original stock COL bounds; player forces, native FlyingControl impulses and actual native pose controllers consume their losses. Cost: locations and coefficients remain approximations requiring refinements.
+- Reviewer-set-aside exact ratings/placement/aerodynamics and full fracture/fragment/fluid simulation remain staged-model limits. Live appearance/responder navigation require play validation. Cost: future fidelity and presentation refinements remain; no live validation was inferred from fixtures.
+- Installation/signature checks were completed by the implementer, independent of the read-only review. No deferred Minor findings.
