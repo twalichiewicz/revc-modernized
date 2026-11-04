@@ -35,7 +35,7 @@ PLUGIN += src/glassmodel.cpp src/carglass.cpp
 PLUGIN += src/partsmodel.cpp src/carparts.cpp
 PLUGIN += src/dentmodel.cpp src/carimpact.cpp
 PLUGIN += src/mechanicalmodel.cpp src/carmechanics.cpp src/projectilemodel.cpp
-PLUGIN += src/firemodel.cpp src/carfire.cpp
+PLUGIN += src/firemodel.cpp src/carfire.cpp src/airframemodel.cpp src/airframedamage.cpp
 GUNS      ?= $(wildcard assets/guns/*.vmg)  # every gun built (GUNS="..." to build in only some)
 CXXFLAGS  += -I$(BUILD)
 BLENDER   ?= blender
@@ -370,6 +370,7 @@ test-game-assets: $(BUILD)/test_glass_assets $(BUILD)/test_estateassets $(BUILD)
 	GAMEDATA="$(GAMEDATA)" $(BUILD)/test_jetboardingpose
 	GAMEDATA="$(GAMEDATA)" $(BUILD)/test_jetcrouchgait
 	GAMEDATA="$(GAMEDATA)" MACVC_NATIVE="$(MACVC_NATIVE)" $(BUILD)/test_airportjetspawners_native
+	GAMEDATA="$(GAMEDATA)" $(BUILD)/test_airframe_assets
 	python3 -I tests/test_patchcapacity.py
 
 $(BUILD)/test_airportjets_assets: tests/test_airportjets_assets.cpp $(GAMEFILES) $(wildcard tools/bake/*.h) src/mapdata.cpp src/mapdata.h | $(BUILD)
@@ -441,6 +442,7 @@ $(BUILD)/test_trafficweave: tests/test_trafficweave.cpp tests/nativeweavearm.h s
 FEEDBACK_TESTS += test_handlingmodel test_handlinghook test_drivelog test_headbalance
 FEEDBACK_TESTS += test_glassmodel test_carglass
 FEEDBACK_TESTS += test_partsmodel test_carparts test_dentmodel test_cardeform test_mechanicalmodel test_projectilemodel test_carmechanics test_carsystem_lights
+FEEDBACK_TESTS += test_skinmodel test_airframemodel test_airframedamage
 FEEDBACK_TESTS += test_firemodel
 FEEDBACK_TESTS += test_carfire
 FEEDBACK_TESTS += test_carfire_awareness
@@ -789,3 +791,14 @@ $(BUILD)/test_carfire_native: tests/test_carfire_native.cpp tests/test_carfire.c
 	$(CXX) $(CXXFLAGS) -Isrc -o $@ tests/test_carfire_native.cpp src/firemodel.cpp
 
 test-game-assets: $(BUILD)/test_carfire_native
+
+$(BUILD)/test_skinmodel: tests/test_skinmodel.cpp src/skinmodel.h | $(BUILD)
+	$(CXX) $(CXXFLAGS) -Isrc -o $@ tests/test_skinmodel.cpp
+$(BUILD)/test_airframemodel: tests/test_airframemodel.cpp src/airframemodel.cpp src/projectilemodel.cpp src/mechanicalmodel.cpp $(wildcard src/*.h) | $(BUILD)
+	$(CXX) $(CXXFLAGS) -Isrc -o $@ tests/test_airframemodel.cpp src/airframemodel.cpp src/projectilemodel.cpp src/mechanicalmodel.cpp
+$(BUILD)/test_airframedamage: tests/test_airframedamage.cpp src/airframedamage.cpp src/airframemodel.cpp src/projectilemodel.cpp src/mechanicalmodel.cpp src/partsmodel.cpp $(wildcard src/*.h) | $(BUILD)
+	$(CXX) $(CXXFLAGS) -Isrc -o $@ tests/test_airframedamage.cpp src/airframemodel.cpp src/projectilemodel.cpp src/mechanicalmodel.cpp src/partsmodel.cpp
+
+$(BUILD)/test_airframe_assets: tests/test_airframe_assets.cpp tests/test_mechanical_assets.cpp src/airframemodel.cpp src/projectilemodel.cpp src/mechanicalmodel.cpp tools/bake/gamefiles.cpp $(wildcard src/*.h) | $(BUILD)
+	$(CXX) $(CXXFLAGS) -Isrc -o $@ tests/test_airframe_assets.cpp src/airframemodel.cpp src/projectilemodel.cpp src/mechanicalmodel.cpp tools/bake/gamefiles.cpp -lz
+test-game-assets: $(BUILD)/test_airframe_assets

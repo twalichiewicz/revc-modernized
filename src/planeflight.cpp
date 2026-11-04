@@ -44,7 +44,7 @@ CVector Row(const uint8_t *v,size_t at){return *reinterpret_cast<const CVector *
 float Scalar(const uint8_t *v,size_t at){return *reinterpret_cast<const float *>(v+at);}
 struct Controls {float throttle,pitch,roll,yaw,brake;};
 struct Air {CVector acceleration;float alpha,speed,forward;};
-Air Aerodynamics(CVector velocity,CVector r,CVector f,CVector u,float height,const Controls &input,float power,bool cleanJet=false)
+Air Aerodynamics(CVector velocity,CVector r,CVector f,CVector u,float height,const Controls &input,float power,bool cleanJet=false,const airframemodel::Effects &damage={})
 {
 	const float speed=Length(velocity),forward=Dot(velocity,f);
 	const float alpha=std::atan2(-Dot(velocity,u),std::max(.1f,forward));
@@ -52,7 +52,7 @@ Air Aerodynamics(CVector velocity,CVector r,CVector f,CVector u,float height,con
 	const float attack=std::fabs(alpha),stall=std::exp(-7*std::max(0.0f,attack-.30f));
 	const float cl=std::clamp(.70f+4.5f*alpha,-1.5f,1.9f)*stall;
 	const float flow=std::clamp(forward,0.0f,140.0f);
-	const float lift=density*kGravity*(flow*flow/(40*40))*cl;
+	const float lift=density*kGravity*(flow*flow/(40*40))*cl*(damage.leftLift+damage.rightLift)*.5f;
 	const CVector direction=speed>.01f?Mul(velocity,1/speed):f;
 	const CVector liftDirection=Unit(Sub(u,Mul(direction,Dot(u,direction))));
 	// The brake pedal operates the wheels; these aircraft have no deployed
@@ -64,7 +64,7 @@ Air Aerodynamics(CVector velocity,CVector r,CVector f,CVector u,float height,con
 	const float transition=cleanJet?std::clamp((forward-40)/35,0.0f,1.0f):0;
 	const float clean=transition*transition*(3-2*transition);
 	const float profile=.0013f-.00085f*clean;
-	const float drag=density*(profile+.0007f*cl*cl+.008f*(1-stall))*std::min(speed*speed,19600.0f);
+	const float drag=density*(profile+.0007f*cl*cl+.008f*(1-stall)+.004f*damage.drag)*std::min(speed*speed,19600.0f);
 	const float thrust=8.0f*input.throttle*power*std::sqrt(density);
 	const float side=Dot(velocity,r);
 	return {Add(Add(Mul(f,thrust),Mul(liftDirection,lift)),Add(Mul(direction,-drag),Mul(r,-.025f*side*std::fabs(side)))),alpha,speed,forward};
@@ -113,7 +113,9 @@ bool Apply(uint8_t *vehicle,int flightModel)
 	    axes.pitch,
 	    std::clamp(native.roll(pad)/128.0f,-1.0f,1.0f),axes.yaw,
 	    std::clamp(native.brake(pad)/255.0f,0.0f,1.0f)};
-	const float power=(vehicle[0x295]&0x10)?std::clamp((health-100)/650,0.0f,1.0f):0;
+	const auto damage=api.AirframeEffects?api.AirframeEffects(vehicle):airframemodel::Effects{};
+ const float power=(vehicle[0x295]&0x10)?(damage.managed?damage.power:std::clamp((health-100)/650,0.0f,1.0f)):0;
+ if(api.AirframeFlightUsed)api.AirframeFlightUsed(vehicle);
 	// Registered jets have physical, retractable gear. Its contact query owns
 	// ground classification even when it returns false; the broad COL keeps
 	// the extended tire bounds and cannot stand in for a deployed wheel.
@@ -125,18 +127,18 @@ bool Apply(uint8_t *vehicle,int flightModel)
 	CVector speed=start;
 	const int steps=std::max(1,int(std::ceil(dt/.01f)));const float step=dt/steps;
 	Air air{};
-	for(int i=0;i<steps;i++){air=Aerodynamics(speed,r,f,u,height,engine,power,personalJet&&!wheels);speed=Add(speed,Mul(air.acceleration,step));}
+	for(int i=0;i<steps;i++){air=Aerodynamics(speed,r,f,u,height,engine,power,personalJet&&!wheels,damage);speed=Add(speed,Mul(air.acceleration,step));}
 	if(wheels&&!rolling&&input.brake>0){const CVector horizontal{speed.x,speed.y,0};speed=Sub(speed,Mul(Unit(horizontal),std::min(Length(horizontal),7*input.brake*dt)));}
 	const CVector impulse=Mul(Sub(speed,start),mass/kHz);
 	native.move(vehicle,impulse.x,impulse.y,impulse.z);
 	const float authority=std::clamp(air.forward/25,0.0f,1.3f);
 	const float slip=std::atan2(Dot(speed,r),std::max(5.0f,air.forward));
-	const float pitch=(.55f*input.pitch-1.3f*(air.alpha-.06f))*authority;
-	const float roll=wheels?0:(.8f*input.roll+.12f*r.z*(1-std::fabs(input.roll)))*authority;
+	const float pitch=(.55f*input.pitch-1.3f*(air.alpha-.06f))*authority*damage.pitch;
+	const float roll=wheels?0:(.8f*input.roll+.12f*r.z*(1-std::fabs(input.roll)))*authority*damage.roll+(damage.leftLift-damage.rightLift)*.7f*authority;
 	// Positive body-right slip needs negative world-up yaw: +Z turns the
 	// forward +Y nose away from +X velocity and creates positive feedback.
 	const float yaw=wheels?(rolling?0:-(.7f*input.yaw+.6f*input.roll)*std::clamp(air.forward/3,0.0f,1.0f)):
-	    (-.35f*input.yaw-.8f*slip+r.z*kGravity/std::max(15.0f,air.forward))*authority;
+	    (-.35f*input.yaw-.8f*slip+r.z*kGravity/std::max(15.0f,air.forward))*authority*damage.yaw;
 	const CVector desired=Add(Add(Mul(r,pitch),Mul(f,roll)),Mul(u,yaw));
 	const CVector change=Mul(Sub(desired,angular),1-std::exp(-3*dt));
 	const CVector centre=Add(Add(Mul(r,com.x),Mul(f,com.y)),Mul(u,com.z));
@@ -379,7 +381,7 @@ void Crash(uint8_t *v,uint8_t *by)
 void Hook_Damage(uint8_t *v,uint8_t *by,int weapon,float damage,CVector point)
 {
 	orig_Damage(v,by,weapon,damage,point);
-	if(Owned(v)&&VehicleHealth(v)<=0)Crash(v,by);
+	if(Owned(v)&&VehicleHealth(v)<=0&&!(weapon==31&&api.AirframeEffects&&api.AirframeEffects(v).managed))Crash(v,by);
 }
 void Hook_Control(uint8_t *v)
 {
@@ -397,7 +399,7 @@ void Hook_Control(uint8_t *v)
 	if(!Wrecked(v)&&std::isfinite(impact)&&impact>4)
 		roster.damage(v,nullptr,39,std::min(1500.0f,(impact-4)*(impact-4)*12),EntityPos(v));
 	const uint32_t now=api.timeMs?*api.timeMs:gPrevious;
-	if(!Wrecked(v)&&VehicleHealth(v)<250){
+	if(!Wrecked(v)&&VehicleHealth(v)<250&&!(api.AirframeEffects&&api.AirframeEffects(v).managed)){
 		if(!gPlane.burning)gPlane.burning=now;
 		else if(now-gPlane.burning>5000)Crash(v,nullptr);
 	}else gPlane.burning=0;

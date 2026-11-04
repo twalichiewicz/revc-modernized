@@ -38,8 +38,8 @@ Native fire pool40 x0x38, 256 bounded actor slots; original geometry and unrelat
 ### Task 3: Aircraft component and skin model
 
 **Files:** separate airframe/skin models and owner, shot tracing, flight consumers, RW/native/stock fixtures.
-- [ ] RED thin-skin penetration/perforation and localized propulsion/control/aero failures including guarded CPlane and missions.
-- [ ] Implement separate safe layouts, bounded private skin and flight effects; native/stock/RW consumers GREEN, document fidelity and commit.
+- [x] RED thin-skin penetration/perforation and localized propulsion/control/aero failures including guarded CPlane and missions.
+- [x] Implement separate safe layouts, bounded private skin and flight effects; native/stock/RW consumers GREEN, document fidelity and commit.
 
 ### Task 4: Completion
 

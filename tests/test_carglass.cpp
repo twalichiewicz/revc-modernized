@@ -138,6 +138,13 @@ int main()
  entries["_ZN7CEntity14DeleteRwObjectEv"]=reinterpret_cast<void *>(Delete);
  game::api.PoolsGetVehicle=Car;gConfig.carGlass=gConfig.carDeformation=false;Check(carglass::Install()&&!carglass::gReady,"disabled startup installs no glass hooks");gConfig.carGlass=gConfig.carDeformation=true;
  Check(carglass::Install(),"installed native bindings");Reset();
+ *reinterpret_cast<int16_t *>(cars.data()+0x6a)=181;*reinterpret_cast<int *>(cars.data()+0x348)=4;
+ const auto original=atoms[0][0].geo;Check(carglass::Perforate(cars.data(),&atoms[0][0],{-.8f,.5f,-.1f},{1,0,0},80),"aircraft skin accepts certified local perforation");
+ Check(atoms[0][0].geo!=original&&atoms[1][0].geo==original,"perforation uses private geometry on only the struck airframe");
+ float area=0;auto g=atoms[0][0].geo;for(const auto &t:g->triangles)if(t.material==1){const auto a=g->vertices[t.v[0]],b=g->vertices[t.v[1]],c=g->vertices[t.v[2]];area+=std::fabs((b.y-a.y)*(c.z-a.z)-(b.z-a.z)*(c.y-a.y))*.5f;}
+ Check(area<.5f&&area>.45f&&g->triangles.size()>original->triangles.size(),"perforated coarse skin retains surrounding surface with real local missing area");
+ float opening=1;Check(carglass::Opening(cars.data(),{-2,.5f,-.1f},{2,.5f,-.1f},opening)&&opening>0&&opening<1,"later rays see the actual private skin opening");
+ carglass::Restore(cars.data());Check(atoms[0][0].geo==original,"airframe repair restores its original shared geometry");Reset();
  Bullet();
  Check(!(atoms[0][0].geo->flags&1)&&stripRebuilds==0&&base->flags==0x3f,"broken copies use triangle lists and retain the original strip geometry");
  Check(atoms[0][0].geo!=base&&Collapsed(atoms[0][0].geo,0)&&Collapsed(atoms[0][0].geo,1),"hit side window disappears");

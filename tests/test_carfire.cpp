@@ -13,13 +13,13 @@
 #include <cstdio>
 #include <stdexcept>
 #include <dlfcn.h>
-namespace fixture {void *Lookup(void *,const char *);void *Native(const char *);std::map<std::string,void *> entries;uint64_t gates[3]{};void *imageBase=nullptr;}
+namespace fixture {void *Lookup(void *,const char *);void *Native(const char *);std::map<std::string,void *> entries;uint64_t gates[4]{};void *imageBase=nullptr;}
 namespace game {Api api{};}
 Config gConfig;void Log(const char *,...){}
 namespace carmechanics {firemodel::Input sample;float exposure=0;firemodel::Input FireInput(const uint8_t *){return sample;}void Burn(uint8_t *,float dt){if(gConfig.carMechanics)exposure+=dt;}}
 namespace hooks {
 void *Chain(const char *s,void *p){fixture::entries[s]=p;return fixture::Native(s);}
-volatile uint64_t *Flag(const char *s){if(!strcmp(s,"skip:car_fire_countdown"))return &fixture::gates[0];if(!strcmp(s,"skip:car_rollover_drain"))return &fixture::gates[1];if(!strcmp(s,"skip:car_ordinary_lethal"))return &fixture::gates[2];return nullptr;}
+volatile uint64_t *Flag(const char *s){if(!strcmp(s,"skip:car_fire_countdown"))return &fixture::gates[0];if(!strcmp(s,"skip:car_rollover_drain"))return &fixture::gates[1];if(!strcmp(s,"skip:car_ordinary_lethal"))return &fixture::gates[2];if(!strcmp(s,"skip:aircraft_boat_fire"))return &fixture::gates[3];return nullptr;}
 bool IsCallTo(uint32_t,const char *){return true;}const void *ImageBase(){return fixture::imageBase;}
 }
 #define dlsym fixture::Lookup
@@ -46,13 +46,13 @@ int Engine(void *d){return static_cast<uint8_t *>(d)[1];}void SetEngine(void *d,
 void Check(bool b,const char *s){if(!b){printf("FAIL: %s\n",s);++failures;}}
 void Blow(uint8_t *v,uint8_t * =nullptr){++blasts;v[0x60]=(v[0x60]&7)|0x28;F(v,0x2a0)=0;}
 void NativeExtinguish(uint8_t *f){if(!f||f<manager+8||f>=manager+sizeof manager||!f[0])return;auto *v=*reinterpret_cast<uint8_t **>(f+0x10);if(v&&*reinterpret_cast<uint8_t **>(v+0x280)==f)*reinterpret_cast<void **>(v+0x280)=nullptr;f[0]=0;*reinterpret_cast<void **>(f+0x10)=nullptr;--*reinterpret_cast<int *>(manager);}
-uint8_t *Start(void *,uint8_t *v,uint8_t *by,float size,uint8_t){++starts;if(*reinterpret_cast<void **>(v+0x280)||Engine(v+0x34c)>224)return nullptr;
+uint8_t *Start(void *,uint8_t *v,uint8_t *by,float size,uint8_t){++starts;if(*reinterpret_cast<void **>(v+0x280)||(*reinterpret_cast<int *>(v+0x348)==0&&Engine(v+0x34c)>224))return nullptr;
  for(int i=0;i<40;i++){auto *f=manager+8+i*0x38;if(f[0])continue;memset(f,0,0x38);f[0]=1;*reinterpret_cast<void **>(f+0x10)=v;*reinterpret_cast<void **>(f+0x18)=by;*reinterpret_cast<void **>(v+0x280)=f;*reinterpret_cast<uint32_t *>(f+0x20)=now+4000;F(f,0x2c)=size;F(f,0x30)=1;memcpy(f+4,v+0x38,12);++*reinterpret_cast<int *>(manager);
   if(repairStart){repairStart=false;Fix()(v);}if(recycleStart){recycleStart=false;++flags[v==cars[0]?0:1];NativeExtinguish(f);F(v,0x2a0)=1000;SetEngine(v+0x34c,0);}return f;
  }return nullptr;
 }
-void NativeHit(uint8_t *v,uint8_t *,int type,float amount,CVector){if(!(v[0x297]&0x40)||(type==31&&(*reinterpret_cast<uint32_t *>(v+0x60)&(1u<<26))))return;const float before=F(v,0x2a0);F(v,0x2a0)=std::max(0.f,before-amount);if(F(v,0x2a0)<250)SetEngine(v+0x34c,225);if(before<=amount&&!gates[2])Blow(v);}
-void NativeDamage(uint8_t *v,float amount,uint16_t){if(amount==0&&F(v,0x30)<0&&!gates[1])F(v,0x2a0)=std::max(0.f,F(v,0x2a0)-4*timeStep);else if(amount>0)F(v,0x2a0)=std::max(1.f,F(v,0x2a0)-amount);if(F(v,0x2a0)<250)SetEngine(v+0x34c,225);}
+void NativeHit(uint8_t *v,uint8_t *,int type,float amount,CVector){if(!(v[0x297]&0x40)||(type==31&&(*reinterpret_cast<uint32_t *>(v+0x60)&(1u<<26))))return;const float before=F(v,0x2a0);F(v,0x2a0)=std::max(0.f,before-amount);if(F(v,0x2a0)<250&&*reinterpret_cast<int *>(v+0x348)==0)SetEngine(v+0x34c,225);if(before<=amount&&!gates[2])Blow(v);}
+void NativeDamage(uint8_t *v,float amount,uint16_t){if(amount==0&&F(v,0x30)<0&&!gates[1])F(v,0x2a0)=std::max(0.f,F(v,0x2a0)-4*timeStep);else if(amount>0)F(v,0x2a0)=std::max(1.f,F(v,0x2a0)-amount);if(F(v,0x2a0)<250&&*reinterpret_cast<int *>(v+0x348)==0)SetEngine(v+0x34c,225);}
 void NativeControl(uint8_t *v){if(throwControl){throwControl=false;throw std::runtime_error("native control");}if(nest&&v==cars[0]){nest=false;Control()(cars[1]);nestedFlags=gates[0]==1;}Crash()(v,0,0);if(explosionInside){explosionInside=false;Hit()(v,nullptr,30,2000,{});}if(F(v,0x2a0)<250&&!gates[0]&&!game::Wrecked(v)){F(v,0x65c)+=timeStep*20;if(F(v,0x65c)>5000)Blow(v);}}
 void NativeProcess(uint8_t *f){++processes;if(!f[0])return;auto *v=*reinterpret_cast<uint8_t **>(f+0x10);if(v&&!f[1])Hit()(v,nullptr,31,timeStep*1.2f,{});if(now>*reinterpret_cast<uint32_t *>(f+0x20))Extinguish()(f);}
 void NativeFix(uint8_t *v){if(auto *f=*reinterpret_cast<uint8_t **>(v+0x280))NativeExtinguish(f);F(v,0x2a0)=1000;F(v,0x65c)=0;v[0x60]=(v[0x60]&7);SetEngine(v+0x34c,0);}
@@ -62,9 +62,11 @@ int Total(const void *){return *reinterpret_cast<int *>(manager);}
 uint8_t *Nearest(void *,CVector at,float *distance){uint8_t *best=nullptr;for(int i=0;i<40;i++){auto *f=manager+8+i*0x38;if(!f[0]||f[1])continue;const auto p=*reinterpret_cast<CVector *>(f+4);const float d=std::sqrt((p.x-at.x)*(p.x-at.x)+(p.y-at.y)*(p.y-at.y)+(p.z-at.z)*(p.z-at.z));if(d<*distance){*distance=d;best=f;}}return best;}
 uint8_t *Furthest(void *m,CVector at,float minimum,float maximum){float d=maximum;auto *f=Nearest(m,at,&d);return d>minimum?f:nullptr;}
 void NativeCannon(uint8_t *){}
+void NativePlaneControl(uint8_t *){}
 void NativeDispatch(){++dispatches;}
 void *Native(const char *s){
  if(strstr(s,"TellOccupantsToLeaveCar"))return reinterpret_cast<void *>(CrewLeave);
+ if(strstr(s,"CPlane14ProcessControl")||strstr(s,"CBoat14ProcessControl"))return reinterpret_cast<void *>(NativePlaneControl);
  if(strstr(s,"FireTruckControl"))return reinterpret_cast<void *>(NativeCannon);if(strstr(s,"FindFurthestFire"))return reinterpret_cast<void *>(Furthest);
  if(strstr(s,"CAutomobile14ProcessControl"))return reinterpret_cast<void *>(NativeControl);if(strstr(s,"CAutomobile13VehicleDamage"))return reinterpret_cast<void *>(NativeDamage);
  if(strstr(s,"CVehicle13InflictDamage"))return reinterpret_cast<void *>(NativeHit);if(strstr(s,"CFire11ProcessFire"))return reinterpret_cast<void *>(NativeProcess);if(strstr(s,"CFire10Extinguish"))return reinterpret_cast<void *>(NativeExtinguish);
@@ -78,7 +80,7 @@ void *Lookup(void *,const char *s){
  if(strstr(s,"StartFireEP7CEntity"))return reinterpret_cast<void *>(Start);if(strstr(s,"GetEngineStatus"))return reinterpret_cast<void *>(Engine);if(strstr(s,"SetEngineStatus"))return reinterpret_cast<void *>(SetEngine);
  if(strstr(s,"IsPlayerOnAMission"))return reinterpret_cast<void *>(Mission);if(strstr(s,"CCutsceneMgr10ms_running"))return &cutscene;if(strstr(s,"NumFiretrucksOnDuty"))return &duty;return nullptr;
 }
-void Reset(){if(!entries.empty())Entry<void (*)()>("_ZN6CWorld15ClearForRestartEv")();memset(cars,0,sizeof cars);memset(player,0,sizeof player);memset(wanted,0,sizeof wanted);mission=cutscene=throwControl=nest=explosionInside=repairStart=recycleStart=false;now+=10000;timeStep=5;blasts=starts=processes=dispatches=duty=0;nestedFlags=false;carmechanics::sample={};carmechanics::exposure=0;
+void Reset(){if(!entries.empty())Entry<void (*)()>("_ZN6CWorld15ClearForRestartEv")();memset(cars,0,sizeof cars);memset(player,0,sizeof player);memset(wanted,0,sizeof wanted);mission=cutscene=throwControl=nest=explosionInside=repairStart=recycleStart=false;now+=10000;timeStep=5;blasts=starts=processes=dispatches=duty=0;nestedFlags=false;game::api.AirframeEffects=nullptr;game::api.AirframeFire=nullptr;game::api.AirframeBurn=nullptr;carmechanics::sample={};carmechanics::exposure=0;
  for(int i=0;i<2;i++){flags[i]=uint8_t((flags[i]+1)&0x7f);auto *v=cars[i];*reinterpret_cast<void **>(v)=reinterpret_cast<void *>(0x1000);*reinterpret_cast<void **>(v+0x58)=reinterpret_cast<void *>(0x2000);*reinterpret_cast<uint32_t *>(v+0x60)=2;*reinterpret_cast<int16_t *>(v+0x6a)=150;v[0x297]=0x40;v[0x294]=1;v[0x295]=0x10;F(v,0x2a0)=1000;F(v,8)=F(v,0x1c)=F(v,0x30)=1;}
  *reinterpret_cast<void **>(pedPool)=crew;*reinterpret_cast<void **>(pedPool+8)=pedFlags;*reinterpret_cast<int *>(pedPool+16)=2;crewExits=0;game::api.PoolsGetPed=Ped;
  *reinterpret_cast<void **>(player+0x778)=wanted;game::api.timeMs=&now;game::api.timeStep=&timeStep;game::api.PoolsGetVehicle=Car;game::api.FindPlayerPed=+[](){return player;};
@@ -107,6 +109,12 @@ int main(){using namespace fixture;*reinterpret_cast<void **>(pool)=cars;*reinte
  Reset();carmechanics::sample.running=true;carmechanics::sample.electrical=.9f;carmechanics::sample.breach=.4f;F(cars[0],0x2a0)=200;recycleStart=true;for(int i=0;i<85;i++)Step();Check(F(cars[0],0x2a0)==1000&&Engine(cars[0]+0x34c)==0&&!carfire::Burning(cars[0],false),"recycled actor inside native fire creation cannot inherit fire or status loan");
  Reset();carmechanics::sample.running=true;carmechanics::sample.electrical=.9f;carmechanics::sample.breach=.4f;F(cars[0],0x2a0)=200;for(int i=0;i<84;i++){Hit()(cars[0],nullptr,17,1,{});Step();}Check(starts==1,"continuous accepted small hits do not postpone first ignition");
  Extinguish()(*reinterpret_cast<uint8_t **>(cars[0]+0x280));for(int i=0;i<84;i++){Hit()(cars[0],nullptr,17,1,{});Step();}Check(starts==2,"continuous small hits after extinguishing relight after the normal dwell");
+ Reset();*reinterpret_cast<int16_t *>(cars[0]+0x6a)=180;*reinterpret_cast<int *>(cars[0]+0x348)=4;cars[0][0x294]=2;
+ game::api.AirframeEffects=+[](const uint8_t *){airframemodel::Effects e;e.managed=true;return e;};game::api.AirframeFire=+[](const uint8_t *){return carmechanics::sample;};game::api.AirframeBurn=+[](uint8_t *,float dt){carmechanics::exposure+=dt;};
+ carmechanics::sample.running=true;carmechanics::sample.electrical=.9f;carmechanics::sample.breach=.4f;std::memset(cars[0]+0x34c,0xaa,0x388-0x34c);
+ for(int i=0;i<100;i++){now+=100;if(entries.count("_ZN6CPlane14ProcessControlEv"))Entry<Fn>("_ZN6CPlane14ProcessControlEv")(cars[0]);for(int j=0;j<40;j++)if(manager[8+j*0x38])Process()(manager+8+j*0x38);}
+ Check(starts==1&&carfire::Burning(cars[0],false)&&carmechanics::exposure>0,"mission CPlane uses the same localized fire and module burn owner");
+ bool intact=true;for(int i=0x34c;i<0x388;i++)intact&=cars[0][i]==0xaa;Check(intact,"CPlane fire never reads or writes an automobile engine damage manager");
  printf("carfire: %s\n",failures?"FAILED":"all passed");return failures?1:0;
 }
 #else

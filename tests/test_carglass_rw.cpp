@@ -107,7 +107,11 @@ void Copy(bool strip,bool broken,bool glassOnly,bool dented)
   const auto &t=copy->triangles[i];Check((t.v[0]==t.v[1]&&t.v[0]==t.v[2])==(broken&&i<2),"only broken glass collapsed");
  }
  if(broken){Check(!(copy->flags&rw::Geometry::TRISTRIP)&&!(copy->meshHeader->flags&rw::MeshHeader::TRISTRIP),"broken copy uses triangle lists");Check(copy->meshHeader->totalIndices==unsigned(nt*3),"all triangle-list indices retained");}
- copy->destroy();atomic->destroy();source->destroy();root->destroyHierarchy();glass->destroy();metal->destroy();
+ std::vector<skinmodel::Hole> holes{{{-.8f,.5f,.5f},{1,0,0},.07f}};size_t skinBytes=0;
+ auto skin=static_cast<rw::Geometry *>(carglass::CopySkin(mesh,holes,skinBytes,carglass::kBudget));Check(skin&&skin->meshHeader,"perforated skin builds real librw triangle-list topology");
+ Check(skin->numTriangles>nt&&skin->meshHeader->totalIndices==unsigned(skin->numTriangles*3),"real coarse source retains triangulated surface surrounding hole");
+ for(int i=0;i<skin->numVertices;i++){auto n=skin->morphTargets[0].normals[i];Check(std::isfinite(n.x)&&std::fabs(n.x-1)<1e-5f,"interpolated real skin normals retained");}
+ skin->destroy();copy->destroy();atomic->destroy();source->destroy();root->destroyHierarchy();glass->destroy();metal->destroy();
 }
 }
 int main()

@@ -3,6 +3,7 @@
 // main executable. Struct offsets were read from the disassembly of macVC
 // 1.0.5217 (LC_UUID below); hooks are refused on any other build.
 #include "types.h"
+#include "airframemodel.h"
 
 #include <cstddef>
 #include <cstdint>
@@ -303,7 +304,13 @@ struct Api {
 	int (*glfwGetGamepadState)(int jid, void *state); // GLFWgamepadstate: uint8 buttons[15], float axes[6]
 	const char *(*glfwGetJoystickName)(int jid);
 	int (*glfwUpdateGamepadMappings)(const char *mappings);
-	bool (*VehicleBurning)(const uint8_t *vehicle); // installed fire owner, or native-health fallback
+	airframemodel::Effects (*AirframeEffects)(const uint8_t *);
+ firemodel::Input (*AirframeFire)(const uint8_t *);
+ void (*AirframeBurn)(uint8_t *,float);
+ void (*AirframeFlightUsed)(uint8_t *);
+ void (*AirframeCollision)(uint8_t *,Vec3,float);
+ void (*RepairVehicleFire)(uint8_t *);
+ bool (*VehicleBurning)(const uint8_t *vehicle); // installed fire owner, or native-health fallback
 	bool (*VehicleFireService)(const uint8_t *vehicle); // active native cannon crew owns its behavior
 };
 
@@ -486,7 +493,7 @@ inline int16_t EntityModel(const uint8_t *entity) { return *reinterpret_cast<con
 inline bool IsAircraft(const uint8_t *vehicle)
 {
 	switch (EntityModel(vehicle)) {
-	case 155: case 177: case 190: case 194: case 195: case 199: case 217: case 218: case 227: case 231:
+	case 155: case 165: case 177: case 190: case 194: case 195: case 199: case 217: case 218: case 227: case 231:
 		return true;
 	default:
 		return *reinterpret_cast<const int32_t *>(vehicle + 0x348) == 4; // m_vehType: plane

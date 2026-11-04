@@ -172,7 +172,9 @@ bool Helicopter(uint8_t *v,int model)
  // upper service ceiling is a gradual climb reduction, never a position clamp.
  if(height>3200)climb=std::min(climb,std::max(0.0f,12*(3800-height)/600));
  if(height>3800)climb=std::min(climb,-std::min(8.0f,(height-3800)*.05f));
- const float power=(v[0x295]&0x10)?std::clamp(Scalar(v,0x5f0)/.22f,0.0f,1.0f)*std::clamp((health-100)/500,0.0f,1.0f):0;
+ const auto damage=api.AirframeEffects?api.AirframeEffects(v):airframemodel::Effects{};
+ const float power=(v[0x295]&0x10)?std::clamp(Scalar(v,0x5f0)/.22f,0.0f,1.0f)*(damage.managed?damage.power*damage.rotor:std::clamp((health-100)/500,0.0f,1.0f)):0;
+ if(api.AirframeFlightUsed)api.AirframeFlightUsed(v);pitch*=damage.pitch;roll*=damage.roll;
  // Automobile calls CPhysical::ProcessControl (including gravity) before
  // FlyingControl. Reconstruct the start of that step for feedback; the output
  // below is compared with its actual post-gravity incoming velocity.
@@ -185,7 +187,7 @@ bool Helicopter(uint8_t *v,int model)
  const CVector impulse=Mul(Sub(speed,start),mass/kHz);gMove(v,impulse.x,impulse.y,impulse.z);
  const float pr=std::clamp(2.2f*(pitch-std::asin(std::clamp(f.z,-1.0f,1.0f))),-1.1f,1.1f);
  const float rr=std::clamp(2.2f*(roll+std::asin(std::clamp(r.z,-1.0f,1.0f))),-1.1f,1.1f);
- const CVector desired=Add(Add(Mul(r,pr),Mul(f,rr)),Mul(u,-yaw*.7f));
+ const CVector desired=Add(Add(Mul(r,pr),Mul(f,rr)),Mul(u,-yaw*.7f*damage.yaw*damage.antiTorque+(1-damage.antiTorque)*1.5f));
  const CVector change=Mul(Sub(Mul(desired,power),angular),1-std::exp(-5*dt));
  const CVector centre=Add(Add(Mul(r,com.x),Mul(f,com.y)),Mul(u,com.z));
  auto torque=[&](CVector force,CVector lever,float amount){force=Mul(force,amount*turnMass/kHz);lever=Add(centre,lever);gTurn(v,force.x,force.y,force.z,lever.x,lever.y,lever.z);};

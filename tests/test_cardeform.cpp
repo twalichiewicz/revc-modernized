@@ -74,6 +74,7 @@ namespace hooks {void *Chain(const char *s,void *replacement){using namespace fi
  return nullptr;
 }}
 static void *Lookup(void *,const char *s){if(!strcmp(s,"_ZN6CPools15ms_pVehiclePoolE"))return &fixture::poolPointer;return nullptr;}
+static int airHits=0;static void AirCollision(uint8_t *,Vec3,float){++airHits;}
 int main(int argc,char **argv){using namespace fixture;
  std::unique_ptr<nativejetshadowtest::Code> code;
  if(argc>1&&!strcmp(argv[1],"--native")){
@@ -87,6 +88,8 @@ int main(int argc,char **argv){using namespace fixture;
  game::api.PoolsGetVehicle=Car;game::api.timeMs=&now;
  gConfig.carDeformation=gConfig.carMechanics=false;Check(carimpact::Install()&&pair==PairNative,"startup off installs no collision hooks");gConfig.carDeformation=gConfig.carMechanics=true;Check(carimpact::Install(),"native collision owner installs");
  for(int kind=0;kind<3;kind++){Reset();Hit(kind);control(cars[0]);Check(dents.size()==1&&dents[0].v==cars[0]&&dents[0].hit.point.y==2&&dents[0].hit.inward.y==-1,"successful actual impulse dents local contact on correct car");Check(F(cars[0],0x2a0)==990,"native health remains unchanged by mesh tuning");}
+ Reset();*reinterpret_cast<int16_t *>(cars[0]+0x6a)=180;*reinterpret_cast<int *>(cars[0]+0x348)=4;game::api.AirframeEffects=+[](const uint8_t *){airframemodel::Effects e;e.managed=true;return e;};game::api.AirframeCollision=AirCollision;
+ {auto p=Contact();float force=0;single(cars[0],p,force);}Check(airHits==1,"accepted actual plane contact reaches independent aircraft systems without an automobile damage manager");game::api.AirframeEffects=nullptr;game::api.AirframeCollision=nullptr;
  Reset();for(int i=0;i<100;i++){Hit();control(cars[0]);now+=20;}Check(dents.size()==1,"continuous contact across frames creates one dent episode");now+=350;Hit();control(cars[0]);Check(dents.size()==2,"separate collision can deepen existing dent");
  Reset();auto p=Contact();float a,b;pair(cars[0],cars[1],p,a,b);Record(cars[0],cars[1],p,a);Record(cars[1],cars[0],p,b,true);nested=true;control(cars[0]);Check(dents.size()==2&&dents[0].v==cars[1]&&dents[0].hit.point.y==-2&&dents[0].hit.inward.y==1,"secondary car and nested controller retain opposite inward contact");
  Reset();p=Contact();pair(cars[0],wall,p,a,b);Record(cars[0],wall,p,a);

@@ -274,6 +274,7 @@ DEFAULT_HOOKS = [
 # the single entry of a block, and the target is where the game itself jumps
 # when it hides that block (health/armour flashing).
 DEFAULT_SKIPS = [
+    ("skip:aircraft_boat_fire", 0x100267A64, 0x12003C08, 0x100267BC8),
     # carfire owns these only inside a validated current automobile call.
     ("skip:car_fire_countdown", 0x10024D25C, 0x12003C08, 0x10024CFD0),
     ("skip:car_rollover_drain", 0x10024EB7C, 0xBD42A260, 0x10024EBA0),

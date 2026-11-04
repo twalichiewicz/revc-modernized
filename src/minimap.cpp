@@ -109,6 +109,7 @@
 #include "flightmodel.h"
 #include "airportjets.h"
 #include "aircraftdamage.h"
+#include "airframedamage.h"
 #include "airworld.h"
 #include "jetwheels.h"
 #include "jetaudio.h"
@@ -815,7 +816,9 @@ __attribute__((constructor)) void Init()
 		Log("car parts: native collision hook missing; re-run install.sh");
 	if (!carmechanics::Install())
 		Log("car mechanics: native performance hooks missing; re-run install.sh");
-	if (!carimpact::Install())
+	if (!airframedamage::Install())
+  Log("airframes: component/skin lifecycle bindings missing; re-run install.sh");
+ if (!carimpact::Install())
 		Log("car impacts: native collision hooks missing; re-run install.sh");
 	if (!carfire::Install())
 		Log("car fire: native fire hooks missing; re-run install.sh");

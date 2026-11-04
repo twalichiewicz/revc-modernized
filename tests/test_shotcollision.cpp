@@ -1,6 +1,7 @@
 #include "game.h"
 #include "carmechanics.h"
 #include "carparts.h"
+#include "airframedamage.h"
 #include "nativebullet.h"
 #include "hooks.h"
 #include "../tools/bake/visualmodel.h"
@@ -21,6 +22,8 @@
 namespace game { Api api; }
 void Log(const char *,...){}
 namespace carglass {
+bool opening=false;bool Opening(uint8_t *,Vec3,Vec3,float &f){if(!opening)return false;f=.36f;return true;}
+int perforations=0;bool Perforate(uint8_t *,const void *,Vec3,Vec3,float){++perforations;return true;}
 int calls=0,face=-1;const void *part=nullptr;uint8_t *car=nullptr;Vec3 point{};
 void Bullet(uint8_t *v,const void *a,int t,Vec3 p,Vec3){++calls;car=v;part=a;face=t;point=p;}
 }
@@ -32,6 +35,7 @@ BulletToken BeginBullet(uint8_t *){BulletToken t;if(enabled)t.revision=revision;
 void Projectile(uint8_t *,const BulletToken &t,const projectilemodel::Ray &r){if(!enabled||t.revision!=revision)return;++deliveries;lastRay=r;std::copy(r.layers,r.layers+r.count,lastLayers.begin());lastRay.layers=lastLayers.data();}
 }
 namespace carparts {bool enabled=false;int hits=0,component=0;bool Enabled(){return enabled;}BulletToken BeginBullet(uint8_t *){return {enabled?1u:0u};}void Projectile(uint8_t *,const BulletToken &t,int c,float){if(t.revision){++hits;component=c;}}}
+namespace airframedamage {bool ComponentHit(uint8_t *,Vec3,Vec3,float,float &fraction,Vec3 &normal){if(!carglass::opening)return false;fraction=.4f;normal={-1,0,0};return true;}bool enabled=false;int hits=0;bool Enabled(const uint8_t *){return enabled;}Token BeginBullet(uint8_t *){Token t;if(enabled)t.revision=1;return t;}bool Projectile(uint8_t *,const Token &t,const projectilemodel::Ray &,std::array<float,projectilemodel::kLayers> *passed){if(!t.revision)return false;++hits;if(passed)passed->fill(20);return true;}void Perforated(uint8_t *,const Token &,float){}}
 namespace fixture { void *Lookup(void *,const char *); void *Native(const char *); std::map<std::string,void *> entry; }
 namespace hooks {void *Chain(const char *s,void *p){fixture::entry[s]=p;return fixture::Native(s);}}
 #define dlsym fixture::Lookup
@@ -175,7 +179,7 @@ void *Lookup(void *,const char *s){
  return nullptr;
 }
 void Setup(){
- carparts::enabled=false;carparts::hits=0;roundBudget=20;nestCover=nestedCoverPreserved=repairBeforeImpact=nativeGlassGate=false;carmechanics::enabled=false;carmechanics::deliveries=0;++carmechanics::revision;deferredBullets={};doDamage=false;acceptDamage=true;doubleDamage=coverWall=throwCover=false;damageMutation=0;ignore=nullptr;
+ carglass::opening=false;airframedamage::enabled=false;airframedamage::hits=carglass::perforations=0;carparts::enabled=false;carparts::hits=0;roundBudget=20;nestCover=nestedCoverPreserved=repairBeforeImpact=nativeGlassGate=false;carmechanics::enabled=false;carmechanics::deliveries=0;++carmechanics::revision;deferredBullets={};doDamage=false;acceptDamage=true;doubleDamage=coverWall=throwCover=false;damageMutation=0;ignore=nullptr;
  carglass::calls=0;carglass::part=nullptr;carglass::face=-1;
  cars={};peds={};carFlags[0]=1;carFlags[1]=2;clumpType=2;clump.atomics.clear();Identity(clump.root.matrix.data());Identity(clump.root.world.data());staleLTM=windowMode=ignoreSee=false;windowStatus=windowSounds=afterTrace=0;carModel.spheres={{{0,0,.5f},1,0}};pedModel.spheres={{{0,0,.5f},.25f,3}};modelPtrs[7]=modelInfo.data();tyres=true;wall=false;stale=false;throwFire=throwWorld=nested=stander=noPeds=false;fireType=1;modelPtrs[8]=modelInfoB.data();passengerModel.spheres={{{-.5f,0,.5f},.2f,2}};standerModel.spheres={{{1,0,.5f},.25f,3}};
  for(int i=0;i<2;i++){auto c=cars.data()+i*0x6f0;*reinterpret_cast<float *>(c+0x2a0)=1000;Identity(reinterpret_cast<float *>(c+8));*reinterpret_cast<unsigned *>(c+0x60)=2|0x100;*reinterpret_cast<int16_t *>(c+0x6a)=7;*reinterpret_cast<void **>(c+0x58)=&clump;}
@@ -266,6 +270,8 @@ int main(int argc,char **argv){const bool assets=argc>1&&!std::strcmp(argv[1],"-
  Setup();Panel(-.8f,128,"windscreen_hi_ok");*reinterpret_cast<void **>(cars.data()+0x218)=nullptr;FireShot();Check(victim==cars.data() && result.surfaceB==7,"glass retains native car impact when no seated body is behind it");
  Setup();Panel(-.8f,255,"door_lr_hi_ok");*reinterpret_cast<void **>(cars.data()+0x218)=nullptr;nativeGlassGate=doDamage=carparts::enabled=true;FireShot();Check(carparts::hits==1&&carparts::component==9,"actual accepted opaque part impact reaches ballistic native part owner with mechanics disabled");
  Setup();Panel(-.8f,89,"door_lr_hi_ok");*reinterpret_cast<void **>(cars.data()+0x218)=nullptr;nativeGlassGate=doDamage=carparts::enabled=true;FireShot();Check(carparts::hits==0,"a glazing hit cannot shoot the entire door off");
+ Setup();Panel(-.8f,255,"fuselage");Panel(.8f,255,"fuselage");*reinterpret_cast<int16_t *>(cars.data()+0x6a)=180;*reinterpret_cast<int *>(cars.data()+0x348)=4;*reinterpret_cast<void **>(cars.data()+0x218)=nullptr;airframedamage::enabled=nativeGlassGate=doDamage=true;FireShot();Check(airframedamage::hits==1&&carglass::perforations==2&&*reinterpret_cast<float *>(cars.data()+0x2a0)==1000,"certified plane shot delivers a separate component ray and real entrance/exit skin holes without turning skin damage into engine/hull health");
+ Setup();Panel(.8f,255,"fuselage");*reinterpret_cast<int16_t *>(cars.data()+0x6a)=180;*reinterpret_cast<int *>(cars.data()+0x348)=4;*reinterpret_cast<void **>(cars.data()+0x218)=nullptr;airframedamage::enabled=carglass::opening=nativeGlassGate=doDamage=true;FireShot();Check(airframedamage::hits==1&&result.p.x<0,"a later round through an existing skin opening intersects the internal component before the opposite shell");
  for(int model:{157,158}){
   Setup();Panel(-.8f,89,"door_lf_hi_ok");*reinterpret_cast<int16_t *>(cars.data()+0x6a)=model;roundBudget=100;doDamage=true;FireShot();Check(lastPedDamage>0&&lastPedDamage<20,"penetrated armor glazing scales occupant damage by residual budget");
   Setup();Panel(-.8f,255,"door_lf_hi_ok");*reinterpret_cast<int16_t *>(cars.data()+0x6a)=model;*reinterpret_cast<void **>(cars.data()+0x218)=nullptr;nativeGlassGate=doDamage=true;FireShot();Check(*reinterpret_cast<float *>(cars.data()+0x2a0)==1000,"armored body stops ordinary rounds without whole-vehicle health loss");

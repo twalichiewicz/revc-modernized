@@ -13,6 +13,7 @@ struct Layer {float fraction=0,incidence=1;Material material=Material::Body;};
 // Fractions refer to the original segment. Entry is the real accepted surface;
 // limit is nearer external cover. Budgets use calibrated native damage units.
 struct Ray {Vec3 from{},to{};float entry=0,limit=1,budget=0;const Layer *layers=nullptr;size_t count=0;};
-struct Result {std::array<float,mechanicalmodel::kModules> doses{};float remaining=0,deposited=0,surfaceLoss=0;bool valid=false;};
+struct Result {std::array<float,mechanicalmodel::kModules> doses{};std::array<float,kLayers> layerRemaining{};float remaining=0,deposited=0,surfaceLoss=0;bool valid=false;};
+Result Absorb(const mechanicalmodel::Box &body,const std::array<mechanicalmodel::Box,mechanicalmodel::kModules> &volumes,const float *resistance,const float *capacity,const Ray &);
 Result Doses(const mechanicalmodel::Layout &,const Ray &);
 }

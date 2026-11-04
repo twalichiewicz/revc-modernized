@@ -12,11 +12,12 @@
 #include <dlfcn.h>
 namespace carfire {namespace {
 constexpr size_t kSlots=256,kStride=0x6f0,kFireCount=40,kFireStride=0x38;
-enum Gate {Countdown,Rollover,Lethal};
-volatile uint64_t *gGates[3]{};void **gPool,**gPedPool;uint8_t *gManager;bool gReady,*gCutscene;
+enum Gate {Countdown,Rollover,Lethal,BoatCountdown};
+volatile uint64_t *gGates[4]{};void **gPool,**gPedPool;uint8_t *gManager;bool gReady,*gCutscene;
 bool (*gMission)();CVector (*gCoords)();int *gDuty;
 void (*gControl)(uint8_t *),(*gDamage)(uint8_t *,float,uint16_t),(*gInflict)(uint8_t *,uint8_t *,int,float,CVector);
 void (*gProcess)(uint8_t *),(*gExtinguish)(uint8_t *),(*gFix)(uint8_t *),(*gDelete)(uint8_t *),(*gRestart)(),(*gDispatch)();
+void (*gPlaneControl)(uint8_t *),(*gBoatControl)(uint8_t *);
 void (*gLeave)(uint8_t *),(*gCannon)(uint8_t *);
 uint8_t *(*gFurthest)(void *,CVector,float,float);
 uint8_t *(*gStart)(void *,uint8_t *,uint8_t *,float,uint8_t),*(*gNearest)(void *,CVector,float *);
@@ -36,8 +37,7 @@ bool Identify(uint8_t *v,Identity &id)
 }
 bool Eligible(const Identity &id)
 {
- return gReady&&gConfig.carFire&&id.vtable&&id.model>=0&&id.model<6500&&id.model!=162&&id.model!=171&&!game::IsAircraft(id.car)&&
-  *reinterpret_cast<int *>(id.car+0x348)==0&&!game::Wrecked(id.car)&&(id.car[0x297]&0x40)&&
+ return gReady&&gConfig.carFire&&id.vtable&&id.model>=0&&id.model<6500&&id.model!=162&&id.model!=171&&((!game::IsAircraft(id.car)&&*reinterpret_cast<int *>(id.car+0x348)==0)||(game::api.AirframeEffects&&game::api.AirframeEffects(id.car).managed))&&!game::Wrecked(id.car)&&(id.car[0x297]&0x40)&&
   !(game::EntityFlags(id.car)&((1u<<26)|(1u<<28)))&&std::isfinite(game::VehicleHealth(id.car));
 }
 struct History {Identity id;firemodel::State state;uint8_t *fire=nullptr;uint64_t revision=0;uint32_t clock=0;bool seen=false,crewHeld=false;int driverRef=-1;};
@@ -55,7 +55,7 @@ struct Scope {
  Scope(uint8_t *v,unsigned bits,bool controller=false):lease(Capture(v)),mask(bits),control(controller){gScope=this;Sync();}
  ~Scope(){gScope=previous;Sync();}
 };
-void Sync(){const unsigned mask=gScope&&gScope->valid&&Current(gScope->lease)?gScope->mask:0;for(int i=0;i<3;i++)if(gGates[i])*gGates[i]=(mask>>i)&1;}
+void Sync(){const unsigned mask=gScope&&gScope->valid&&Current(gScope->lease)?gScope->mask:0;for(int i=0;i<4;i++)if(gGates[i])*gGates[i]=(mask>>i)&1;}
 void Invalidate(uint8_t *v){for(auto *s=gScope;s;s=s->previous)if(!v||s->lease.id.car==v)s->valid=false;Sync();}
 bool ControllerOwns(uint8_t *v){for(auto *s=gScope;s;s=s->previous)if(s->control)return s->valid&&s->lease.id.car==v&&Current(s->lease);return false;}
 void MarkDamage(const Lease &lease,float before,int weapon){if(weapon==31||!Current(lease))return;auto &h=gHistory[size_t(lease.id.ref>>8)];if(game::VehicleHealth(lease.id.car)<before)firemodel::Rearm(h.state);}
@@ -71,21 +71,22 @@ void Extinguish(uint8_t *f)
  gExtinguish(f);Identity now;
  if(revision&&Identify(id.car,now)&&Same(id,now)){auto &h=gHistory[size_t(id.ref>>8)];if(h.revision==revision&&h.fire==f){h.fire=nullptr;firemodel::Extinguish(h.state);Log("car fire: model %d extinguished",id.model);}}
 }
+firemodel::Input Input(const uint8_t *v){return game::IsAircraft(v)&&game::api.AirframeFire?game::api.AirframeFire(v):carmechanics::FireInput(v);}
 bool Create(const Lease &lease)
 {
  if(!Current(lease))return false;auto *v=lease.id.car;
- const unsigned status=unsigned(gEngine(v+0x34c)),loan=std::min(status,224u);
+ const bool automobile=*reinterpret_cast<const int *>(v+0x348)==0;const unsigned status=automobile?unsigned(gEngine(v+0x34c)):0,loan=std::min(status,224u);
  if(loan!=status)gSetEngine(v+0x34c,loan);
  struct Restore {Lease lease;unsigned status,loan;~Restore(){auto *v=lease.id.car;if(status!=loan&&Current(lease)&&unsigned(gEngine(v+0x34c))==loan)gSetEngine(v+0x34c,status);}} restore{lease,status,loan};
  auto *fire=gStart(gManager,v,nullptr,.3f,0);
  if(!Current(lease)||!FireFor(fire,lease.id))return false;
- auto &h=gHistory[size_t(lease.id.ref>>8)];h.fire=fire;const auto input=carmechanics::FireInput(v);Log("car fire: ref %d model %d ignited from systems (heat %.2f, fuel %.0f%%, breach %.0f%%, electrical %.0f%%); native fire registered",lease.id.ref,lease.id.model,input.heat,input.fuel*100,input.breach*100,input.electrical*100);return true;
+ auto &h=gHistory[size_t(lease.id.ref>>8)];h.fire=fire;const auto input=Input(v);Log("car fire: ref %d model %d ignited from systems (heat %.2f, fuel %.0f%%, breach %.0f%%, electrical %.0f%%); native fire registered",lease.id.ref,lease.id.model,input.heat,input.fuel*100,input.breach*100,input.electrical*100);return true;
 }
 void Burnout(const Lease &lease)
 {
  if(!Current(lease))return;auto &h=gHistory[size_t(lease.id.ref>>8)];auto *v=lease.id.car,*fire=h.fire;h.fire=nullptr;
  if(FireFor(fire,lease.id))gExtinguish(fire);
- if(!Current(lease))return;gSetEngine(v+0x34c,250);if(!Current(lease))return;
+ if(!Current(lease))return;if(*reinterpret_cast<const int *>(v+0x348)==0)gSetEngine(v+0x34c,250);if(!Current(lease))return;
  *reinterpret_cast<float *>(v+0x2a0)=0;v[0x295]&=uint8_t(~0x10);v[0x60]=(v[0x60]&7)|0x28;Invalidate(v);
  Log("car fire: model %d burned out without blast",lease.id.model);
 }
@@ -95,10 +96,10 @@ void Advance(const Lease &lease)
  auto *bound=*reinterpret_cast<uint8_t **>(lease.id.car+0x280);
  if(FireFor(bound,lease.id)&&bound!=h.fire){h.fire=bound;firemodel::Ignite(h.state);Log("car fire: model %d adopted native external fire",lease.id.model);}
  if(h.fire&&!FireFor(h.fire,lease.id)){h.fire=nullptr;firemodel::Extinguish(h.state);}
- auto input=carmechanics::FireInput(lease.id.car);input.health=game::VehicleHealth(lease.id.car);
+ auto input=Input(lease.id.car);input.health=game::VehicleHealth(lease.id.car);
  const bool burning=h.state.lit&&FireFor(h.fire,lease.id);firemodel::Tick(h.state,input,dt);
  if(!Current(lease))return;
- if(burning&&dt>0&&dt<=1)carmechanics::Burn(lease.id.car,dt);
+ if(burning&&dt>0&&dt<=1){if(game::IsAircraft(lease.id.car)&&game::api.AirframeBurn)game::api.AirframeBurn(lease.id.car,dt);else carmechanics::Burn(lease.id.car,dt);}
  if(!Current(lease))return;
  if(h.state.spent){Burnout(lease);return;}
  if(h.state.lit&&!h.fire&&!Create(lease)){
@@ -149,6 +150,8 @@ void UpdateService(uint8_t *v)
  if(sameDriver&&v[0x19e]==11&&!game::Wrecked(v)){const auto at=game::EntityPos(v);std::memcpy(v+0x1b4,&at,sizeof at);v[0x19e]=8;v[0x19f]=0;}
 }
 void Control(uint8_t *v){Scope scope(v,1u<<Countdown,true);gControl(v);if(scope.valid)Advance(scope.lease);UpdateService(v);}
+void PlaneControl(uint8_t *v){Scope scope(v,0,true);gPlaneControl(v);if(scope.valid)Advance(scope.lease);}
+void BoatControl(uint8_t *v){Scope scope(v,1u<<BoatCountdown,true);gBoatControl(v);if(scope.valid)Advance(scope.lease);}
 void Process(uint8_t *f)
 {
  uint8_t *v=FireAddress(f)&&f[0]==1&&f[1]==0?*reinterpret_cast<uint8_t **>(f+0x10):nullptr;
@@ -184,16 +187,17 @@ bool Install()
  B(gPedPool,"_ZN6CPools11ms_pPedPoolE");
  B(gCoords,"_Z15FindPlayerCoorsv");B(gDuty,"_ZN8CCarCtrl19NumFiretrucksOnDutyE");B(gStart,"_ZN12CFireManager9StartFireEP7CEntityS1_fh");B(gEngine,"_ZN14CDamageManager15GetEngineStatusEv");B(gSetEngine,"_ZN14CDamageManager15SetEngineStatusEj");
 #undef B
- gGates[Countdown]=hooks::Flag("skip:car_fire_countdown");gGates[Rollover]=hooks::Flag("skip:car_rollover_drain");gGates[Lethal]=hooks::Flag("skip:car_ordinary_lethal");
- if(!gGates[0]||!gGates[1]||!gGates[2]||!game::api.PoolsGetVehicle||!game::api.timeMs||!hooks::IsCallTo(0x53030,"_ZNK12CFireManager19GetTotalActiveFiresEv")||!hooks::IsCallTo(0x53140,"_ZN12CFireManager15FindNearestFireE7CVectorPf")||!hooks::IsCallTo(0x50814,"_ZN6CCarAI23TellOccupantsToLeaveCarEP8CVehicle")||!hooks::IsCallTo(0x24f618,"_ZN12CFireManager33FindFurthestFire_NeverMindFireMenE7CVectorff"))return false;
+ gGates[Countdown]=hooks::Flag("skip:car_fire_countdown");gGates[Rollover]=hooks::Flag("skip:car_rollover_drain");gGates[Lethal]=hooks::Flag("skip:car_ordinary_lethal");gGates[BoatCountdown]=hooks::Flag("skip:aircraft_boat_fire");
+ if(!gGates[0]||!gGates[1]||!gGates[2]||!gGates[3]||!game::api.PoolsGetVehicle||!game::api.timeMs||!hooks::IsCallTo(0x53030,"_ZNK12CFireManager19GetTotalActiveFiresEv")||!hooks::IsCallTo(0x53140,"_ZN12CFireManager15FindNearestFireE7CVectorPf")||!hooks::IsCallTo(0x50814,"_ZN6CCarAI23TellOccupantsToLeaveCarEP8CVehicle")||!hooks::IsCallTo(0x24f618,"_ZN12CFireManager33FindFurthestFire_NeverMindFireMenE7CVectorff"))return false;
 #define C(v,s,f) if(!v)v=reinterpret_cast<decltype(v)>(hooks::Chain(s,reinterpret_cast<void *>(f)))
  C(gControl,"_ZN11CAutomobile14ProcessControlEv",Control);C(gDamage,"_ZN11CAutomobile13VehicleDamageEft",Damage);C(gInflict,"_ZN8CVehicle13InflictDamageEP7CEntity11eWeaponTypef7CVector",Inflict);
  C(gProcess,"_ZN5CFire11ProcessFireEv",Process);C(gExtinguish,"_ZN5CFire10ExtinguishEv",Extinguish);C(gFix,"_ZN11CAutomobile3FixEv",Fix);C(gDelete,"_ZN7CEntity14DeleteRwObjectEv",Delete);C(gRestart,"_ZN6CWorld15ClearForRestartEv",Restart);
  C(gDispatch,"_ZN8CCarCtrl28GenerateEmergencyServicesCarEv",Dispatch);C(gTotal,"_ZNK12CFireManager19GetTotalActiveFiresEv",Total);C(gNearest,"_ZN12CFireManager15FindNearestFireE7CVectorPf",Nearest);
+ C(gPlaneControl,"_ZN6CPlane14ProcessControlEv",PlaneControl);C(gBoatControl,"_ZN5CBoat14ProcessControlEv",BoatControl);
  C(gLeave,"_ZN6CCarAI23TellOccupantsToLeaveCarEP8CVehicle",Leave);
  C(gCannon,"_ZN11CAutomobile16FireTruckControlEv",Cannon);C(gFurthest,"_ZN12CFireManager33FindFurthestFire_NeverMindFireMenE7CVectorff",Furthest);
 #undef C
- gReady=gControl&&gDamage&&gInflict&&gProcess&&gExtinguish&&gFix&&gDelete&&gRestart&&gDispatch&&gTotal&&gNearest&&gLeave&&gCannon&&gFurthest;
- if(gReady){game::api.VehicleBurning=ReadBurning;game::api.VehicleFireService=ReadService;Log("car fire: progressive native fires and single-fire emergency response enabled");}return gReady;
+ gReady=gPlaneControl&&gBoatControl&&gControl&&gDamage&&gInflict&&gProcess&&gExtinguish&&gFix&&gDelete&&gRestart&&gDispatch&&gTotal&&gNearest&&gLeave&&gCannon&&gFurthest;
+ if(gReady){game::api.RepairVehicleFire=+[](uint8_t *v){Forget(v,true);};game::api.VehicleBurning=ReadBurning;game::api.VehicleFireService=ReadService;Log("car fire: progressive native fires and single-fire emergency response enabled");}return gReady;
 }
 }

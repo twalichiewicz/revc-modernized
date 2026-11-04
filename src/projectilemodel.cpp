@@ -17,11 +17,11 @@ constexpr float resistance[]={80,8,16,16,16,16,12,12,12,12,20,70,6,10};
 constexpr float capacity[]={120,10,40,40,40,40,12,12,12,12,35,100,12,15};
 static_assert(sizeof(resistance)/sizeof(float)==mechanicalmodel::kModules);
 }
-Result Doses(const mechanicalmodel::Layout &layout,const Ray &ray)
+Result Absorb(const mechanicalmodel::Box &body,const std::array<mechanicalmodel::Box,mechanicalmodel::kModules> &volumes,const float *resistance,const float *capacity,const Ray &ray)
 {
  Result out;
  if(!Finite(ray.from)||!Finite(ray.to)||!std::isfinite(ray.entry)||!std::isfinite(ray.limit)||ray.entry<0||ray.limit>1||ray.limit<ray.entry||
-    !std::isfinite(ray.budget)||ray.budget<=0||ray.count>kLayers||(ray.count&&!ray.layers)||!ValidBox(layout.body))return out;
+    !std::isfinite(ray.budget)||ray.budget<=0||ray.count>kLayers||(ray.count&&!ray.layers)||!ValidBox(body))return out;
  const Vec3 d{ray.to.x-ray.from.x,ray.to.y-ray.from.y,ray.to.z-ray.from.z};const float length=std::sqrt(d.x*d.x+d.y*d.y+d.z*d.z);
  if(!std::isfinite(length)||length<1e-6f)return out;
  std::array<Layer,kLayers> layers;size_t n=0;
@@ -33,20 +33,20 @@ Result Doses(const mechanicalmodel::Layout &layout,const Ray &ray)
   if(!same)layers[unique++]=layers[i];
  }n=unique;
  float near,far;out.valid=true;out.remaining=std::min(ray.budget,1000.f);
- if(!BoxHit(layout.body,ray.from,d,near,far))return out;near=std::max(near,ray.entry);far=std::min(far,ray.limit);if(near>=far)return out;
+ if(!BoxHit(body,ray.from,d,near,far))return out;near=std::max(near,ray.entry);far=std::min(far,ray.limit);if(near>=far)return out;
  // Visible bumpers/panels can extend beyond the original COL body bounds.
  // Charge those entry surfaces before reaching any internal module volume.
  std::array<float,3+2*mechanicalmodel::kModules+kLayers> cuts{};size_t count=0;cuts[count++]=ray.entry;cuts[count++]=near;cuts[count++]=far;
  std::array<float,mechanicalmodel::kModules> enter{},exit{};
  for(int i=0;i<mechanicalmodel::kModules;i++){
-  if(!ValidBox(layout.volumes[i]))return {};
-  float a,b;if(BoxHit(layout.volumes[i],ray.from,d,a,b)){enter[i]=std::max(near,a);exit[i]=std::min(far,b);if(enter[i]<exit[i]){cuts[count++]=enter[i];cuts[count++]=exit[i];}}
+  if(!ValidBox(volumes[i]))return {};
+  float a,b;if(BoxHit(volumes[i],ray.from,d,a,b)){enter[i]=std::max(near,a);exit[i]=std::min(far,b);if(enter[i]<exit[i]){cuts[count++]=enter[i];cuts[count++]=exit[i];}}
  }
  for(size_t i=0;i<n;i++)if(layers[i].fraction>=ray.entry-1e-6f&&layers[i].fraction<=far)cuts[count++]=std::max(ray.entry,layers[i].fraction);
  std::sort(cuts.begin(),cuts.begin()+count);size_t layer=0;while(layer<n&&layers[layer].fraction<ray.entry-1e-6f)++layer;
  for(size_t k=0;k+1<count&&out.remaining>0;k++){
   const float t=cuts[k];while(layer<n&&layers[layer].fraction<=t+1e-6f){const auto &l=layers[layer++];
-   const float loss=std::min(out.remaining,Cost(l.material,l.incidence));out.surfaceLoss+=loss;out.remaining-=loss;}
+   const float loss=std::min(out.remaining,Cost(l.material,l.incidence));out.surfaceLoss+=loss;out.remaining-=loss;for(size_t j=0;j<ray.count;j++)if(ray.layers[j].material==l.material&&std::fabs(ray.layers[j].fraction-l.fraction)*length<=.001f)out.layerRemaining[j]=out.remaining;}
   const float next=cuts[k+1],middle=(t+next)*.5f;float rate=0;
   for(int i=0;i<mechanicalmodel::kModules;i++)if(enter[i]<exit[i]&&middle>=enter[i]&&middle<exit[i])rate+=resistance[i];
   if(rate<=0||next<=t||out.remaining<=0)continue;
@@ -55,4 +55,6 @@ Result Doses(const mechanicalmodel::Layout &layout,const Ray &ray)
  }
  return out;
 }
+Result Doses(const mechanicalmodel::Layout &layout,const Ray &ray){return Absorb(layout.body,layout.volumes,resistance,capacity,ray);}
+
 }

@@ -40,13 +40,7 @@ bool Admitted(uint8_t *v,Identity &id)
  if(lease.ref!=id.ref||lease.model!=id.model||lease.kind!=id.kind)lease={id.ref,id.model,id.kind,false};
  const bool heli=id.kind==0&&(id.model==155||id.model==177||id.model==199||id.model==217||id.model==218||id.model==227);
  const bool skimmer=id.kind==1&&id.model==190;
- if((!heli&&!skimmer)||(heli&&!gConfig.heliDamage)||(skimmer&&!gConfig.planes)||Wrecked(v)||
-    !gMission||!gCutscene||*gCutscene||gMission()){lease.admitted=false;return false;}
- uint8_t *player=api.FindPlayerPed?api.FindPlayerPed():nullptr,*driver=*reinterpret_cast<uint8_t **>(v+0x218);
- const int status=v[0x60]>>3;
- const bool owns=player&&status==0&&driver==player&&PedInVehicle(player)&&PedVehicle(player)==v;
- const bool abandoned=lease.admitted&&status==4&&!driver&&v[0x19e]==0;
- if(!owns&&!abandoned){lease.admitted=false;return false;}
+ if((!heli&&!skimmer)||(heli&&!gConfig.heliDamage)||(skimmer&&!gConfig.planes)||Wrecked(v)){lease.admitted=false;return false;}
  lease.admitted=true;return true;
 }
 struct HandlingScope {

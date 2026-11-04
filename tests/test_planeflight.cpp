@@ -222,6 +222,7 @@ static void NativeMode3Yaw()
 	Reset();gNativePad=true;gRight=1;*reinterpret_cast<int16_t *>(gPad+0xec)=3;*reinterpret_cast<int16_t *>(gPad+0x14)=255;
 	CHECK(planeflight::Apply(gBoat,3));CHECK(V(gBoat,0x90).z<0); // primary native pedal overrides conflicting Dpad fallback
 }
+static airframemodel::Effects DamageEffects(const uint8_t *){airframemodel::Effects e;e.managed=true;e.power=0;e.leftLift=.15f;e.pitch=0;return e;}
 int main()
 {
 	for(const char *missing:{"ApplyTurnForce","IsPlayerOnAMission","ms_running","GetCarGunLeftRight"}){
@@ -260,5 +261,7 @@ int main()
 	CHECK(std::fabs(slow.z-fast.z)<100);
 	GlideRecoveryApproach();
 	std::printf("Skimmer360s climb30/120Hz: %.1f / %.1fm\n",slow.z,fast.z);
-	if(!failures)std::puts("planeflight: all passed");return failures?1:0;
+	if(!failures)std::puts("planeflight: all passed");Reset();V(gBoat,0x84)={0,1,0};planeflight::Apply(gBoat,3);const auto healthy=gImpulse;
+ Reset();V(gBoat,0x84)={0,1,0};game::api.AirframeEffects=DamageEffects;planeflight::Apply(gBoat,3);CHECK(gImpulse.y<healthy.y&&gImpulse.z<healthy.z);game::api.AirframeEffects=nullptr;
+ return failures?1:0;
 }

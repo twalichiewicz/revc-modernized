@@ -121,6 +121,11 @@ int main(){if(ExistingFireChecks())return 1;using namespace fixture;using namesp
  Store(arrival.Page(0x1003ba98c),int32_t(1));Arrival(arrival.Address(0x1000507e0),cars[1]);Check(cars[1][0x19e]==1&&!(cars[1][0x295]&4)&&Read<int32_t>(arrival.Page(0x1003ba98c))==0,"actual native cleanup releases road mission and duty count after suppression");
  Entry<Fn>("_ZN6CCarAI23TellOccupantsToLeaveCarEP8CVehicle")(cars[1]);Check(crewExits==1,"direct scripted crew exit remains authoritative");
  imageBase=nullptr;
+ Code boatFire;boatFire.Add(0x100267a60,0x100267bcc);boatFire.bindings={{0x100143f28,reinterpret_cast<void *>(Zero)},{0x10020445c,reinterpret_cast<void *>(Ignore)}};boatFire.Finish();pthread_jit_write_protect_np(0);
+ Skip(boatFire,0x100267a64,0x100267bc8,&gates[3]);{const auto at=size_t(static_cast<uint8_t *>(boatFire.Address(0x100267bc8))-boatFire.code),end=boatFire.Thunk(reinterpret_cast<void *>(CountExit));Store(boatFire.code+at,uint32_t(0x14000000)|(uint32_t((int64_t(end)-int64_t(at))/4)&0x3ffffff));}sys_icache_invalidate(boatFire.code,0x10000);pthread_jit_write_protect_np(1);
+ Reset();*reinterpret_cast<int16_t *>(cars[0]+0x6a)=190;*reinterpret_cast<int *>(cars[0]+0x348)=1;*reinterpret_cast<void **>(cars[0])=vtable;F(cars[0],0x2a0)=200;game::api.AirframeEffects=+[](const uint8_t *){airframemodel::Effects e;e.managed=true;return e;};
+ countEntry=boatFire.Address(0x100267a60);const auto oldBoat=carfire::gBoatControl;carfire::gBoatControl=ControlCount;Store(boatFire.Page(0x10058d674),5.f);
+ for(int i=0;i<70&&!blasts;i++){now+=100;Entry<Fn>("_ZN5CBoat14ProcessControlEv")(cars[0]);}Check(!blasts&&F(cars[0],0x3d8)==0,"actual native Skimmer five-second flame countdown is retired under progressive aircraft fire ownership");carfire::gBoatControl=oldBoat;
  Code burning;burning.Add(0x1000e5df4,0x1000e62a4);burning.bindings={{0x10010c0b4,reinterpret_cast<void *>(NoVehicle)},{0x10010c0f4,reinterpret_cast<void *>(NoVehicle)},
   {0x10027d608,entries.at("_ZN8CVehicle13InflictDamageEP7CEntity11eWeaponTypef7CVector")},{0x100172f48,reinterpret_cast<void *>(Transform)},
   {0x100210fec,reinterpret_cast<void *>(Ignore)},{0x100208a10,reinterpret_cast<void *>(Ignore)},

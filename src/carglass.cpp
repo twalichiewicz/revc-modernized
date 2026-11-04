@@ -1,5 +1,6 @@
 #include "carglass.h"
 #include "glassmodel.h"
+#include "skinmodel.h"
 #include "game.h"
 #include "config.h"
 #include "hooks.h"
@@ -37,7 +38,7 @@ void (*gSound)(uint8_t,const CVector &);
 int (*gDoorStatus)(void *,int),(*gPanelStatus)(void *,int);
 void (*gDoor)(uint8_t *,int,int,bool),(*gBumper)(uint8_t *,int,int,bool),(*gFix)(uint8_t *),(*gDelete)(uint8_t *);
 bool gReady;
-struct Part {void *atomic,*holder,*copy;size_t bytes;std::vector<Vec3> offsets;};
+struct Part {void *atomic,*holder,*copy;size_t bytes;std::vector<Vec3> offsets;std::vector<skinmodel::Hole> holes;};
 struct Car {uint8_t *car;int ref,model;void *clump;uint8_t broken=0;std::vector<Part> parts;bool dented=false;};
 std::vector<Car> gCars;
 size_t gBytes;
@@ -190,6 +191,39 @@ void *Copy(const Mesh &m,uint8_t mask,size_t &bytes,size_t available,const std::
  if(ok)ok=rw.unlock(g)!=nullptr;
  if(!ok){rw.destroyGeometry(g);return nullptr;}return g;
 }
+void *CopySkin(const Mesh &m,const std::vector<skinmodel::Hole> &holes,size_t &bytes,size_t available)
+{
+ const unsigned flags=rw.flags(m.geometry);const int uvs=rw.uvCount(m.geometry);if(uvs<0||uvs>8)return nullptr;
+ struct Vertex {skinmodel::Sample sample;std::array<uint16_t,3> source;};
+ std::vector<Vertex> vertices;std::vector<Triangle> triangles;
+ for(int i=0;i<m.nt;i++){
+  const auto &t=m.t[i];std::vector<std::vector<skinmodel::Sample>> pieces{{{m.v[t.v[0]],{1,0,0}},{m.v[t.v[1]],{0,1,0}},{m.v[t.v[2]],{0,0,1}}}};
+  for(const auto &hole:holes){std::vector<std::vector<skinmodel::Sample>> next;for(const auto &piece:pieces)if(!skinmodel::Subtract(piece,hole,next))return nullptr;pieces=std::move(next);if(pieces.size()>512)return nullptr;}
+  for(const auto &p:pieces)for(size_t j=1;j+1<p.size();j++){
+   const auto cross=Cross(Sub(p[j].position,p[0].position),Sub(p[j+1].position,p[0].position));if(skinmodel::Dot(cross,cross)<1e-16f)continue;
+   if(vertices.size()+3>65535||triangles.size()>=32768)return nullptr;
+   const auto at=uint16_t(vertices.size());for(auto sample:{p[0],p[j],p[j+1]})vertices.push_back({sample,{t.v[0],t.v[1],t.v[2]}});
+   triangles.push_back({{at,uint16_t(at+1),uint16_t(at+2)},t.material});
+  }
+ }
+ if(vertices.empty())return nullptr;
+ bytes=vertices.size()*(12+((flags&16)?12:0)+((flags&8)?4:0)+uvs*8)+triangles.size()*8+4096+holes.size()*sizeof(skinmodel::Hole);if(bytes>available)return nullptr;
+ void *g=rw.createGeometry(int(vertices.size()),int(triangles.size()),(flags&0xffffu&~1u)|(unsigned(uvs)<<16));if(!g)return nullptr;
+ auto morph=rw.morph(g,0),source=rw.morph(m.geometry,0);auto positions=morph?static_cast<Vec3 *>(rw.vertices(morph)):nullptr;
+ auto normals=(flags&16)&&morph?static_cast<Vec3 *>(rw.normals(morph)):nullptr;auto sourceNormals=(flags&16)&&source?static_cast<const Vec3 *>(rw.normals(source)):nullptr;
+ auto colours=(flags&8)?static_cast<uint8_t *>(rw.colours(g)):nullptr;auto sourceColours=(flags&8)?static_cast<const uint8_t *>(rw.colours(m.geometry)):nullptr;
+ bool ok=positions&&source&&(!(flags&16)||(normals&&sourceNormals))&&(!(flags&8)||(colours&&sourceColours));
+ for(size_t i=0;ok&&i<vertices.size();i++){
+  const auto &v=vertices[i];const float w[]={v.sample.weights.x,v.sample.weights.y,v.sample.weights.z};positions[i]=v.sample.position;
+  if(normals){Vec3 n{};for(int j=0;j<3;j++){auto s=sourceNormals[v.source[j]];n={n.x+w[j]*s.x,n.y+w[j]*s.y,n.z+w[j]*s.z};}const float len=std::sqrt(skinmodel::Dot(n,n));normals[i]=len>1e-7f?Vec3{n.x/len,n.y/len,n.z/len}:sourceNormals[v.source[0]];}
+  if(colours)for(int c=0;c<4;c++){float value=0;for(int j=0;j<3;j++)value+=w[j]*sourceColours[v.source[j]*4+c];colours[i*4+c]=uint8_t(std::clamp(value,0.f,255.f));}
+  for(int set=1;set<=uvs;set++){auto out=static_cast<float *>(rw.uv(g,set));auto in=static_cast<const float *>(rw.uv(m.geometry,set));if(!out||!in){ok=false;break;}for(int c=0;c<2;c++){float value=0;for(int j=0;j<3;j++)value+=w[j]*in[v.source[j]*2+c];out[i*2+c]=value;}}
+ }
+ auto out=static_cast<Triangle *>(rw.triangles(g));ok=ok&&out;
+ for(size_t i=0;ok&&i<triangles.size();i++){out[i]=triangles[i];auto material=rw.material(m.geometry,out[i].material);out[i].material=0xffff;ok=material&&rw.triangleMaterial(g,out+i,material);}
+ auto sphere=source?rw.sphere(source):nullptr;if(ok&&sphere)rw.setSphere(morph,sphere);else ok=false;
+ if(ok)ok=rw.unlock(g)!=nullptr;if(!ok){rw.destroyGeometry(g);return nullptr;}return g;
+}
 void Break(uint8_t *v,Pane pane,Vec3 hit)
 {
  if(!gReady||!gConfig.carGlass||pane==Pane::None||pane==Pane::Front||!Eligible(v)||!Finite(hit))return;
@@ -221,7 +255,7 @@ void Break(uint8_t *v,Pane pane,Vec3 hit)
  for(auto &p:pending){
   rw.setGeometry(p.atomic,p.copy,0);
   if(p.was){gBytes-=p.was->bytes;p.was->copy=p.copy;p.was->bytes=p.bytes;}
-  else{car.parts.push_back({p.atomic,p.holder,p.copy,p.bytes,{}});p.holder=nullptr;}
+  else{car.parts.push_back({p.atomic,p.holder,p.copy,p.bytes,{},{}});p.holder=nullptr;}
   gBytes+=p.bytes;
  }
  car.broken|=bit;
@@ -283,7 +317,7 @@ bool Deform(uint8_t *v,const dentmodel::Impact &hit)
  for(auto &p:pending){
   rw.setGeometry(p.atomic,p.copy,0);
   if(p.was){gBytes-=p.was->bytes;p.was->copy=p.copy;p.was->bytes=p.bytes;p.was->offsets=std::move(p.offsets);}
-  else{found->parts.push_back({p.atomic,p.holder,p.copy,p.bytes,std::move(p.offsets)});p.holder=nullptr;}
+  else{found->parts.push_back({p.atomic,p.holder,p.copy,p.bytes,std::move(p.offsets),{}});p.holder=nullptr;}
   gBytes+=p.bytes;
  }
  found->dented=true;
@@ -326,6 +360,47 @@ void Bullet(uint8_t *v,const void *atomic,int triangle,Vec3 hit,Vec3 normal)
  Mesh m;if(!m.Read(rw.geometry(atomic),const_cast<void *>(atomic),rw.root(game::EntityClump(v)))||triangle<0||triangle>=m.nt)return;
  try{Break(v,m.Face(triangle),hit);}catch(const std::bad_alloc &){}
 }
+bool Perforate(uint8_t *v,const void *identity,Vec3 hit,Vec3 normal,float budget)
+{
+ if(!gReady||!gConfig.carDeformation||Ref(v)<0||(game::EntityFlags(v)&7)!=2||!game::IsAircraft(v)||!game::EntityClump(v)||!(v[0x297]&0x40)||!Finite(hit)||!Finite(normal)||!std::isfinite(budget)||budget<=3)return false;
+ try{
+  Collect();auto found=std::find_if(gCars.begin(),gCars.end(),[&](const Car &c){return c.car==v;});if(found==gCars.end()&&gCars.size()>=kMaxCars)return false;
+  Car fresh{v,Ref(v),game::EntityModel(v),game::EntityClump(v),0,{}};Car &car=found==gCars.end()?fresh:*found;
+  Objects objects;rw.atomics(car.clump,Gather,&objects);if(!objects.valid||std::find(objects.a.begin(),objects.a.begin()+objects.n,identity)==objects.a.begin()+objects.n)return false;
+  void *atomic=const_cast<void *>(identity);if(!(rw.atomicFlags(atomic)&4))return false;
+  auto old=std::find_if(car.parts.begin(),car.parts.end(),[&](const Part &p){return p.atomic==atomic;});const bool isNew=old==car.parts.end();if(!isNew&&rw.geometry(atomic)!=old->copy)return false;
+  if(isNew&&car.parts.size()>=kMaxParts)return false;size_t count=0;for(const auto &p:car.parts)count+=p.holes.size();if(count>=64)return false;
+  auto source=isNew?rw.geometry(atomic):rw.geometry(old->holder);Mesh m;if(!m.Read(source,atomic,rw.root(car.clump)))return false;
+  Vec3 origin,basis[3];if(!InCar(m.frame,m.root,{0,0,0},origin))return false;float toCar[16]{};
+  for(int a=0;a<3;a++){if(!InCar(m.frame,m.root,{float(a==0),float(a==1),float(a==2)},basis[a]))return false;auto b=Sub(basis[a],origin);toCar[4*a]=b.x;toCar[4*a+1]=b.y;toCar[4*a+2]=b.z;}toCar[12]=origin.x;toCar[13]=origin.y;toCar[14]=origin.z;
+  Vec3 p,n,local,localNormal;if(!dentmodel::Local(reinterpret_cast<float *>(v+8),hit,false,p)||!dentmodel::Local(reinterpret_cast<float *>(v+8),normal,true,n)||!dentmodel::Local(toCar,p,false,local)||!dentmodel::Local(toCar,n,true,localNormal))return false;
+  auto holes=isNew?std::vector<skinmodel::Hole>{}:old->holes;const float radius=.015f+.0003f*std::min(budget,200.f);
+  for(const auto &h:holes)if(skinmodel::Dot(Sub(h.centre,local),Sub(h.centre,local))<h.radius*h.radius*.25f)return false;
+  holes.push_back({local,localNormal,radius});Pending pending;pending.atomic=atomic;pending.copy=CopySkin(m,holes,pending.bytes,kBudget-gBytes);if(!pending.copy)return false;
+  if(isNew){pending.holder=rw.createAtomic();if(!pending.holder)return false;rw.setGeometry(pending.holder,source,0);car.parts.reserve(kMaxParts);}
+  rw.setGeometry(atomic,pending.copy,0);
+  if(isNew){car.parts.push_back({atomic,pending.holder,pending.copy,pending.bytes,{},std::move(holes)});pending.holder=nullptr;}else{gBytes-=old->bytes;old->copy=pending.copy;old->bytes=pending.bytes;old->holes=std::move(holes);}gBytes+=pending.bytes;
+  if(found==gCars.end())gCars.push_back(std::move(fresh));return true;
+ }catch(const std::bad_alloc &){return false;}
+}
+bool Opening(uint8_t *v,Vec3 from,Vec3 to,float &fraction)
+{
+ if(!gReady||!Finite(from)||!Finite(to)||!std::isfinite(fraction))return false;
+ const auto found=std::find_if(gCars.begin(),gCars.end(),[&](const Car &c){return c.car==v&&Same(c);});if(found==gCars.end())return false;
+ Objects objects;rw.atomics(found->clump,Gather,&objects);if(!objects.valid)return false;Vec3 a,b;if(!dentmodel::Local(reinterpret_cast<float *>(v+8),from,false,a)||!dentmodel::Local(reinterpret_cast<float *>(v+8),to,false,b))return false;bool hit=false;
+ for(const auto &part:found->parts){
+  if(part.holes.empty()||std::find(objects.a.begin(),objects.a.begin()+objects.n,part.atomic)==objects.a.begin()+objects.n||rw.geometry(part.atomic)!=part.copy||!(rw.atomicFlags(part.atomic)&4))continue;
+  auto frame=rw.frame(part.atomic);auto root=rw.root(found->clump);Vec3 origin,axes[3];if(!InCar(frame,root,{0,0,0},origin))continue;float m[16]{};bool valid=true;
+  for(int i=0;i<3;i++){valid&=InCar(frame,root,{float(i==0),float(i==1),float(i==2)},axes[i]);auto d=Sub(axes[i],origin);m[4*i]=d.x;m[4*i+1]=d.y;m[4*i+2]=d.z;}m[12]=origin.x;m[13]=origin.y;m[14]=origin.z;
+  Vec3 localA,localB;if(!valid||!dentmodel::Local(m,a,false,localA)||!dentmodel::Local(m,b,false,localB))continue;const auto delta=Sub(localB,localA);
+  for(const auto &hole:part.holes){using skinmodel::Dot;const float denominator=Dot(delta,hole.normal);if(std::fabs(denominator)<1e-7f)continue;const float t=Dot(Sub(hole.centre,localA),hole.normal)/denominator;if(t<0||t>=fraction)continue;
+   const Vec3 p{localA.x+delta.x*t-hole.centre.x,localA.y+delta.y*t-hole.centre.y,localA.z+delta.z*t-hole.centre.z};const float nl=std::sqrt(Dot(hole.normal,hole.normal));if(nl<1e-7f)continue;Vec3 n{hole.normal.x/nl,hole.normal.y/nl,hole.normal.z/nl};auto u=Cross(n,std::fabs(n.z)<.9f?Vec3{0,0,1}:Vec3{0,1,0});const float ul=std::sqrt(Dot(u,u));u={u.x/ul,u.y/ul,u.z/ul};const auto side=Cross(n,u);bool inside=true;
+   for(int i=0;i<8;i++){const float angle=i*.7853981634f;inside&=Dot(p,u)*std::cos(angle)+Dot(p,side)*std::sin(angle)<hole.radius*.9238795325f;}
+   if(inside){fraction=t;hit=true;}
+  }
+ }return hit;
+}
+void Restore(uint8_t *v){Forget(v,true);}
 bool Install()
 {
  if(gReady||(!gConfig.carGlass&&!gConfig.carDeformation))return true;

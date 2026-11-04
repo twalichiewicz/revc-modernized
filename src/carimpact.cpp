@@ -41,9 +41,10 @@ std::array<History,kSlots> gHistory;
 History &Record(const Identity &id){auto &h=gHistory[size_t(id.ref>>8)];if(!Same(h.id,id)){h={};h.id=id;}return h;}
 struct Capture {Identity id;Contact hit;};
 bool Enabled(){return gConfig.carDeformation||gConfig.carMechanics;}
+bool Airframe(const Identity &id){return game::api.AirframeEffects&&game::api.AirframeCollision&&game::api.AirframeEffects(id.v).managed;}
 Capture Preview(uint8_t *v,uint8_t *other,const Point &p,bool secondary=false,bool knownOther=true)
 {
- Capture c;if(!gReady||!Enabled()||!game::api.timeMs||!Identify(v,c.id)||!Eligible(c.id))return c;
+ Capture c;if(!gReady||!game::api.timeMs||!Identify(v,c.id)||(!(Enabled()&&Eligible(c.id))&&!Airframe(c.id)))return c;
  const auto piece=secondary?p.pieceB:p.pieceA;if(piece>17)return c;
  const auto matrix=reinterpret_cast<const float *>(v+8);const float sign=secondary?-1.0f:1.0f;
  Vec3 point,inward;if(!dentmodel::Local(matrix,{p.p.x,p.p.y,p.p.z},false,point)||
@@ -55,7 +56,8 @@ Capture Preview(uint8_t *v,uint8_t *other,const Point &p,bool secondary=false,bo
 }
 void Save(Capture c,float force)
 {
- if(!c.hit.valid||!std::isfinite(force)||force<=0||!Current(c.id)||!Eligible(c.id))return;
+ if(!c.hit.valid||!std::isfinite(force)||force<=0||!Current(c.id)||(!Eligible(c.id)&&!Airframe(c.id)))return;
+ if(Airframe(c.id)){const float mass=*reinterpret_cast<const float *>(c.id.v+0xcc);if(std::isfinite(mass)&&mass>=100&&mass<=1000000)game::api.AirframeCollision(c.id.v,c.hit.point,force/mass*50);return;}
  auto &h=Record(c.id);const auto now=c.hit.when;
  // Native sector collision retains its first strongest record when forces tie.
  if(!h.hit.valid||now<h.hit.when||now-h.hit.when>200||force>h.hit.force){c.hit.force=force;h.hit=c.hit;}
@@ -127,7 +129,7 @@ void Delete(uint8_t *v){Forget(v);gDelete(v);}
 } // namespace
 bool Install()
 {
- if(gReady||!Enabled())return true;
+ if(gReady||(!Enabled()&&!game::api.AirframeCollision))return true;
  gPool=reinterpret_cast<void **>(dlsym(RTLD_MAIN_ONLY,"_ZN6CPools15ms_pVehiclePoolE"));
  if(!gPool||!game::api.PoolsGetVehicle||!game::api.timeMs||(gConfig.carDeformation&&!carglass::Install()))return false;
 #define CHAIN(v,s,f) if(!v)v=reinterpret_cast<decltype(v)>(hooks::Chain(s,reinterpret_cast<void *>(f)))
