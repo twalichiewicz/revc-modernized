@@ -1,5 +1,23 @@
 # Utility torque and soft-ground regression
 
+## User correction: material and mechanical interaction
+
+The vehicle-class terrain profiles below are an installed interim tuning fix,
+not the desired material simulation. The user rejected class profiles as the
+final approach on2026-11-04 and requested moving on to the other open items.
+Keep replacement of this shortcut open for subsequent work.
+
+Ground materials and wetness must interact with the actual wheel/tyre contact,
+normal load and slip. Gearing, driven wheels and torque distribution determine
+requested wheel force; tyre properties, ground deformation/resistance and
+mechanical damage determine what reaches the ground. Offroad capability should
+emerge from those systems. A vehicle label must not directly grant a grip,
+engine-output or rolling-resistance multiplier. Preserve these distinctions
+when the terrain model is revisited; do not claim the profile table below
+completes them. The requested next task is the remaining backlog.
+
+## Installed interim implementation
+
 The user reports slow SUVs/trucks and a semi unable to cross rainy grass off
 Dolphin Expy, while sports cars handle the beach easily. Preserve the weight,
 suspension and road-speed targets, while giving utility vehicles usable pull

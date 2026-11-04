@@ -150,5 +150,21 @@ int main(){using namespace fixture;
  Run();{carmechanics::Controller scope(cars[0]);scope.history->state.damage[mechanicalmodel::kElectrical]=1;}
  Check(carmechanics::LightingPower(cars[0])==0,"failed supply remains visible outside native control");
  fix(cars[0]);Check(carmechanics::LightingPower(cars[0])==1,"repair immediately restores lamp supply");
+ Reset();projectilemodel::Layer bodyPanel{1.f/12,1,projectilemodel::Material::Body};
+ projectilemodel::Ray bullet{{0,3,.2f},{0,-3,.2f},1.f/12,1,20,&bodyPanel,1};
+ auto token=carmechanics::BeginBullet(cars[0]);Check(token.revision&&carmechanics::gController==nullptr,"bullet lease works outside controller without claiming a physics scope");
+ carmechanics::Projectile(cars[0],token,bullet);Run();const float shotPower=torque[0];Check(shotPower>0&&shotPower<.04f,"certified projectile injury reaches native engine power on next control");
+ token=carmechanics::BeginBullet(cars[0]);carmechanics::Projectile(cars[0],token,bullet);Run();Check(torque[0]<shotPower,"separate rounds accumulate without collision contact cooldown");
+ token=carmechanics::BeginBullet(cars[0]);fix(cars[0]);carmechanics::Projectile(cars[0],token,bullet);Run();Check(torque[0]==.04f,"repair retires pending projectile lease");
+ token=carmechanics::BeginBullet(cars[0]);++flags[0];carmechanics::Projectile(cars[0],token,bullet);Run();Check(torque[0]==.04f,"recycled actor cannot receive a pending round");
+ token=carmechanics::BeginBullet(cars[0]);restart();carmechanics::Projectile(cars[0],token,bullet);Run();Check(torque[0]==.04f,"restart retires pending round even before first new controller");
+ token=carmechanics::BeginBullet(cars[0]);removeRw(cars[0]);carmechanics::Projectile(cars[0],token,bullet);Run();Check(torque[0]==.04f,"render deletion retires a pending round even if its clump address is reused");token=carmechanics::BeginBullet(cars[0]);removeRw(cars[0]);*reinterpret_cast<void **>(cars[0]+0x58)=reinterpret_cast<void *>(0x9000);carmechanics::Projectile(cars[0],token,bullet);Run();Check(torque[0]==.04f,"changed render clump rejects old hit geometry");
+ token=carmechanics::BeginBullet(cars[0]);F(cars[0],0x38)=1;carmechanics::Projectile(cars[0],token,bullet);Run();Check(torque[0]==.04f,"moved actor cannot receive a stale local ray");
+ Reset();cars[0][0x62]|=2;Check(!carmechanics::BeginBullet(cars[0]).revision,"bulletproof actor rejects projectile lease");
+ Reset();gConfig.carMechanics=false;Check(!carmechanics::BeginBullet(cars[0]).revision,"mechanics off cannot begin projectile effects");gConfig.carMechanics=true;
+ Reset();projectilemodel::Layer tyrePanel{0,1,projectilemodel::Material::Rubber};projectilemodel::Ray wheelShot{{-1.5f,1.4f,-.35f},{0,1.4f,-.35f},0,1,40,&tyrePanel,1};
+ for(int i=0;i<8;i++){token=carmechanics::BeginBullet(cars[0]);carmechanics::Projectile(cars[0],token,wheelShot);}Run();
+ Check(wheels[0][0].grip<.05f&&wheels[0][0].brake<.01f&&Status(cars[0]+0x34c,0)==1,"local projectile path changes wheel/caliper performance and composes with native punctures");
+ Check(carmechanics::gHistory[0].state.toe==std::array<float,4>{}&&carmechanics::gHistory[0].state.steeringBias==0,"projectile integrity damage has no invented collision bending impulse");
  printf("carmechanics: %s\n",fails?"FAILED":"all passed");return fails?1:0;
 }

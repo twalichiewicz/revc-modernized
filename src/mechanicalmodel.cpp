@@ -24,7 +24,7 @@ bool Build(int model,Vec3 lo,Vec3 hi,const std::array<Vec3,4> &w,Layout &out)
  const float z=(w[0].z+w[1].z+w[2].z+w[3].z)*.25f+.55f;
  float engineY=front-.2f;if(model==211||model==210)engineY=rear-.15f;
  if(model==141||model==145||model==236)engineY=rear+.55f;
- out.wheels=w;out.volumes[0]=Around({0,engineY,z},{std::min(.75f,width*.6f),std::clamp((front-rear)*.21f,.45f,.8f),.45f});
+ out.body={lo,hi};out.wheels=w;out.volumes[0]=Around({0,engineY,z},{std::min(.75f,width*.6f),std::clamp((front-rear)*.21f,.45f,.8f),.45f});
  out.volumes[1]=Around({0,model==210?engineY:hi.y-.2f,z-.1f},{std::min(.9f,width*.75f),.2f,.4f});
  for(int i=0;i<4;i++){
   out.volumes[kWheelLF+i]=Around(w[i],{.3f,.4f,.4f});
@@ -47,10 +47,14 @@ std::array<float,kModules> Doses(const Layout &layout,const Hit &hit)
  for(int i=0;i<kModules;i++){const float t=Entry(layout.volumes[i],hit.point,d);if(t>=0)doses[i]=dose*(1-.55f*t)*(i==1?1.35f:1);}
  return doses;
 }
+void Apply(State &s,const std::array<float,kModules> &dose)
+{
+ for(int i=0;i<kModules;i++)if(std::isfinite(dose[i])&&dose[i]>0)s.damage[i]=Unit(s.damage[i]+dose[i]);
+}
 void Apply(State &s,const std::array<float,kModules> &dose,Vec3 inward)
 {
+ Apply(s,dose);
  for(int i=0;i<kModules;i++)if(std::isfinite(dose[i])&&dose[i]>0){
-  s.damage[i]=Unit(s.damage[i]+dose[i]);
   if(i>=kWheelLF&&i<=kWheelRR){const int w=i-kWheelLF;const float sign=std::fabs(inward.x)>.1f?std::copysign(1.0f,inward.x):(w<2?-1.0f:1.0f);
    s.toe[w]=std::clamp(s.toe[w]+sign*dose[i]*.10f,-.10f,.10f);}
   if(i==kSteering&&std::isfinite(inward.x))s.steeringBias=std::clamp(s.steeringBias+std::clamp(inward.x,-1.0f,1.0f)*dose[i]*.04f,-.06f,.06f);

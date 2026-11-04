@@ -7,10 +7,13 @@
 #include "log.h"
 #include <array>
 #include <cmath>
+#include <cstring>
 #include <dlfcn.h>
 namespace carmechanics {namespace {
 constexpr size_t kStride=0x6f0,kSlots=256;
 void **gPool;bool gReady;uint32_t gEpoch;
+uint64_t gRevision;
+uint64_t NextRevision(){if(++gRevision==0)++gRevision;return gRevision;}
 void *(*gFrame)(void *,int);float *(*gMatrix)(void *);
 int (*gWheelStatus)(void *,int);void (*gBurst)(uint8_t *,uint8_t,bool);
 void (*gControl)(uint8_t *),(*gFix)(uint8_t *),(*gDelete)(uint8_t *),(*gRestart)();
@@ -33,12 +36,12 @@ bool Eligible(const Identity &id){return id.vtable&&id.model>=0&&id.model<6500&&
  *reinterpret_cast<const int *>(id.v+0x348)==0&&!game::IsAircraft(id.v)&&!game::Wrecked(id.v)&&game::EntityClump(id.v)&&
  (id.v[0x297]&0x40)&&!(game::EntityFlags(id.v)&(1u<<27));}
 struct History {
- Identity id;mechanicalmodel::State state;mechanicalmodel::Layout layout;
+ Identity id;mechanicalmodel::State state;mechanicalmodel::Layout layout;uint64_t revision=0;
  std::array<partsmodel::Episode,mechanicalmodel::kModules> episodes{};
  uint8_t *info=nullptr,*col=nullptr;void *source=nullptr;bool layoutValid=false,tickSeen=false;uint32_t lastTick=0;int powerBand=10,fuelBand=10;
 };
 std::array<History,kSlots> gHistory;
-History &Record(const Identity &id){auto &h=gHistory[size_t(id.ref>>8)];if(!Same(h.id,id)){h={};h.id=id;}return h;}
+History &Record(const Identity &id){auto &h=gHistory[size_t(id.ref>>8)];if(!Same(h.id,id)){h={};h.id=id;h.revision=NextRevision();}return h;}
 bool Layout(History &h)
 {
  if(!game::api.modelInfoPtrs)return false;
@@ -50,6 +53,19 @@ bool Layout(History &h)
  const auto lo=*reinterpret_cast<const Vec3 *>(col+0x10),hi=*reinterpret_cast<const Vec3 *>(col+0x1c);
  mechanicalmodel::Layout layout;if(!mechanicalmodel::Build(h.id.model,lo,hi,wheels,layout))return false;
  h.layout=layout;h.info=info;h.col=col;h.source=source;h.layoutValid=true;return true;
+}
+bool LayoutCurrent(const History &h,const Identity &id)
+{
+ return game::api.modelInfoPtrs&&game::api.modelInfoPtrs[id.model]==h.info&&h.info&&
+  *reinterpret_cast<void **>(h.info+0x30)==h.source&&*reinterpret_cast<uint8_t **>(h.info+0x20)==h.col;
+}
+bool BulletCurrent(uint8_t *v,const BulletToken &token,Identity &id)
+{
+ if(!gReady||!gConfig.carMechanics||!token.revision||!Identify(v,id)||!Eligible(id)||(game::EntityFlags(v)&(1u<<17)))return false;
+ const auto &h=gHistory[size_t(id.ref>>8)];
+ return Same(h.id,id)&&h.revision==token.revision&&h.layoutValid&&game::EntityClump(v)==token.clump&&
+  *reinterpret_cast<void **>(v+0x160)==token.handling&&h.info==token.info&&h.col==token.col&&h.source==token.source&&
+  LayoutCurrent(h,id)&&!std::memcmp(v+8,token.transform.data(),sizeof token.transform);
 }
 struct Controller;thread_local Controller *gController;
 struct Controller {
@@ -66,8 +82,7 @@ bool Current(const Controller *c)
 {
  if(!gReady||!gConfig.carMechanics||!c||!c->valid||!c->history||c->epoch!=gEpoch)return false;
  Identity now;if(!Identify(c->id.v,now)||!Same(now,c->id)||!Eligible(now)||game::EntityClump(now.v)!=c->clump||*reinterpret_cast<uint8_t **>(now.v+0x160)!=c->handling)return false;
- const auto &h=*c->history;return game::api.modelInfoPtrs&&game::api.modelInfoPtrs[now.model]==h.info&&h.info&&
-  *reinterpret_cast<void **>(h.info+0x30)==h.source&&*reinterpret_cast<uint8_t **>(h.info+0x20)==h.col;
+ return LayoutCurrent(*c->history,now);
 }
 void Invalidate(uint8_t *v){for(auto c=gController;c;c=c->previous)if(c->id.v==v)c->valid=false;}
 void Report(History &h)
@@ -122,10 +137,33 @@ void Wheel(uint8_t *v,CVector &f,CVector &r,CVector &speed,CVector &point,int co
  CVector forward{f.x*cs+r.x*sn,f.y*cs+r.y*sn,f.z*cs+r.z*sn},right{r.x*cs-f.x*sn,r.y*cs-f.y*sn,r.z*cs-f.z*sn};
  gWheel(v,forward,right,speed,point,count,thrust*effect.drive,brake*effect.brake,grip*effect.grip,wheel,spin,state,status);
 }
-void Fix(uint8_t *v){Invalidate(v);Identity id;if(Identify(v,id)){auto &h=gHistory[size_t(id.ref>>8)];h={};h.id=id;}gFix(v);}
-void Delete(uint8_t *v){Invalidate(v);gDelete(v);} // render streaming must not heal physical systems
+void Fix(uint8_t *v){Invalidate(v);Identity id;if(Identify(v,id)){auto &h=gHistory[size_t(id.ref>>8)];h={};h.id=id;h.revision=NextRevision();}gFix(v);}
+void Delete(uint8_t *v){Invalidate(v);Identity id;if(Identify(v,id)){auto &h=gHistory[size_t(id.ref>>8)];if(Same(h.id,id))h.revision=NextRevision();}gDelete(v);} // retire pending geometry, preserve physical damage
 void Restart(){++gEpoch;for(auto c=gController;c;c=c->previous)c->valid=false;gHistory={};gRestart();}
 } // namespace
+bool Enabled(){return gReady&&gConfig.carMechanics;}
+BulletToken BeginBullet(uint8_t *v)
+{
+ Identity id;if(!gReady||!gConfig.carMechanics||!Identify(v,id)||!Eligible(id)||(game::EntityFlags(v)&(1u<<17)))return {};
+ auto &h=Record(id);BulletToken token;token.revision=h.revision;token.clump=game::EntityClump(v);token.handling=*reinterpret_cast<void **>(v+0x160);
+ std::memcpy(token.transform.data(),v+8,sizeof token.transform);
+ if(!token.handling||!Layout(h))return {};
+ token.info=h.info;token.col=h.col;token.source=h.source;
+ Identity current;if(!BulletCurrent(v,token,current))return {};return token;
+}
+void Projectile(uint8_t *v,const BulletToken &token,const projectilemodel::Ray &ray)
+{
+ Identity id;if(!BulletCurrent(v,token,id))return;auto &h=gHistory[size_t(id.ref>>8)];
+ const auto hit=projectilemodel::Doses(h.layout,ray);if(!hit.valid)return;
+ const auto before=h.state.damage;mechanicalmodel::Apply(h.state,hit.doses);
+ for(int i=0;i<mechanicalmodel::kModules;i++)if(h.state.damage[i]>before[i])
+  Log("car projectiles: model %d %s integrity %.0f%%",id.model,mechanicalmodel::Name(i),100*(1-h.state.damage[i]));
+ Report(h);
+ for(int i=0;i<4;i++)if(hit.doses[mechanicalmodel::kWheelLF+i]>0&&h.state.damage[mechanicalmodel::kWheelLF+i]>=.75f){
+  Identity now;if(!BulletCurrent(v,token,now))return;const int status=gWheelStatus(v+0x34c,i);
+  if(status==0&&BulletCurrent(v,token,now))gBurst(v,uint8_t(i),false);
+ }
+}
 float LightingPower(const uint8_t *v)
 {
  Identity id;if(!gReady||!gConfig.carMechanics||!Identify(const_cast<uint8_t *>(v),id)||!Eligible(id))return 1;

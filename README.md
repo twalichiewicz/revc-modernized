@@ -370,9 +370,9 @@ know you by your description, and getting away leaves you under an APB until you
   instead of snapping, and take longer to stop. Softer springs roll the body in corners, dive it under
   braking and squat it under power, at the same ride height. Each car keeps its place among the others
   (`CarHandling`). SUVs/offroaders and trucks retain stronger low-speed pull while keeping the lower
-  road top-speed targets. In rain, offroad tyres retain more grip and encounter less soft-ground
-  resistance; work vehicles can cross wet grass and suffer more in mud or sand. Sports tyres lose
-  more performance on soaked soft ground (`RainVehicles`). Terrain profiles work with `CarHandling=0`.
+  road top-speed targets. The installed rain fix currently uses vehicle-class soft-ground factors
+  (`RainVehicles`, independent of `CarHandling`). This is interim tuning: the intended replacement
+  derives terrain response from materials, tyre contact/load/slip, gearing, driven wheels and damage.
 - Side and rear car windows shatter from bullets and severe native door or rear-bumper damage
   (`CarGlass`), with the game's falling glass and sound. Damage stays on the car that was hit, and
   repairs restore its glass. The front windscreen keeps the game's cracked and shattered stages.
@@ -389,8 +389,11 @@ know you by your description, and getting away leaves you under an APB until you
   and an empty tank removes drive. Electrical damage also dims or disables the car's lights.
   Severe wheel damage can puncture its tyre. Repairs restore all systems and refill reservoirs.
   Native ground light projections retain their original brightness in this pass.
-  These are approximate collision-driven internal volumes; detailed per-model internals, projectile
-  penetration and saved mechanical damage remain future work.
+  Accepted bullets also injure modules along their path: body panels, glass and tyres consume a
+  penetration budget, angled surfaces resist more, and intervening components absorb what remains.
+  Ordinary gunfire, drive-bys, mounted rounds and deferred bullets share the same system damage.
+  The internals and material resistance are approximations; detailed per-model authoring, complete
+  bullet continuation through the world, fire propagation and saved mechanical damage remain open.
 - Car radios can be heard from the street, muffled through the bodywork and coming from where the car is.
   Your own car keeps playing after you get out, and so do stopped cars nearby. Getting into a car, you
   hear only that car's radio, and a police car plays the police scanner, not the station you just heard.

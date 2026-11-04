@@ -1,4 +1,6 @@
 #include "game.h"
+#include "carmechanics.h"
+#include "nativebullet.h"
 #include "hooks.h"
 #include "../tools/bake/visualmodel.h"
 #include <array>
@@ -20,6 +22,13 @@ void Log(const char *,...){}
 namespace carglass {
 int calls=0,face=-1;const void *part=nullptr;uint8_t *car=nullptr;Vec3 point{};
 void Bullet(uint8_t *v,const void *a,int t,Vec3 p,Vec3){++calls;car=v;part=a;face=t;point=p;}
+}
+namespace carmechanics {
+static bool enabled=false;static int deliveries=0;static uint64_t revision=1;
+static projectilemodel::Ray lastRay;static std::array<projectilemodel::Layer,64> lastLayers;
+bool Enabled(){return enabled;}
+BulletToken BeginBullet(uint8_t *){BulletToken t;if(enabled)t.revision=revision;return t;}
+void Projectile(uint8_t *,const BulletToken &t,const projectilemodel::Ray &r){if(!enabled||t.revision!=revision)return;++deliveries;lastRay=r;std::copy(r.layers,r.layers+r.count,lastLayers.begin());lastRay.layers=lastLayers.data();}
 }
 namespace fixture { void *Lookup(void *,const char *); void *Native(const char *); std::map<std::string,void *> entry; }
 namespace hooks {void *Chain(const char *s,void *p){fixture::entry[s]=p;return fixture::Native(s);}}
@@ -46,6 +55,9 @@ alignas(16) std::array<uint8_t,0x8d0*3> peds;
 uint8_t carFlags[2]{1,2},pedFlags[3]{3,4,5};Pool carPool{cars.data(),carFlags,2},pedPool{peds.data(),pedFlags,3};Pool *cp=&carPool,*pp=&pedPool;
 Clump clump;Model carModel,pedModel,passengerModel,standerModel,wheelModel;std::array<uint8_t,0x80> modelInfo{},modelInfoB{};void *modelPtrs[6500]{};
 bool tyres=true;int fail,narrowCalls,worldCalls,fireCalls,occupantCalls,updates;bool wall=false,nested=false,throwFire=false,throwWorld=false,stale=false,stander=false,noPeds=false,staleLTM=false,windowMode=false,ignoreSee=false;int windowStatus=0,windowSounds=0,afterTrace=0,clumpType=2;int fireType=1,rounds=0,roundDamage=0;float nestedX=0;float wallT=.1f;uint8_t *ignore=nullptr;
+alignas(8) std::array<uint8_t,nativebullet::kCount*nativebullet::kStride> deferredBullets{};
+std::array<uint8_t,100> weaponInfo{};
+bool nestCover=false,nestedCoverPreserved=false,repairBeforeImpact=false;bool doDamage=false,acceptDamage=true,doubleDamage=false,coverWall=false,throwCover=false;int damageMutation=0;
 Point result{};uint8_t *victim;CVector from{-3,0,.5f},to{3,0,.5f};int weaponType=17;
 void Check(bool yes,const char *msg){if(!yes){printf("FAIL: %s\n",msg);++fail;}}
 void Identity(float *m){std::fill(m,m+16,0);m[0]=m[5]=m[10]=m[15]=1;}
@@ -69,7 +81,7 @@ const void *Verts(const void *g){return static_cast<const Geometry *>(g)->verts.
 void *Mat(const void *g,int i){return const_cast<Material *>(&static_cast<const Geometry *>(g)->mats.at(i));}
 const uint8_t *Colour(const void *m){return static_cast<const Material *>(m)->colour.data();}
 void *Animate(void *self,void *){return self==modelInfoB.data()?&passengerModel:&pedModel;}
-uint8_t *Info(int){return reinterpret_cast<uint8_t *>(&fireType); }
+uint8_t *Info(int){std::memcpy(weaponInfo.data(),&fireType,4);uint32_t damage=20;std::memcpy(weaponInfo.data()+0x14,&damage,4);return weaponInfo.data(); }
 V Sub(V a,V b){return {a.x-b.x,a.y-b.y,a.z-b.z};}float Dot(V a,V b){return a.x*b.x+a.y*b.y+a.z*b.z;}
 bool NativeNarrow(const Line &l,const void *,void *m,Point &p,float &closest,bool,bool)
 {
@@ -78,12 +90,18 @@ bool NativeNarrow(const Line &l,const void *,void *m,Point &p,float &closest,boo
  return hit;
 }
 Narrow NarrowEntry(){return reinterpret_cast<Narrow>(entry["_ZN10CCollision18ProcessLineOfSightERK8CColLineRK7CMatrixR9CColModelR9CColPointRfbb"]);}
+World WorldEntry();
 bool NativeWorld(const CVector &a,const CVector &b,Point &p,uint8_t *&e,bool,bool vehicles,bool pedsFlag,bool,bool,bool see,bool,bool shoot)
 {
- ++worldCalls;if(throwWorld)throw 8;float t=1;e=nullptr;Line line{a,0,b,0};if(vehicles && NarrowEntry()(line,cars.data()+8,&carModel,p,t,see,shoot))e=cars.data();
+ if(nestCover&&ignore==cars.data()){
+  nestCover=false;const auto saved=gShot->last;Point other{};uint8_t *hit=nullptr;WorldEntry()(from,to,other,hit,true,true,true,true,true,false,false,true);
+  nestedCoverPreserved=gShot->last.car==saved.car&&!std::memcmp(&gShot->last.point,&saved.point,sizeof saved.point);
+ }
+ ++worldCalls;if(throwCover&&ignore==cars.data())throw 9;if(throwWorld)throw 8;float t=1;e=nullptr;Line line{a,0,b,0};if(vehicles && ignore!=cars.data() && NarrowEntry()(line,cars.data()+8,&carModel,p,t,see,shoot))e=cars.data();
  if(stander&&pedsFlag&&NarrowEntry()(line,peds.data()+0x8d0+8,&standerModel,p,t,false,false))e=peds.data()+0x8d0;
- if(vehicles && tyres){float wheelClosest=1;Point wheel{};if(NarrowEntry()(line,cars.data()+8,&wheelModel,wheel,wheelClosest,see,shoot)&&wheelClosest<=t){p=wheel;t=wheelClosest;e=cars.data();}}
+ if(vehicles && ignore!=cars.data() && tyres){float wheelClosest=1;Point wheel{};if(NarrowEntry()(line,cars.data()+8,&wheelModel,wheel,wheelClosest,see,shoot)&&wheelClosest<=t){p=wheel;t=wheelClosest;e=cars.data();}}
  // Same native closest-fraction competition after the vehicle list.
+ if(coverWall&&std::fabs(b.x-a.x)>1e-6f){const float at=-a.x/(b.x-a.x);if(at>=0&&at<t){t=at;p={};p.p={0,a.y+(b.y-a.y)*at,a.z+(b.z-a.z)*at};e=peds.data()+0x8d0;}}
  if(wall && wallT<t){p={};p.p={a.x+(b.x-a.x)*wallT,a.y+(b.y-a.y)*wallT,a.z+(b.z-a.z)*wallT};e=reinterpret_cast<uint8_t *>(0x1234);}
  return e!=nullptr;
 }
@@ -95,24 +113,45 @@ void NativeOccupant(uint8_t **e,Point *p,int,const CVector &,const CVector &){++
  if(*e==cars.data()&&windowMode&&windowStatus<3){++windowStatus;if(windowStatus==2)++windowStatus;unsigned selector=windowStatus==1?2:0;for(auto &a:clump.atomics)if(a.frame.name.find("windscreen")!=std::string::npos)a.flags=(a.id&3)==selector?4:0;++windowSounds;}
 if(*e==cars.data() && *reinterpret_cast<void **>(cars.data()+0x218)){*e=peds.data();p->p={0,0,.5f};p->pieceB=6;}}
 Occupant OccupantEntry(){return reinterpret_cast<Occupant>(entry["_ZN7CWeapon31CheckForShootingVehicleOccupantEPP7CEntityP9CColPoint11eWeaponTypeRK7CVectorS8_"]);}
-bool NativeFire(uint8_t *,uint8_t *,CVector *)
+void NativeImpact(uint8_t *,uint8_t *,uint8_t *,CVector *,CVector *,Point *,Vec2);
+void NativeBurst(uint8_t *v,uint8_t piece,bool){if(v[0x299]&2)return;const int map[]={0,2,1,3};const int w=piece>=13&&piece<=16?map[piece-13]:piece;if(w<4)v[0x351+w]=1;}
+bool NativeFire(uint8_t *weapon,uint8_t *by,CVector *)
 {
  ++fireCalls;if(throwFire)throw 7;
  if(nested){nested=false;uint8_t nonbullet[32]{};int type=30;std::memcpy(nonbullet,&type,4);reinterpret_cast<Fire>(entry["_ZN7CWeapon4FireEP7CEntityP7CVector"])(nonbullet,peds.data()+0x8d0,&from);nestedX=result.p.x;}
  WorldEntry()(from,to,result,victim,true,true,!noPeds,true,true,ignoreSee,false,true);
  if(victim)OccupantEntry()(&victim,&result,weaponType,from,to);
+ if(repairBeforeImpact)++carmechanics::revision;
+ if(doDamage&&victim==cars.data()){
+  using Impact=void (*)(uint8_t *,uint8_t *,uint8_t *,CVector *,CVector *,Point *,Vec2);
+  const auto found=entry.find("_ZN7CWeapon14DoBulletImpactEP7CEntityS1_P7CVectorS3_P9CColPoint9CVector2D");
+  if(found!=entry.end())reinterpret_cast<Impact>(found->second)(weapon,by,victim,&from,&to,&result,{});
+  else NativeImpact(weapon,by,victim,&from,&to,&result,{});
+ }
  return true;
 }
-void NativeVehicleDamage(uint8_t *,uint8_t *,int,float,CVector){}
+void NativeVehicleDamage(uint8_t *v,uint8_t *,int,float damage,CVector){
+ if(acceptDamage)*reinterpret_cast<float *>(v+0x2a0)-=damage;
+ if(damageMutation==1)++carFlags[0];if(damageMutation==2)*reinterpret_cast<void **>(v+0x58)=reinterpret_cast<void *>(0x1234);
+ if(damageMutation==3)reinterpret_cast<float *>(v+8)[12]+=.1f;if(damageMutation==4)++carmechanics::revision;
+}
+void NativeImpact(uint8_t *,uint8_t *by,uint8_t *v,CVector *,CVector *,Point *point,Vec2){
+ if(point->pieceB>=13&&point->pieceB<=16){reinterpret_cast<void (*)(uint8_t *,uint8_t,bool)>(entry["_ZN11CAutomobile9BurstTyreEhb"])(v,point->pieceB,true);return;}
+ auto inflict=reinterpret_cast<void (*)(uint8_t *,uint8_t *,int,float,CVector)>(entry["_ZN8CVehicle13InflictDamageEP7CEntity11eWeaponTypef7CVector"]);
+ inflict(v,by,weaponType,20,{});if(doubleDamage)inflict(v,by,weaponType,20,{});
+}
 bool NativePedDamage(uint8_t *,uint8_t *,int,float,int,uint8_t){return false;}
 void DirectDamage(){
  if(victim==cars.data()&&entry["_ZN8CVehicle13InflictDamageEP7CEntity11eWeaponTypef7CVector"])reinterpret_cast<void (*)(uint8_t *,uint8_t *,int,float,CVector)>(entry["_ZN8CVehicle13InflictDamageEP7CEntity11eWeaponTypef7CVector"])(victim,peds.data()+0x8d0*2,weaponType,20,CVector{0,0,0});
  if(victim==peds.data()&&entry["_ZN4CPed13InflictDamageEP7CEntity11eWeaponTypef14ePedPieceTypesh"])reinterpret_cast<bool (*)(uint8_t *,uint8_t *,int,float,int,uint8_t)>(entry["_ZN4CPed13InflictDamageEP7CEntity11eWeaponTypef14ePedPieceTypesh"])(victim,peds.data()+0x8d0*2,weaponType,20,result.pieceB,0);
 }
-bool NativeFireCar(uint8_t *,uint8_t *,bool,bool){WorldEntry()(from,to,result,victim,true,true,true,true,true,false,false,true);DirectDamage();return true;}
-void NativeUpdate(){++updates;NativeFire(nullptr,nullptr,nullptr);}
-void NativeRound(CVector *a,CVector *b,int amount){++rounds;roundDamage=amount;Check(a==&from&&b==&to,"native cannon keeps original ray argument pointers");WorldEntry()(*a,*b,result,victim,true,true,true,true,true,false,false,true);DirectDamage();}
+void BodyDamage(uint8_t *by,int type,float amount){if(victim==cars.data())reinterpret_cast<void (*)(uint8_t *,uint8_t *,int,float,CVector)>(entry["_ZN8CVehicle13InflictDamageEP7CEntity11eWeaponTypef7CVector"])(victim,by,type,amount,{});else DirectDamage();}
+bool NativeFireCar(uint8_t *,uint8_t *,bool,bool){WorldEntry()(from,to,result,victim,true,true,true,true,true,false,false,true);BodyDamage(peds.data()+0x8d0*2,42,20);return true;}
+void NativeUpdate(){++updates;WorldEntry()(from,to,result,victim,true,true,!noPeds,true,true,false,false,true);if(doDamage){auto r=nativebullet::Read(deferredBullets.data(),0);BodyDamage(r.creator,r.type,r.damage);}}
+void NativeRound(CVector *a,CVector *b,int amount){++rounds;roundDamage=amount;Check(a==&from&&b==&to,"native cannon keeps original ray argument pointers");WorldEntry()(*a,*b,result,victim,true,true,true,true,true,false,false,true);BodyDamage(nullptr,23,float(amount));}
 void *Native(const char *s){
+ if(strstr(s,"DoBulletImpact"))return reinterpret_cast<void *>(NativeImpact);
+ if(strstr(s,"BurstTyre"))return reinterpret_cast<void *>(NativeBurst);
  if(strstr(s,"CVehicle13InflictDamage"))return reinterpret_cast<void *>(NativeVehicleDamage);
  if(strstr(s,"CPed13InflictDamage"))return reinterpret_cast<void *>(NativePedDamage);
  if(strstr(s,"FireOneInstantHitRound"))return reinterpret_cast<void *>(NativeRound);
@@ -124,6 +163,8 @@ void *Native(const char *s){
  return reinterpret_cast<void *>(NativeFire);
 }
 void *Lookup(void *,const char *s){
+ if(!strcmp(s,"gaBulletInfo"))return deferredBullets.data();
+ if(strstr(s,"GetWheelStatus"))return reinterpret_cast<void *>(+[](void *v,int w)->int{return static_cast<uint8_t *>(v)[5+w];});
 #define BIND(n,v) if(!strcmp(s,n))return reinterpret_cast<void *>(v)
  BIND("_ZN6CPools15ms_pVehiclePoolE",&cp);BIND("_ZN6CPools11ms_pPedPoolE",&pp);BIND("_ZN10CModelInfo16ms_modelInfoPtrsE",modelPtrs);BIND("_ZN6CWorld16bIncludeCarTyresE",&tyres);
  BIND("_Z15RwObjectGetTypePKN2rw6ObjectE",ObjectType);BIND("_Z15RpClumpGetFramePKN2rw5ClumpE",Root);BIND("_Z16RwFrameGetMatrixPN2rw5FrameE",FrameMatrix);BIND("_Z20RpClumpForAllAtomicsPN2rw5ClumpEPFPNS_6AtomicES3_PvES4_",Atomics);BIND("_Z16RpAtomicGetFlagsPKN2rw6AtomicE",Flags);BIND("_Z16RpAtomicGetFramePKN2rw6AtomicE",AFrame);BIND("_Z19RpAtomicGetGeometryPKN2rw6AtomicE",AGeo);BIND("_Z13RwFrameGetLTMPN2rw5FrameE",LTM);BIND("_Z16GetFrameNodeNamePN2rw5FrameE",Name);BIND("_Z16RwFrameGetParentPKN2rw5FrameE",Parent);BIND("_Z24RpGeometryGetNumVerticesPKN2rw8GeometryE",NV);BIND("_Z25RpGeometryGetNumTrianglesPKN2rw8GeometryE",NT);BIND("_Z22RpGeometryGetTrianglesPKN2rw8GeometryE",Tris);BIND("_Z24RpGeometryGetMorphTargetPKN2rw8GeometryEi",Morph);BIND("_Z24RpMorphTargetGetVerticesPKN2rw11MorphTargetE",Verts);BIND("_Z21RpGeometryGetMaterialPKN2rw8GeometryEi",Mat);BIND("_Z18RpMaterialGetColorPKN2rw8MaterialE",Colour);BIND("_ZN13CPedModelInfo25AnimatePedColModelSkinnedEPN2rw5ClumpE",Animate);
@@ -131,11 +172,12 @@ void *Lookup(void *,const char *s){
  return nullptr;
 }
 void Setup(){
+ nestCover=nestedCoverPreserved=repairBeforeImpact=false;carmechanics::enabled=false;carmechanics::deliveries=0;++carmechanics::revision;deferredBullets={};doDamage=false;acceptDamage=true;doubleDamage=coverWall=throwCover=false;damageMutation=0;ignore=nullptr;
  carglass::calls=0;carglass::part=nullptr;carglass::face=-1;
  cars={};peds={};carFlags[0]=1;carFlags[1]=2;clumpType=2;clump.atomics.clear();Identity(clump.root.matrix.data());Identity(clump.root.world.data());staleLTM=windowMode=ignoreSee=false;windowStatus=windowSounds=afterTrace=0;carModel.spheres={{{0,0,.5f},1,0}};pedModel.spheres={{{0,0,.5f},.25f,3}};modelPtrs[7]=modelInfo.data();tyres=true;wall=false;stale=false;throwFire=throwWorld=nested=stander=noPeds=false;fireType=1;modelPtrs[8]=modelInfoB.data();passengerModel.spheres={{{-.5f,0,.5f},.2f,2}};standerModel.spheres={{{1,0,.5f},.25f,3}};
- for(int i=0;i<2;i++){auto c=cars.data()+i*0x6f0;Identity(reinterpret_cast<float *>(c+8));*reinterpret_cast<unsigned *>(c+0x60)=2|0x100;*reinterpret_cast<int16_t *>(c+0x6a)=7;*reinterpret_cast<void **>(c+0x58)=&clump;}
+ for(int i=0;i<2;i++){auto c=cars.data()+i*0x6f0;*reinterpret_cast<float *>(c+0x2a0)=1000;Identity(reinterpret_cast<float *>(c+8));*reinterpret_cast<unsigned *>(c+0x60)=2|0x100;*reinterpret_cast<int16_t *>(c+0x6a)=7;*reinterpret_cast<void **>(c+0x58)=&clump;}
  for(int i=0;i<3;i++){auto p=peds.data()+i*0x8d0;Identity(reinterpret_cast<float *>(p+8));*reinterpret_cast<unsigned *>(p+0x60)=3;*reinterpret_cast<int16_t *>(p+0x6a)=7;*reinterpret_cast<void **>(p+0x58)=&clump;p[0x193]=4;p[0x4c0]=1;*reinterpret_cast<void **>(p+0x4b8)=cars.data();*reinterpret_cast<float *>(p+0x44c)=100;}
- *reinterpret_cast<void **>(cars.data()+0x218)=peds.data();game::api.GetWeaponInfo=Info;game::api.PoolsGetVehicle=Car;game::api.PoolsGetPed=Ped;game::api.ignoreEntity=&ignore;from={-3,0,.5f};to={3,0,.5f};weaponType=17;victim=nullptr;result={};narrowCalls=worldCalls=fireCalls=occupantCalls=updates=0;
+ *reinterpret_cast<void **>(cars.data()+0x218)=peds.data();game::api.GetWeaponInfo=Info;game::api.FindPlayerPed=+[](){return peds.data()+0x8d0*2;};game::api.PoolsGetVehicle=Car;game::api.PoolsGetPed=Ped;game::api.ignoreEntity=&ignore;from={-3,0,.5f};to={3,0,.5f};weaponType=17;victim=nullptr;result={};narrowCalls=worldCalls=fireCalls=occupantCalls=updates=0;
 }
 void Panel(float x,unsigned alpha=255,const char *name="door_lf_hi_ok"){
  Atomic a;Identity(a.frame.matrix.data());Identity(a.frame.world.data());a.frame.parent=&clump.root;a.frame.name=name;a.geo.verts={{x,-1,0},{x,1,0},{x,1,1},{x,-1,1}};a.geo.tris={{{0,1,2},0},{{0,2,3},0}};a.geo.mats[0].colour[3]=uint8_t(alpha);clump.atomics.push_back(std::move(a));
@@ -172,6 +214,7 @@ bool LoadAircraftParts(const char *model){
   for(auto material:mesh.materials){Material m;m.colour[3]=material.alpha;a.geo.mats.push_back(m);}a.geo.materials=int(a.geo.mats.size());
   for(auto v:mesh.vertices)a.geo.verts.push_back({v.x,v.y,v.z});for(auto f:mesh.faces){if(f.a>65535||f.b>65535||f.c>65535)return false;a.geo.tris.push_back({{uint16_t(f.a),uint16_t(f.b),uint16_t(f.c)},uint16_t(f.material)});}clump.atomics.push_back(std::move(a));
  }
+
  return !clump.atomics.empty();
 }
 bool RotorPart(const std::string &name){return name.find("rotor")!=std::string::npos||name=="bonnet_hi_ok"||name=="bonnet_hi_dam";}
@@ -290,5 +333,49 @@ int main(int argc,char **argv){const bool assets=argc>1&&!std::strcmp(argv[1],"-
  if(assets)ActualRotorTrace();
  if(assets){Setup();Check(LoadCar("police"),"benchmark loads actual stock police mesh");*reinterpret_cast<void **>(cars.data()+0x218)=nullptr;from={-4,0,0};to={4,0,0};
  auto begin=std::chrono::steady_clock::now();for(int n=0;n<1000;n++)FireShot();auto elapsed=std::chrono::duration<double,std::milli>(std::chrono::steady_clock::now()-begin).count();printf("actual stock police: %.4f ms per native-layout shot query (1000 samples)\n",elapsed/1000);}
+ Setup();Panel(-.8f);noPeds=true;*reinterpret_cast<void **>(cars.data()+0x218)=nullptr;carmechanics::enabled=doDamage=nestCover=true;FireShot();
+ Check(nestedCoverPreserved&&carmechanics::deliveries==1,"nested read-only cover query preserves its parent impact certificate");
+ // Native vehicle damage is position-zero in DoBulletImpact; only its certified impact scope authorizes it.
+ Setup();Panel(-.8f);noPeds=true;*reinterpret_cast<void **>(cars.data()+0x218)=nullptr;carmechanics::enabled=doDamage=true;FireShot();
+ Check(carmechanics::deliveries==1&&carmechanics::lastRay.count==1&&carmechanics::lastRay.layers[0].material==projectilemodel::Material::Body,"accepted native body impact delivers one material path with coincident triangles merged");
+ Setup();Panel(-.8f);noPeds=true;*reinterpret_cast<void **>(cars.data()+0x218)=nullptr;carmechanics::enabled=doDamage=true;acceptDamage=false;FireShot();Check(carmechanics::deliveries==0,"native rejected damage cannot injure modules");
+ Setup();Panel(-.8f);noPeds=true;*reinterpret_cast<void **>(cars.data()+0x218)=nullptr;carmechanics::enabled=doDamage=doubleDamage=true;FireShot();Check(carmechanics::deliveries==1,"native duplicate damage call cannot deliver the same pending ray twice");
+ for(int mutation:{1,2,3,4}){Setup();Panel(-.8f);noPeds=true;*reinterpret_cast<void **>(cars.data()+0x218)=nullptr;carmechanics::enabled=doDamage=true;damageMutation=mutation;FireShot();Check(carmechanics::deliveries==0,"native callback recycling/clump/motion/repair retires pending projectile");}
+ Setup();Panel(-.8f);noPeds=true;*reinterpret_cast<void **>(cars.data()+0x218)=nullptr;carmechanics::enabled=doDamage=repairBeforeImpact=true;FireShot();Check(carmechanics::deliveries==0,"repair between mesh query and native impact retires the pending round");
+ Setup();Panel(-.8f);noPeds=true;*reinterpret_cast<void **>(cars.data()+0x218)=nullptr;carmechanics::enabled=doDamage=coverWall=true;FireShot();
+ Check(carmechanics::deliveries==1&&std::fabs(carmechanics::lastRay.limit-.5f)<.001f&&ignore==nullptr,"nearer real cover clips internal ray and restores ignored entity");
+ Setup();Panel(-.8f);noPeds=true;*reinterpret_cast<void **>(cars.data()+0x218)=nullptr;carmechanics::enabled=doDamage=throwCover=true;try{FireShot();}catch(int){}Check(ignore==nullptr&&!gShot&&!gQuery,"cover exception restores ignored entity and both shot/query scopes");
+ Setup();Panel(-.8f);carmechanics::enabled=true;{uint8_t gun[32]{};int t=17;memcpy(gun,&t,4);Shot query(gun,peds.data()+0x8d0*2);WorldEntry()(from,to,result,victim,true,true,true,true,true,false,false,true);}Check(carmechanics::deliveries==0,"read-only obstruction query cannot deliver module damage");
+
+ Setup();Panel(-.8f);noPeds=true;*reinterpret_cast<void **>(cars.data()+0x218)=nullptr;carmechanics::enabled=true;carFire(w,cars.data(),true,false);
+ Check(carmechanics::deliveries==1&&carmechanics::lastRay.budget==20,"actual drive-by type42 and player creator delivers accepted damage");
+ Setup();Panel(-.8f);noPeds=true;*reinterpret_cast<void **>(cars.data()+0x218)=nullptr;carmechanics::enabled=true;reinterpret_cast<void (*)(CVector *,CVector *,int)>(entry["_Z22FireOneInstantHitRoundP7CVectorS0_i"])(&from,&to,15);
+ Check(carmechanics::deliveries==1&&carmechanics::lastRay.budget==15,"actual mounted type23 null-creator round keeps native damage budget");
+ auto deferred=[&](bool duplicate,bool mismatch){Setup();Panel(-.8f);noPeds=true;*reinterpret_cast<void **>(cars.data()+0x218)=nullptr;carmechanics::enabled=doDamage=true;
+  static float step=1;game::api.timeStep=&step;nativebullet::Record r{};r.type=29;r.creator=peds.data()+0x8d0*2;r.active=1;r.position={from.x,from.y,from.z};r.velocity={12,0,0};r.damage=45;
+  if(mismatch)r.position.y+=1;memcpy(deferredBullets.data(),&r,sizeof r);if(duplicate)memcpy(deferredBullets.data()+nativebullet::kStride,&r,sizeof r);
+  reinterpret_cast<void (*)()>(entry["_ZN11CBulletInfo6UpdateEv"])();};
+ deferred(false,false);Check(carmechanics::deliveries==1&&carmechanics::lastRay.budget==45,"unique actual deferred bullet metadata authorizes its zero-position native damage");
+ deferred(true,false);Check(carmechanics::deliveries==0,"ambiguous deferred records cannot certify a round");
+ deferred(false,true);Check(carmechanics::deliveries==0,"unmatched deferred source cannot authorize module damage");
+ deferred(false,false);carmechanics::deliveries=0;{Shot update(nullptr,nullptr,true);WorldEntry()(from,to,result,victim,true,true,true,true,true,false,false,true);Hook_VehicleDamage(victim,nullptr,17,20,result.p);}Check(carmechanics::deliveries==0,"nonzero-position unrelated damage cannot steal a matched deferred ray");
+ Setup();Panel(-.8f);noPeds=true;*reinterpret_cast<void **>(cars.data()+0x218)=nullptr;carmechanics::enabled=true;*reinterpret_cast<void **>(cars.data()+0x460)=&clump.atomics[0].frame;
+ {Shot query(w,peds.data()+0x8d0*2);WorldEntry()(from,to,result,victim,true,true,true,true,true,false,false,true);Hook_Burst(victim,13,true);}Check(carmechanics::deliveries==0,"unrelated burst during an obstruction query lacks a native impact receipt");
+ for(int corner=0;corner<4;corner++){Setup();Panel(-.8f);noPeds=true;*reinterpret_cast<void **>(cars.data()+0x218)=nullptr;carmechanics::enabled=doDamage=true;
+  const size_t offsets[]={0x460,0x448,0x470,0x458};*reinterpret_cast<void **>(cars.data()+offsets[corner])=&clump.atomics[0].frame;FireShot();const int mapping[]={0,2,1,3};
+  Check(carmechanics::deliveries==1&&cars[0x351+mapping[corner]]==1&&carmechanics::lastRay.layers[0].material==projectilemodel::Material::Rubber,"native collision-piece tyre burst certifies each wheel and rubber layer");
+  FireShot();Check(carmechanics::deliveries==1,"already-burst tyre does not fabricate a new accepted burst");}
+ Setup();Panel(-.8f);noPeds=true;*reinterpret_cast<void **>(cars.data()+0x218)=nullptr;carmechanics::enabled=doDamage=true;*reinterpret_cast<void **>(cars.data()+0x460)=&clump.atomics[0].frame;cars[0x299]=2;FireShot();Check(carmechanics::deliveries==0,"native tyreproof rejection cannot injure wheel modules");
+ Setup();for(int i=0;i<65;i++)Panel(-.8f+i*.02f);noPeds=true;*reinterpret_cast<void **>(cars.data()+0x218)=nullptr;carmechanics::enabled=doDamage=true;FireShot();Check(victim==cars.data()&&carmechanics::deliveries==0,"layer overflow preserves native precise hit and rejects module effects");
+ Setup();Panel(-.8f,89);Panel(-.5f);noPeds=true;*reinterpret_cast<void **>(cars.data()+0x218)=nullptr;carmechanics::enabled=doDamage=true;FireShot();Check(carmechanics::deliveries==1&&carmechanics::lastRay.count==2,"actual glass then body mesh crossings reach the material path");
+ if(assets)for(const char *model:{"police","sentinel","deluxo"}){
+  Setup();Check(LoadCar(model),"projectile path loads actual stock vehicle geometry");noPeds=true;*reinterpret_cast<void **>(cars.data()+0x218)=nullptr;carmechanics::enabled=doDamage=true;
+  bool accepted=false;for(int yi=-20;yi<=20&&!accepted;yi++)for(int zi=-5;zi<=10&&!accepted;zi++){
+   from={-4,yi*.1f,zi*.1f};to={4,from.y,from.z};FireShot();accepted=carmechanics::deliveries>0;
+  }
+  Check(accepted&&carmechanics::lastRay.count>0&&carmechanics::lastRay.count<=64,"actual stock mesh delivers accepted bounded material path");
+  printf("projectile asset %s: %zu material crossings\n",model,accepted?carmechanics::lastRay.count:0);
+ }
+ carmechanics::enabled=false;
  printf("shotcollision: %d failures\n",fail);return fail?1:0;
 }

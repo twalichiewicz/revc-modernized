@@ -45,6 +45,11 @@ int main(){
   {0x100172e50,reinterpret_cast<void *>(Normalise)},{0x100143f28,reinterpret_cast<void *>(Rand)}};
  code.Finish();carmechanics::gCalculate=reinterpret_cast<Calc>(code.Address(0x100279a1c));
  Reset();NativeRecord(code);Run();const float intact=torque[0];Check(intact>0,"actual native transmission produces positive drive");
+ projectilemodel::Layer panel{1.f/12,1,projectilemodel::Material::Body};
+ projectilemodel::Ray round{{0,3,.2f},{0,-3,.2f},1.f/12,1,40,&panel,1};
+ auto bullet=carmechanics::BeginBullet(cars[0]);carmechanics::Projectile(cars[0],bullet,round);Run();
+ Check(torque[0]>0&&torque[0]<intact*.9f,"material-limited projectile damage reduces actual native transmission output");
+ Reset();NativeRecord(code);
  hits[0]={Nose()};Run();const float injured=torque[0];Check(torque[0]>0&&torque[0]<intact*.9f,"localized engine injury reduces actual native drive acceleration");
  const auto retainedGear=Read<uint8_t *>(code.Page(0x1007f4598));Check(retainedGear>=handling+0x34&&retainedGear<handling+0x7c&&std::fabs(F(handling,0x90)-.2f)<1e-6f,"actual native transmission scratch and retained gear pointer use original allocation");
  carmechanics::gWheel=reinterpret_cast<WheelFn>(code.Address(0x10027ca40));

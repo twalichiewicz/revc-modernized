@@ -162,6 +162,7 @@ DEFAULT_HOOKS = [
     "_ZN9CRenderer21SetupEntityVisibilityEP7CEntity",
     "_ZN7CWeapon4FireEP7CEntityP7CVector",
     "_ZN7CWeapon14FireInstantHitEP7CEntityP7CVector",
+    "_ZN11CAutomobile9BurstTyreEhb",
     "_ZN11CWeaponInfo13GetWeaponInfoE11eWeaponType",
     "_ZN7CWeapon21FireInstantHitFromCarEP8CVehiclebb",
     "_ZN11CBulletInfo9AddBulletEP7CEntity11eWeaponType7CVectorS3_",
