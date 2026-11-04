@@ -369,7 +369,10 @@ know you by your description, and getting away leaves you under an APB until you
   gives way. Cars accelerate more gently and top out a little lower, turn in heavier, slide gradually
   instead of snapping, and take longer to stop. Softer springs roll the body in corners, dive it under
   braking and squat it under power, at the same ride height. Each car keeps its place among the others
-  (`CarHandling`).
+  (`CarHandling`). SUVs/offroaders and trucks retain stronger low-speed pull while keeping the lower
+  road top-speed targets. In rain, offroad tyres retain more grip and encounter less soft-ground
+  resistance; work vehicles can cross wet grass and suffer more in mud or sand. Sports tyres lose
+  more performance on soaked soft ground (`RainVehicles`). Terrain profiles work with `CarHandling=0`.
 - Side and rear car windows shatter from bullets and severe native door or rear-bumper damage
   (`CarGlass`), with the game's falling glass and sound. Damage stays on the car that was hit, and
   repairs restore its glass. The front windscreen keeps the game's cracked and shattered stages.

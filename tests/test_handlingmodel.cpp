@@ -195,7 +195,12 @@ static void TestAfterConversion()
 
 static void TestFind()
 {
-	CHECK(kCarCount == 71);
+ CHECK(kCarCount == 71);
+ CHECK(FindModel(130)&&FindModel(130)->kind==Kind::OffRoad);
+ CHECK(FindModel(133)&&FindModel(133)->kind==Kind::HeavyTruck);
+ CHECK(FindModel(141)&&FindModel(141)->kind==Kind::Sports);
+ for(int m:{189,213,216,232,233,236})CHECK(FindModel(m));
+ for(int m:{-1,0,155,171,217,6500})CHECK(FindModel(m)==nullptr);
 	const Car *c = Find("INFERNUS");
 	CHECK(c && c->kind == Kind::Sports);
 	CHECK((c = Find("BUS")) && c->kind == Kind::HeavyTruck);

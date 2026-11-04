@@ -118,8 +118,8 @@ $(BUILD)/test_haze: tests/test_haze.cpp src/weather.cpp src/weather.h src/rainmo
 $(BUILD)/test_vehiclerain: tests/test_vehiclerain.cpp src/vehiclerain.cpp src/vehiclerain.h | $(BUILD)
 	$(CXX) $(CXXFLAGS) -Isrc -o $@ tests/test_vehiclerain.cpp src/vehiclerain.cpp
 
-$(BUILD)/test_rainvehicles: tests/test_rainvehicles.cpp src/rainvehicles.cpp src/rainvehicles.h src/vehiclerain.cpp src/rainmodel.cpp src/mapdata.cpp | $(BUILD)
-	$(CXX) $(CXXFLAGS) -Isrc -o $@ tests/test_rainvehicles.cpp src/vehiclerain.cpp src/rainmodel.cpp src/mapdata.cpp
+$(BUILD)/test_rainvehicles: tests/test_rainvehicles.cpp src/rainvehicles.cpp src/rainvehicles.h src/handlingmodel.cpp src/handlingmodel.h src/vehiclerain.cpp src/vehiclerain.h src/rainmodel.cpp src/mapdata.cpp | $(BUILD)
+	$(CXX) $(CXXFLAGS) -Isrc -o $@ tests/test_rainvehicles.cpp src/handlingmodel.cpp src/vehiclerain.cpp src/rainmodel.cpp src/mapdata.cpp
 
 $(BUILD)/test_handlingmodel: tests/test_handlingmodel.cpp src/handlingmodel.cpp src/handlingmodel.h | $(BUILD)
 	$(CXX) $(CXXFLAGS) -Isrc -o $@ tests/test_handlingmodel.cpp src/handlingmodel.cpp
@@ -345,6 +345,7 @@ test-game-assets: $(BUILD)/test_glass_assets $(BUILD)/test_estateassets $(BUILD)
 	MACVC_NATIVE="$(MACVC_NATIVE)" $(BUILD)/test_mechanical_native
 	GAMEDATA="$(GAMEDATA)" $(BUILD)/test_estateassets
 	GAMEDATA="$(GAMEDATA)" $(BUILD)/test_handling_assets
+	GAMEDATA="$(GAMEDATA)" MACVC_NATIVE="$(MACVC_NATIVE)" $(BUILD)/test_utility_native
 	GAMEDATA="$(GAMEDATA)" $(BUILD)/test_mapassets
 	GAMEDATA="$(GAMEDATA)" $(BUILD)/test_shotcollision --assets
 	GAMEDATA="$(GAMEDATA)" $(BUILD)/test_rotorassets
@@ -761,3 +762,8 @@ $(BUILD)/test_mechanical_assets: tests/test_mechanical_assets.cpp src/mechanical
 
 $(BUILD)/test_mechanical_native: tests/test_mechanical_native.cpp tests/test_carmechanics.cpp tests/nativejetshadowarm.h tests/nativeweavearm.h src/carmechanics.cpp src/mechanicalmodel.cpp src/partsmodel.cpp $(wildcard src/*.h) | $(BUILD)
 	$(CXX) $(CXXFLAGS) -Isrc -o $@ tests/test_mechanical_native.cpp src/mechanicalmodel.cpp src/partsmodel.cpp
+
+$(BUILD)/test_utility_native: tests/test_utility_native.cpp tests/test_handling_assets.cpp tests/nativejetshadowarm.h tests/nativeweavearm.h src/rainvehicles.cpp src/handlingmodel.cpp src/vehiclerain.cpp $(wildcard src/*.h) | $(BUILD)
+	$(CXX) $(CXXFLAGS) -Isrc -o $@ tests/test_utility_native.cpp src/handlingmodel.cpp src/vehiclerain.cpp src/rainmodel.cpp src/mapdata.cpp
+
+test-game-assets: $(BUILD)/test_utility_native

@@ -5,7 +5,7 @@
 // buoyancy, the top speed and the gears from the new values itself.
 //
 // - Mass by type: trucks and buses weigh what such vehicles weigh; cars keep theirs.
-// - Slower: less engine, and a top speed set through drag (the game's top speed
+// - Engine output by purpose: utility pull retained, road top speed set through drag (the game's top speed
 //   is where drag meets the engine; dimension z feeds only that drag).
 // - Softer springs at the same ride height, so the game's own suspension rolls
 //   the body in corners, dives it under braking and squats it under power;
@@ -94,10 +94,13 @@ const Factors &For(Kind);
 struct Car {
 	const char *name; // handling.cfg identifier
 	Kind kind;
+	int16_t model; // primary supported vehicle model; aliases handled by FindModel
 };
 extern const Car kCars[];
 extern const int kCarCount; // 71: every car of handling.cfg but the RC Bandit
 const Car *Find(const char *identifier); // nullptr: not retuned
+// Model classification is available even when handling retuning is disabled.
+const Car *FindModel(int model); // nullptr: unknown/noncar
 
 // A record as parsed (before conversion) that this layout reads sensibly.
 bool Plausible(const Record &raw);

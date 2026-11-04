@@ -77,7 +77,19 @@ int main()
 	TestDryGroundUnchanged();
 	TestSoakedGroundBogsDown();
 	TestWeakCarsStuck();
-	TestAircraftThrownAbout();
+ using handlingmodel::Kind;
+ for(uint8_t surface:{kGrass,kMud,kSand,kBeach,kGravel}){
+  const auto off=OnGround(surface,1,Kind::OffRoad),work=OnGround(surface,1,Kind::HeavyTruck),sport=OnGround(surface,1,Kind::Sports);
+  CHECK(off.grip>work.grip&&off.drive>=work.drive&&off.drag<work.drag);
+  CHECK(work.grip>sport.grip&&work.drive>sport.drive&&work.drag<sport.drag);
+  for(auto kind:{Kind::Sports,Kind::Car,Kind::Van,Kind::OffRoad,Kind::LightTruck,Kind::HeavyTruck,Kind::Tank,Kind::Small}){
+   const auto dry=OnGround(surface,0,kind),wet=OnGround(surface,1,kind),half=OnGround(surface,.5f,kind),road=OnGround(kTarmac,1,kind);
+   CHECK(dry.grip==1&&dry.drive==1&&dry.drag==0&&road.grip==1&&road.drive==1&&road.drag==0);
+   CHECK(std::fabs(half.drive-(1+wet.drive)*.5f)<1e-6f&&std::fabs(half.drag-wet.drag*.5f)<1e-6f);
+  }
+ }
+ CHECK(OnGround(kGrass,NAN,Kind::OffRoad).drag==0);
+ TestAircraftThrownAbout();
 	if (failures)
 		return 1;
 	std::puts("vehiclerain: all vehicles-in-the-rain tests passed");

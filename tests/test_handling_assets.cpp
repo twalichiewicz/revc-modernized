@@ -203,6 +203,18 @@ static void TestCharacterKept()
 	SameOrder("brakes", [](const Record &r) { return r.brakeDeceleration; });
 }
 
+static void TestModelClasses()
+{
+ std::ifstream file(std::string(std::getenv("GAMEDATA"))+"/data/default.ide");CHECK(bool(file));int count=0;
+ for(std::string row;std::getline(file,row);){std::replace(row.begin(),row.end(),',',' ');std::istringstream in(row);int id;std::string model,texture,type,handling;
+  if(!(in>>id>>model>>texture>>type>>handling)||type!="car")continue;
+  const auto *expected=Find(handling.c_str()),*actual=FindModel(id);
+  if(expected){++count;CHECK(actual&&actual==expected);}
+  else CHECK(!actual);
+ }
+ CHECK(count==77); //71 primary models plus6 aliases (includes Rhino)
+}
+
 static void TestNoStabiliser()
 {
 	for (const Line &l : gLines)
@@ -220,6 +232,7 @@ int main()
 	TestEveryTopSpeed();
 	TestCharacterKept();
 	TestNoStabiliser();
+ TestModelClasses();
 	if (failures)
 		std::printf("%d failure(s)\n", failures);
 	else

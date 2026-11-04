@@ -50,7 +50,8 @@ void Hook_ProcessWheel(uint8_t *vehicle, float *fwd, float *right, float *contac
 	if (gConfig.rainVehicles && *reinterpret_cast<const int32_t *>(vehicle + kVehicleType) == kCar && wheel >= 0 && wheel < 4) {
 		const uint8_t surface = vehicle[kWheelContacts + size_t(wheel) * kContactSize + kContactSurface];
 		const rainmodel::Weather &w = weather::Now();
-		g = vehiclerain::OnGround(surface, std::max(w.wetness, w.puddles)); // the ground stays soaked while the puddles stand
+		const auto *car=handlingmodel::FindModel(game::EntityModel(vehicle));
+		g = vehiclerain::OnGround(surface, std::max(w.wetness, w.puddles), car?car->kind:handlingmodel::Kind::Car); // the ground stays soaked while the puddles stand
 	}
 	orig_ProcessWheel(vehicle, fwd, right, contactSpeed, contactPoint, wheelsOnGround, thrust * g.drive, brake, adhesion * g.grip,
 	                  wheel, wheelSpeed, state, status);

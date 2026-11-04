@@ -14,8 +14,8 @@ constexpr float kTurnMass = 1.25f, kSlideLossKept = 0.65f, kTraction = 0.97f, kB
 
 // By type (tuned in play from the drive log):            mass  accel  top   springs
 constexpr Factors kSports{1.00f, 0.85f, 0.92f, 0.65f}, kCar{1.00f, 0.85f, 0.90f, 0.55f},
-    kVan{1.20f, 0.85f, 0.90f, 0.60f}, kOffRoad{1.15f, 0.85f, 0.90f, 0.60f}, kLightTruck{1.50f, 0.85f, 0.90f, 0.70f},
-    kHeavyTruck{1.60f, 0.85f, 0.85f, 0.75f}, kTank{1.00f, 1.00f, 0.60f, 1.00f}, kSmall{1.00f, 0.85f, 0.60f, 0.80f};
+    kVan{1.20f, 0.85f, 0.90f, 0.60f}, kOffRoad{1.15f, 1.10f, 0.90f, 0.60f}, kLightTruck{1.50f, 1.10f, 0.90f, 0.70f},
+    kHeavyTruck{1.60f, 1.15f, 0.85f, 0.75f}, kTank{1.00f, 1.00f, 0.60f, 1.00f}, kSmall{1.00f, 0.85f, 0.60f, 0.80f};
 
 // ConvertDataToGameUnits: engine acceleration and max velocity into game units,
 // and its search's step (game units per 1/50 s; 1 = 180 km/h).
@@ -64,30 +64,30 @@ float Softening(const Record &r, float wanted)
 } // namespace
 
 const Car kCars[] = {
-    {"PHEONIX", Kind::Sports},     {"HOTRING", Kind::Sports},     {"SABRETUR", Kind::Sports},
-    {"INFERNUS", Kind::Sports},    {"CHEETAH", Kind::Sports},     {"BANSHEE", Kind::Sports},
-    {"DELUXO", Kind::Sports},      {"COMET", Kind::Sports},       {"STINGER", Kind::Sports},
-    {"ADMIRAL", Kind::Car},        {"SENTINEL", Kind::Car},       {"MAFIA", Kind::Car},
-    {"WASHING", Kind::Car},        {"LOVEFIST", Kind::Car},       {"STRETCH", Kind::Car},
-    {"ZEBRA", Kind::Car},          {"CABBIE", Kind::Car},         {"ROMERO", Kind::Car},
-    {"GLENDALE", Kind::Car},       {"VIRGO", Kind::Car},          {"IDAHO", Kind::Car},
-    {"ESPERANT", Kind::Car},       {"SABRE1", Kind::Car},         {"STALLION", Kind::Car},
-    {"VOODOO", Kind::Car},         {"OCEANIC", Kind::Car},        {"GREENWOO", Kind::Car},
-    {"HERMES", Kind::Car},         {"CUBAN", Kind::Car},          {"BLOODRA", Kind::Car},
-    {"BLOODRB", Kind::Car},        {"REGINA", Kind::Car},         {"PEREN", Kind::Car},
-    {"TAXI", Kind::Car},           {"MANANA", Kind::Car},         {"BLISTAC", Kind::Car},
-    {"POLICE", Kind::Car},         {"FBICAR", Kind::Car},         {"MOONBEAM", Kind::Van},
-    {"GANGBUR", Kind::Van},        {"BURRITO", Kind::Van},        {"PONY", Kind::Van},
-    {"RUMPO", Kind::Van},          {"MRWHOOP", Kind::Van},        {"SANDKING", Kind::OffRoad},
-    {"BFINJECT", Kind::OffRoad},   {"WALTON", Kind::OffRoad},     {"BOBCAT", Kind::OffRoad},
-    {"LANDSTAL", Kind::OffRoad},   {"RANCHER", Kind::OffRoad},    {"DESPERAD", Kind::OffRoad},
-    {"PATRIOT", Kind::OffRoad},    {"FBIRANCH", Kind::OffRoad},   {"BENSON", Kind::LightTruck},
-    {"MULE", Kind::LightTruck},    {"BOXVILLE", Kind::LightTruck}, {"YANKEE", Kind::LightTruck},
-    {"SECURICA", Kind::LightTruck}, {"AMBULAN", Kind::LightTruck}, {"ENFORCER", Kind::LightTruck},
-    {"LINERUN", Kind::HeavyTruck}, {"PACKER", Kind::HeavyTruck},  {"BUS", Kind::HeavyTruck},
-    {"FLATBED", Kind::HeavyTruck}, {"TRASH", Kind::HeavyTruck},   {"COACH", Kind::HeavyTruck},
-    {"FIRETRUK", Kind::HeavyTruck}, {"BARRACKS", Kind::HeavyTruck}, {"RHINO", Kind::Tank},
-    {"GOLFCART", Kind::Small},     {"BAGGAGE", Kind::Small},
+    {"PHEONIX", Kind::Sports, 207},     {"HOTRING", Kind::Sports, 224},     {"SABRETUR", Kind::Sports, 206},
+    {"INFERNUS", Kind::Sports, 141},    {"CHEETAH", Kind::Sports, 145},     {"BANSHEE", Kind::Sports, 159},
+    {"DELUXO", Kind::Sports, 211},      {"COMET", Kind::Sports, 210},       {"STINGER", Kind::Sports, 132},
+    {"ADMIRAL", Kind::Car, 175},        {"SENTINEL", Kind::Car, 135},       {"MAFIA", Kind::Car, 174},
+    {"WASHING", Kind::Car, 151},        {"LOVEFIST", Kind::Car, 201},       {"STRETCH", Kind::Car, 139},
+    {"ZEBRA", Kind::Car, 188},          {"CABBIE", Kind::Car, 168},         {"ROMERO", Kind::Car, 172},
+    {"GLENDALE", Kind::Car, 196},       {"VIRGO", Kind::Car, 221},          {"IDAHO", Kind::Car, 131},
+    {"ESPERANT", Kind::Car, 149},       {"SABRE1", Kind::Car, 205},         {"STALLION", Kind::Car, 169},
+    {"VOODOO", Kind::Car, 142},         {"OCEANIC", Kind::Car, 197},        {"GREENWOO", Kind::Car, 222},
+    {"HERMES", Kind::Car, 204},         {"CUBAN", Kind::Car, 164},          {"BLOODRA", Kind::Car, 234},
+    {"BLOODRB", Kind::Car, 235},        {"REGINA", Kind::Car, 209},         {"PEREN", Kind::Car, 134},
+    {"TAXI", Kind::Car, 150},           {"MANANA", Kind::Car, 140},         {"BLISTAC", Kind::Car, 226},
+    {"POLICE", Kind::Car, 156},         {"FBICAR", Kind::Car, 147},         {"MOONBEAM", Kind::Van, 148},
+    {"GANGBUR", Kind::Van, 179},        {"BURRITO", Kind::Van, 212},        {"PONY", Kind::Van, 143},
+    {"RUMPO", Kind::Van, 170},          {"MRWHOOP", Kind::Van, 153},        {"SANDKING", Kind::OffRoad, 225},
+    {"BFINJECT", Kind::OffRoad, 154},   {"WALTON", Kind::OffRoad, 208},     {"BOBCAT", Kind::OffRoad, 152},
+    {"LANDSTAL", Kind::OffRoad, 130},   {"RANCHER", Kind::OffRoad, 219},    {"DESPERAD", Kind::OffRoad, 230},
+    {"PATRIOT", Kind::OffRoad, 200},    {"FBIRANCH", Kind::OffRoad, 220},   {"BENSON", Kind::LightTruck, 229},
+    {"MULE", Kind::LightTruck, 144},    {"BOXVILLE", Kind::LightTruck, 228}, {"YANKEE", Kind::LightTruck, 186},
+    {"SECURICA", Kind::LightTruck, 158}, {"AMBULAN", Kind::LightTruck, 146}, {"ENFORCER", Kind::LightTruck, 157},
+    {"LINERUN", Kind::HeavyTruck, 133}, {"PACKER", Kind::HeavyTruck, 173},  {"BUS", Kind::HeavyTruck, 161},
+    {"FLATBED", Kind::HeavyTruck, 185}, {"TRASH", Kind::HeavyTruck, 138},   {"COACH", Kind::HeavyTruck, 167},
+    {"FIRETRUK", Kind::HeavyTruck, 137}, {"BARRACKS", Kind::HeavyTruck, 163}, {"RHINO", Kind::Tank, 162},
+    {"GOLFCART", Kind::Small, 187},     {"BAGGAGE", Kind::Small, 215},
 };
 const int kCarCount = int(sizeof(kCars) / sizeof(kCars[0]));
 
@@ -112,6 +112,16 @@ const Car *Find(const char *identifier)
 		if (!std::strcmp(car.name, identifier))
 			return &car;
 	return nullptr;
+}
+
+const Car *FindModel(int model)
+{
+ // Native default.ide aliases share a handling row, including work-vehicle
+ // mission variants and the two additional Hotrings. Keep one Kind per row.
+ switch(model){case 189:model=143;break;case 213:model=144;break;case 216:model=168;break;
+ case 232:case 233:model=224;break;case 236:model=145;break;}
+ for(const Car &car:kCars)if(car.model==model)return &car;
+ return nullptr;
 }
 
 bool Plausible(const Record &r)

@@ -23,21 +23,26 @@ float Phase(uint32_t seed, int i)
 
 } // namespace
 
-Ground OnGround(uint8_t surface, float soak)
+Ground OnGround(uint8_t surface, float soak, handlingmodel::Kind kind)
 {
-	const float k = std::clamp(soak, 0.0f, 1.0f);
-	switch (surface) {
-	case 2: // grass
-	case 4: // mud
-		return {1 - 0.55f * k, 1 - 0.45f * k, 3.2f * k};
-	case 18: // sand
-	case 33: // the beach
-		return {1 - 0.35f * k, 1 - 0.4f * k, 3.3f * k};
-	case 3: // gravel: drains, firmer
-		return {1 - 0.25f * k, 1 - 0.15f * k, 1.0f * k};
-	default:
-		return {1, 1, 0};
-	}
+ if(!std::isfinite(soak))return {1,1,0};
+ const float k=std::clamp(soak,0.0f,1.0f);
+ using handlingmodel::Kind;
+ const bool offroad=kind==Kind::OffRoad||kind==Kind::Tank;
+ const bool work=kind==Kind::Van||kind==Kind::LightTruck||kind==Kind::HeavyTruck;
+ Ground wet{1,1,0};
+ switch(surface){
+ case 2: // grass: road trucks can traverse a field; offroad tyres retain more purchase
+  wet=offroad?Ground{.82f,.95f,.65f}:work?Ground{.65f,.85f,1.1f}:kind==Kind::Sports?Ground{.40f,.40f,3.2f}:Ground{.45f,.55f,3.2f};break;
+ case 4: // mud: a road truck's tyres still struggle more than all-terrain tyres
+  wet=offroad?Ground{.70f,.85f,1.3f}:work?Ground{.50f,.70f,2.2f}:kind==Kind::Sports?Ground{.40f,.40f,3.2f}:Ground{.45f,.55f,3.2f};break;
+ case 18:case 33: // sand/beach
+  wet=offroad?Ground{.85f,.90f,1.0f}:work?Ground{.65f,.75f,2.0f}:kind==Kind::Sports?Ground{.45f,.40f,3.3f}:Ground{.65f,.60f,3.3f};break;
+ case 3: // gravel drains and stays firmer
+  wet=offroad?Ground{.90f,.95f,.35f}:work?Ground{.85f,.95f,.6f}:Ground{.75f,.85f,1.0f};break;
+ default:return {1,1,0};
+ }
+ return {1-(1-wet.grip)*k,1-(1-wet.drive)*k,wet.drag*k};
 }
 
 Air InTheAir(float rain, float gust, float seconds, uint32_t seed)

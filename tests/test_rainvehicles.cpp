@@ -82,6 +82,19 @@ int main()
 	Wheel(2, 0);
 	CHECK(gThrust == 1 && Speed(gCar)[1] == 0.2f && gWheels == 5);
 
+ // Purpose-specific profiles, independent of handling retuning being enabled.
+ gWeather.wetness=1;gConfig.carHandling=false;
+ *reinterpret_cast<int16_t *>(gCar+0x6a)=219;Speed(gCar)[1]=.2f;Wheel(2,0);
+ CHECK(std::fabs(gThrust-.95f)<1e-5f&&std::fabs(gAdhesion-.82f)<1e-5f);
+ CHECK(std::fabs(Speed(gCar)[1]-(.2f-.65f/2500/4))<1e-6f);
+ *reinterpret_cast<int16_t *>(gCar+0x6a)=133;Speed(gCar)[1]=.2f;Wheel(2,0);
+ CHECK(std::fabs(gThrust-.85f)<1e-5f&&std::fabs(gAdhesion-.65f)<1e-5f);
+ *reinterpret_cast<int16_t *>(gCar+0x6a)=141;Speed(gCar)[1]=.2f;Wheel(33,0);
+ CHECK(std::fabs(gThrust-.40f)<1e-5f&&std::fabs(gAdhesion-.45f)<1e-5f);
+ gConfig.rainVehicles=false;Speed(gCar)[1]=.2f;Wheel(2,0);CHECK(gThrust==1&&gAdhesion==1&&Speed(gCar)[1]==.2f);
+ gConfig.rainVehicles=true;*reinterpret_cast<int16_t *>(gCar+0x6a)=0;
+ gWeather.wetness=0;
+
 	// His aircraft, high up in heavy rain: bumped about. On the ground, or not his: left alone.
 	gWeather.rain = 0.5f;
 	float *m = reinterpret_cast<float *>(gCar + 8);
