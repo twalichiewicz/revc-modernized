@@ -373,6 +373,9 @@ know you by your description, and getting away leaves you under an APB until you
 - Side and rear car windows shatter from bullets and severe native door or rear-bumper damage
   (`CarGlass`), with the game's falling glass and sound. Damage stays on the car that was hit, and
   repairs restore its glass. The front windscreen keeps the game's cracked and shattered stages.
+- Hoods, trunks and doors retain their damaged and swinging stages before a stronger later hit tears
+  them off (`CarParts`). Bumpers retain their damaged model before detaching. Continuous contact with
+  a wall counts as one impact for each part. The game's own loose-part physics and repairs handle it.
 - Car radios can be heard from the street, muffled through the bodywork and coming from where the car is.
   Your own car keeps playing after you get out, and so do stopped cars nearby. Getting into a car, you
   hear only that car's radio, and a police car plays the police scanner, not the station you just heard.
@@ -544,6 +547,7 @@ updated after that. To pick up settings added by a newer version, delete it and 
 | `Clouds`, `ModernLighting`, `LightGlow` | The new sky, the camera look, and cars' lights glowing on the model |
 | `Planes` | The airliners up in the clouds, lit by the sky, with their lights |
 | `CarGlass` | Side and rear windows shatter from bullets and severe component damage |
+| `CarParts` | Damaged and swinging stages before native parts detach on stronger later hits |
 | `CarHandling` | GTA IV-style weight: mass by type, gentler acceleration, softer springs that lean, longer braking |
 | `HeadBalance` | First person in a car: the view leans with the car, his head levelling a little against it |
 

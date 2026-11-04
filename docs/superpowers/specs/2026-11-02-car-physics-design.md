@@ -101,8 +101,16 @@ off.
 ## Progress, 2026-11-04
 
 Handling and physical lean are implemented, with the drive log retained for tuning. The glass pass is
-implemented and installed on `car-glass`; see [glass design](2026-11-04-car-glass-design.md) and
-[verification record](../plans/2026-11-04-car-glass.md). It adds side/rear region breakage from bullets
-and severe native component damage, keeps the native windscreen, and restores geometry on repair.
-Offline/asset tests pass; live presentation acceptance remains pending. Parts loosening/detachment and
-body deformation are still subsequent work, so #37 remains open.
+installed; see [glass design](2026-11-04-car-glass-design.md) and
+[verification record](../plans/2026-11-04-car-glass.md). After the triangle-strip crash fix, the user
+confirmed no crash and visible breakage. The 03:08:27 log records both front side panes of a Deluxo
+breaking, with normal gameplay continuing through 03:09:30. Front windscreen damage stays native,
+and repairs restore the private side/rear geometry. Other glass presentation checks remain
+in the verification record.
+
+The parts pass now tunes eight native components through damaged, swinging and detached stages, with
+one progression per contact episode and stronger later hits required. Native health, handling, locks,
+hinges, loose objects and repair remain in charge. See [parts design](2026-11-04-car-parts-design.md)
+and [verification record](../plans/2026-11-04-car-parts.md). Full offline, asset and exact-native tests
+pass; live parts presentation is the next driving check. Body deformation remains subsequent work,
+so #37 stays open.

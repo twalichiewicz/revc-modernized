@@ -173,6 +173,7 @@ DEFAULT_HOOKS = [
     "_ZN8CVehicle13FlyingControlE12eFlightModel",
     "_ZN11CAutomobile14ProcessControlEv",
     "_ZN11CAutomobile13VehicleDamageEft",
+    "_ZN14CDamageManager11ApplyDamageE10tComponentff",
     "_ZN11CAutomobile13SetDoorDamageEi6eDoorsb",
     "_ZN11CAutomobile15SetBumperDamageEi7ePanelsb",
     "_ZN7CEntity14DeleteRwObjectEv",
