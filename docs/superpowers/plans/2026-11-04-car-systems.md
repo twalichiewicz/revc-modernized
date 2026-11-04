@@ -37,7 +37,7 @@ Native handling, actor refs, native protections, output pointers and visual tuni
 - [x] Add production-hook lighting tests for partial/failed supply, unrelated cars/world emissions and configuration/lifecycle; run RED.
 - [x] Apply supply with nested/exception-safe emitting-car scope; run GREEN.
 - [x] Full make all test test-game-assets, focused sanitizers, independent final review and one fix pass if needed.
-- [ ] Install game closed; compare bytes, verify strict signatures; record results and commit.
+- [x] Install game closed; compare bytes, verify strict signatures; record results and commit.
 
 ## Execution record
 
@@ -55,3 +55,6 @@ Native handling, actor refs, native protections, output pointers and visual tuni
 - Review rulings: native projected ground light patches retain original brightness (cost: visible ground patches after lamp supply fails); detailed model internals/projectiles/persistence/engine audio remain future scope (cost: coarse internals and native audio after drive failure); live balance/appearance remains the user's acceptance (cost: offline tests do not establish feel).
 
 - Final fix-pass verification: `make -j4 all test test-game-assets` exit0, zero warnings/errors/failing assertions (`build/car-systems/verification-final.log`); updated owner/native/lamp ASan/UBSan runs exit0. No review Minor findings. Native disassembly retained under `build/car-systems/native-*-review.disasm`.
+
+- `./install.sh` exit0 with game closed,154 hooks+6 skips. Installed dylib matches build byte-for-byte; strict plugin and executable (`--ignore-resources`) signature verification both exit0. Completion stays on local car-systems branch; no merge/push requested.
+- Next live drive: hard corner impacts should weaken the relevant brake and steering response; bay/gearbox/electrical hits reduce drive, electrical damage dims lamps; tank breaches leak over time, including while parked, then remove drive. Native Fix restores14 modules, coolant/fuel and heat. Logs include module integrity, power/coolant/heat and fuel bands. Ground light projections/native engine audio and detailed internal/ballistic/persistent simulation remain the documented limits; live feel still needs user acceptance.
