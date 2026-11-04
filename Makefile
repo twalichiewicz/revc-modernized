@@ -31,6 +31,7 @@ PLUGIN += src/towercollision.cpp
 PLUGIN += src/jetshadow.cpp
 PLUGIN += src/jetboardingpose.cpp
 PLUGIN += src/handlingmodel.cpp src/handling.cpp src/drivelog.cpp src/headbalance.cpp
+PLUGIN += src/glassmodel.cpp src/carglass.cpp
 GUNS      ?= $(wildcard assets/guns/*.vmg)  # every gun built (GUNS="..." to build in only some)
 CXXFLAGS  += -I$(BUILD)
 BLENDER   ?= blender
@@ -119,6 +120,15 @@ $(BUILD)/test_rainvehicles: tests/test_rainvehicles.cpp src/rainvehicles.cpp src
 
 $(BUILD)/test_handlingmodel: tests/test_handlingmodel.cpp src/handlingmodel.cpp src/handlingmodel.h | $(BUILD)
 	$(CXX) $(CXXFLAGS) -Isrc -o $@ tests/test_handlingmodel.cpp src/handlingmodel.cpp
+
+$(BUILD)/test_glassmodel: tests/test_glassmodel.cpp src/glassmodel.cpp src/glassmodel.h | $(BUILD)
+	$(CXX) $(CXXFLAGS) -Isrc -o $@ tests/test_glassmodel.cpp src/glassmodel.cpp
+
+$(BUILD)/test_carglass: tests/test_carglass.cpp src/carglass.cpp src/carglass.h src/glassmodel.cpp $(wildcard src/*.h) | $(BUILD)
+	$(CXX) $(CXXFLAGS) -Isrc -o $@ tests/test_carglass.cpp src/glassmodel.cpp
+
+$(BUILD)/test_glass_assets: tests/test_glass_assets.cpp src/glassmodel.cpp tools/bake/visualmodel.cpp tools/bake/gamefiles.cpp src/mapdata.cpp $(wildcard src/*.h tools/bake/*.h) | $(BUILD)
+	$(CXX) $(CXXFLAGS) -Isrc -o $@ tests/test_glass_assets.cpp src/glassmodel.cpp tools/bake/visualmodel.cpp tools/bake/gamefiles.cpp src/mapdata.cpp -lz
 
 $(BUILD)/test_handling_assets: tests/test_handling_assets.cpp src/handlingmodel.cpp src/handlingmodel.h | $(BUILD)
 	$(CXX) $(CXXFLAGS) -Isrc -o $@ tests/test_handling_assets.cpp src/handlingmodel.cpp
@@ -309,7 +319,8 @@ $(BUILD)/test_estateassets: tests/test_estateassets.cpp src/estatelighting.cpp s
 $(BUILD)/test_mapassets: tests/test_mapassets.cpp tools/bake/bake.cpp $(GAMEFILES) $(wildcard tools/bake/*.h) src/mapdata.cpp src/mapdata.h src/radiologos.cpp | $(BUILD)
 	$(CXX) $(CXXFLAGS) -Isrc -o $@ tests/test_mapassets.cpp $(GAMEFILES) src/mapdata.cpp src/radiologos.cpp -lz
 
-test-game-assets: $(BUILD)/test_estateassets $(BUILD)/test_handling_assets $(BUILD)/test_mapassets $(BUILD)/test_shotcollision $(BUILD)/test_rotorassets $(BUILD)/test_planeflight_assets $(BUILD)/test_flightpath_assets $(BUILD)/test_planeflight_nativecaller $(BUILD)/test_airportjets_assets $(BUILD)/test_planestream $(BUILD)/test_airportjetmodel $(BUILD)/test_airworld_native $(BUILD)/test_learjetseat_assets $(BUILD)/test_jetwash_assets $(BUILD)/test_trafficweave $(BUILD)/test_towercollision_assets $(BUILD)/test_towercollision_native $(BUILD)/test_jetboarding_assets $(BUILD)/test_jetboarding_native $(BUILD)/test_jetshadow_assets $(BUILD)/test_jetshadow_native $(BUILD)/test_jetboardingpose $(BUILD)/test_airportjetspawners_native $(BUILD)/test_jetcrouchgait
+test-game-assets: $(BUILD)/test_glass_assets $(BUILD)/test_estateassets $(BUILD)/test_handling_assets $(BUILD)/test_mapassets $(BUILD)/test_shotcollision $(BUILD)/test_rotorassets $(BUILD)/test_planeflight_assets $(BUILD)/test_flightpath_assets $(BUILD)/test_planeflight_nativecaller $(BUILD)/test_airportjets_assets $(BUILD)/test_planestream $(BUILD)/test_airportjetmodel $(BUILD)/test_airworld_native $(BUILD)/test_learjetseat_assets $(BUILD)/test_jetwash_assets $(BUILD)/test_trafficweave $(BUILD)/test_towercollision_assets $(BUILD)/test_towercollision_native $(BUILD)/test_jetboarding_assets $(BUILD)/test_jetboarding_native $(BUILD)/test_jetshadow_assets $(BUILD)/test_jetshadow_native $(BUILD)/test_jetboardingpose $(BUILD)/test_airportjetspawners_native $(BUILD)/test_jetcrouchgait
+	GAMEDATA="$(GAMEDATA)" $(BUILD)/test_glass_assets
 	GAMEDATA="$(GAMEDATA)" $(BUILD)/test_estateassets
 	GAMEDATA="$(GAMEDATA)" $(BUILD)/test_handling_assets
 	GAMEDATA="$(GAMEDATA)" $(BUILD)/test_mapassets
@@ -403,6 +414,7 @@ $(BUILD)/test_trafficweave: tests/test_trafficweave.cpp tests/nativeweavearm.h s
 	$(CXX) $(CXXFLAGS) -Isrc -o $@ tests/test_trafficweave.cpp
 
 FEEDBACK_TESTS += test_handlingmodel test_handlinghook test_drivelog test_headbalance
+FEEDBACK_TESTS += test_glassmodel test_carglass
 
 test-feedback: $(addprefix $(BUILD)/,$(FEEDBACK_TESTS))
 	@set -e; for test in $(FEEDBACK_TESTS); do $(BUILD)/$$test; done

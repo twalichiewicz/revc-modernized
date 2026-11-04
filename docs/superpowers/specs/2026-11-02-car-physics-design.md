@@ -59,8 +59,9 @@ crash.
 ### 4. Glass
 
 - **What it means:** windows crack and shatter, from bullets and crashes, with shards falling.
-- **What the game has:** none of that. Glass is just transparent parts of each car's materials; the mod
-  already tells glass apart this way for its first-person view.
+- **What the game has:** the front windscreen already cracks and shatters through native panel damage,
+  with falling panes and sound. Side/rear glass is embedded in translucent materials without equivalent
+  independent damage. The mod already traces these glass triangles for first-person bullets.
 - **The approach:** per car, hide the glass triangles of a window once it's broken (with a cracked stage
   first if possible) and spawn shard particles. The mod's car-bullet collision code (#11) already knows
   where shots hit glass.
@@ -96,3 +97,12 @@ off.
    tail-happy) or make them more alike?
 3. **Deformation:** how severe? GTA IV's is quite soft. The cap decides how many crashes make a car a
    wreck.
+
+## Progress, 2026-11-04
+
+Handling and physical lean are implemented, with the drive log retained for tuning. The glass pass is
+implemented and installed on `car-glass`; see [glass design](2026-11-04-car-glass-design.md) and
+[verification record](../plans/2026-11-04-car-glass.md). It adds side/rear region breakage from bullets
+and severe native component damage, keeps the native windscreen, and restores geometry on repair.
+Offline/asset tests pass; live presentation acceptance remains pending. Parts loosening/detachment and
+body deformation are still subsequent work, so #37 remains open.

@@ -17,6 +17,10 @@
 #endif
 namespace game { Api api; }
 void Log(const char *,...){}
+namespace carglass {
+int calls=0,face=-1;const void *part=nullptr;uint8_t *car=nullptr;Vec3 point{};
+void Bullet(uint8_t *v,const void *a,int t,Vec3 p,Vec3){++calls;car=v;part=a;face=t;point=p;}
+}
 namespace fixture { void *Lookup(void *,const char *); void *Native(const char *); std::map<std::string,void *> entry; }
 namespace hooks {void *Chain(const char *s,void *p){fixture::entry[s]=p;return fixture::Native(s);}}
 #define dlsym fixture::Lookup
@@ -99,10 +103,18 @@ bool NativeFire(uint8_t *,uint8_t *,CVector *)
  if(victim)OccupantEntry()(&victim,&result,weaponType,from,to);
  return true;
 }
-bool NativeFireCar(uint8_t *w,uint8_t *v,bool,bool){return NativeFire(w,v,nullptr);}
+void NativeVehicleDamage(uint8_t *,uint8_t *,int,float,CVector){}
+bool NativePedDamage(uint8_t *,uint8_t *,int,float,int,uint8_t){return false;}
+void DirectDamage(){
+ if(victim==cars.data()&&entry["_ZN8CVehicle13InflictDamageEP7CEntity11eWeaponTypef7CVector"])reinterpret_cast<void (*)(uint8_t *,uint8_t *,int,float,CVector)>(entry["_ZN8CVehicle13InflictDamageEP7CEntity11eWeaponTypef7CVector"])(victim,peds.data()+0x8d0*2,weaponType,20,CVector{0,0,0});
+ if(victim==peds.data()&&entry["_ZN4CPed13InflictDamageEP7CEntity11eWeaponTypef14ePedPieceTypesh"])reinterpret_cast<bool (*)(uint8_t *,uint8_t *,int,float,int,uint8_t)>(entry["_ZN4CPed13InflictDamageEP7CEntity11eWeaponTypef14ePedPieceTypesh"])(victim,peds.data()+0x8d0*2,weaponType,20,result.pieceB,0);
+}
+bool NativeFireCar(uint8_t *,uint8_t *,bool,bool){WorldEntry()(from,to,result,victim,true,true,true,true,true,false,false,true);DirectDamage();return true;}
 void NativeUpdate(){++updates;NativeFire(nullptr,nullptr,nullptr);}
-void NativeRound(CVector *a,CVector *b,int amount){++rounds;roundDamage=amount;Check(a==&from&&b==&to,"native cannon keeps original ray argument pointers");WorldEntry()(*a,*b,result,victim,true,true,true,true,true,false,false,true);}
+void NativeRound(CVector *a,CVector *b,int amount){++rounds;roundDamage=amount;Check(a==&from&&b==&to,"native cannon keeps original ray argument pointers");WorldEntry()(*a,*b,result,victim,true,true,true,true,true,false,false,true);DirectDamage();}
 void *Native(const char *s){
+ if(strstr(s,"CVehicle13InflictDamage"))return reinterpret_cast<void *>(NativeVehicleDamage);
+ if(strstr(s,"CPed13InflictDamage"))return reinterpret_cast<void *>(NativePedDamage);
  if(strstr(s,"FireOneInstantHitRound"))return reinterpret_cast<void *>(NativeRound);
  if(strstr(s,"CheckForShooting"))return reinterpret_cast<void *>(NativeOccupant);
  if(strstr(s,"CCollision"))return reinterpret_cast<void *>(NativeNarrow);
@@ -119,6 +131,7 @@ void *Lookup(void *,const char *s){
  return nullptr;
 }
 void Setup(){
+ carglass::calls=0;carglass::part=nullptr;carglass::face=-1;
  cars={};peds={};carFlags[0]=1;carFlags[1]=2;clumpType=2;clump.atomics.clear();Identity(clump.root.matrix.data());Identity(clump.root.world.data());staleLTM=windowMode=ignoreSee=false;windowStatus=windowSounds=afterTrace=0;carModel.spheres={{{0,0,.5f},1,0}};pedModel.spheres={{{0,0,.5f},.25f,3}};modelPtrs[7]=modelInfo.data();tyres=true;wall=false;stale=false;throwFire=throwWorld=nested=stander=noPeds=false;fireType=1;modelPtrs[8]=modelInfoB.data();passengerModel.spheres={{{-.5f,0,.5f},.2f,2}};standerModel.spheres={{{1,0,.5f},.25f,3}};
  for(int i=0;i<2;i++){auto c=cars.data()+i*0x6f0;Identity(reinterpret_cast<float *>(c+8));*reinterpret_cast<unsigned *>(c+0x60)=2|0x100;*reinterpret_cast<int16_t *>(c+0x6a)=7;*reinterpret_cast<void **>(c+0x58)=&clump;}
  for(int i=0;i<3;i++){auto p=peds.data()+i*0x8d0;Identity(reinterpret_cast<float *>(p+8));*reinterpret_cast<unsigned *>(p+0x60)=3;*reinterpret_cast<int16_t *>(p+0x6a)=7;*reinterpret_cast<void **>(p+0x58)=&clump;p[0x193]=4;p[0x4c0]=1;*reinterpret_cast<void **>(p+0x4b8)=cars.data();*reinterpret_cast<float *>(p+0x44c)=100;}
@@ -205,6 +218,12 @@ void TraceChecks(){using namespace fixture;using shotcollision::MeshHit;using sh
 int main(int argc,char **argv){const bool assets=argc>1&&!std::strcmp(argv[1],"--assets");using namespace fixture;Setup();Check(shotcollision::Install(),"native ABI hooks install");TraceChecks();Setup();
  Panel(-.8f);FireShot();Check(victim==cars.data() && std::fabs(result.p.x+.8f)<1e-5f,"real metal blocks native head-only retarget and uses visible surface");
  Setup();Panel(-.8f,128,"windscreen_hi_ok");*reinterpret_cast<void **>(cars.data()+0x218)=nullptr;FireShot();Check(victim==cars.data() && result.surfaceB==7,"glass retains native car impact when no seated body is behind it");
+ Setup();Panel(-.8f,89,"door_lf_hi_ok");*reinterpret_cast<void **>(cars.data()+0x218)=nullptr;FireShot();Check(carglass::calls==1&&carglass::car==cars.data()&&carglass::part==&clump.atomics[0]&&carglass::face>=0&&std::fabs(carglass::point.x+.8f)<1e-5f,"actual glass impact certifies exact car atomic triangle and point");
+ Setup();Panel(-.8f,89,"door_lf_hi_ok");Panel(2);FireShot();Check(carglass::calls==1&&carglass::part==&clump.atomics[0]&&victim==peds.data()&&result.pieceB==3,"glass before occupant breaks without retargeting body hit");
+ Setup();Panel(-.8f,89,"door_lf_hi_ok");wall=true;FireShot();Check(carglass::calls==0,"world obstruction prevents side-window effects");
+ Setup();Panel(-.8f,89,"door_lf_hi_ok");*reinterpret_cast<void **>(cars.data()+0x218)=nullptr;{uint8_t gun[32]{};int t=17;memcpy(gun,&t,4);Shot query(gun,peds.data()+0x8d0*2);WorldEntry()(from,to,result,victim,true,true,true,true,true,false,false,true);DirectDamage();}Check(carglass::calls==0,"zero damage point only accepted in native drive-by and mounted scopes");
+ Setup();Panel(-.8f,89,"door_lf_hi_ok");*reinterpret_cast<void **>(cars.data()+0x218)=nullptr;{uint8_t gun[32]{};int t=17;memcpy(gun,&t,4);reinterpret_cast<FireCar>(entry["_ZN7CWeapon21FireInstantHitFromCarEP8CVehiclebb"])(gun,cars.data()+0x6f0,true,false);}Check(carglass::calls==1,"native drive-by damage path consumes glass without occupant checker");
+ Setup();Panel(-.8f,89,"door_lf_hi_ok");Panel(2);{uint8_t gun[32]{};int t=17;memcpy(gun,&t,4);reinterpret_cast<FireCar>(entry["_ZN7CWeapon21FireInstantHitFromCarEP8CVehiclebb"])(gun,cars.data()+0x6f0,true,false);}Check(carglass::calls==1&&victim==peds.data(),"direct seated-ped damage also consumes crossed side glass");
  Setup();Panel(2);FireShot();Check(victim==peds.data() && result.pieceB==3 && std::fabs(result.p.x+.25f)<1e-5f,"open window exposes actual animated body before far car panel");
  Setup();Panel(2);carModel.spheres={{{0,0,.5f},1,0}};*reinterpret_cast<void **>(cars.data()+0x218)=nullptr;from.z=to.z=1.5f;FireShot();Check(victim==nullptr,"empty space around inflated car sphere has no bullet impact");
  Setup();Panel(2);wall=true;FireShot();Check(victim==reinterpret_cast<uint8_t *>(0x1234),"nearer native world obstruction wins over seated body");
@@ -242,6 +261,7 @@ int main(int argc,char **argv){const bool assets=argc>1&&!std::strcmp(argv[1],"-
  Setup();Panel(-.8f);reinterpret_cast<void (*)(CVector *,CVector *,int)>(entry["_Z22FireOneInstantHitRoundP7CVectorS0_i"])(&from,&to,15);Check(rounds==1&&roundDamage==15&&victim==cars.data()&&std::fabs(result.p.x+.8f)<1e-5f,"native Hunter cannon entry uses real nearest metal and forwards damage unchanged");
  Setup();Panel(2);reinterpret_cast<void (*)(CVector *,CVector *,int)>(entry["_Z22FireOneInstantHitRoundP7CVectorS0_i"])(&from,&to,15);Check(rounds==2&&victim==peds.data()&&result.pieceB==3,"native Hunter cannon can hit exposed seated body without a CWeapon Fire call");
 
+ Setup();Panel(-.8f,89,"door_lf_hi_ok");*reinterpret_cast<void **>(cars.data()+0x218)=nullptr;reinterpret_cast<void (*)(CVector *,CVector *,int)>(entry["_Z22FireOneInstantHitRoundP7CVectorS0_i"])(&from,&to,15);Check(carglass::calls==1,"native mounted round consumes zero-position vehicle damage");
  Setup();Panel(-.8f);staleLTM=true;clump.atomics[0].frame.world[12]=10;clump.root.world[12]=10;*reinterpret_cast<void **>(cars.data()+0x218)=nullptr;FireShot();Check(victim==cars.data()&&std::fabs(result.p.x+.8f)<1e-5f,"native control before RW update cannot leave whole-car shot box at old rendered position");
  Setup();Panel(-.8f);staleLTM=true;Identity(clump.atomics[0].frame.world.data());auto current=reinterpret_cast<float *>(cars.data()+8);current[0]=0;current[1]=1;current[4]=-1;current[5]=0;current[12]=5;from={5,-3,.5f};to={5,3,.5f};*reinterpret_cast<void **>(cars.data()+0x218)=nullptr;FireShot();Check(victim==cars.data()&&std::fabs(result.p.x-5)<1e-5f&&std::fabs(result.p.y+.8f)<1e-5f,"current native root rotation and translation replace stale whole-car RW basis");
  Setup();Panel(-.8f);staleLTM=true;clump.atomics[0].frame.world[12]=20;clump.atomics[0].frame.matrix[12]=4;reinterpret_cast<float *>(cars.data()+8)[12]=5;from={6,0,.5f};to={10,0,.5f};*reinterpret_cast<void **>(cars.data()+0x218)=nullptr;FireShot();Check(victim==cars.data()&&std::fabs(result.p.x-8.2f)<1e-5f,"current local moving door composes onto native root despite both cached LTMs lagging");
@@ -249,7 +269,7 @@ int main(int argc,char **argv){const bool assets=argc>1&&!std::strcmp(argv[1],"-
  Setup();Panel(-.8f);Frame hinge;Identity(hinge.matrix.data());hinge.parent=&clump.root;hinge.matrix[0]=0;hinge.matrix[1]=2;hinge.matrix[4]=-1;hinge.matrix[5]=0;hinge.matrix[12]=1;clump.atomics[0].frame.parent=&hinge;clump.atomics[0].frame.matrix[12]=.2f;reinterpret_cast<float *>(cars.data()+8)[12]=2;from={3,-3,.5f};to={3,3,.5f};*reinterpret_cast<void **>(cars.data()+0x218)=nullptr;FireShot();Check(victim==cars.data()&&std::fabs(result.p.x-3)<1e-5f&&std::fabs(result.p.y+1.2f)<1e-5f&&std::fabs(result.n.y+1)<1e-5f,"nested moving door hierarchy keeps current local motion and correct scaled normal");
 
 
- Setup();Panel(-.8f,89,"windscreen_hi_ok");Panel(2);windowMode=true;{uint8_t gun[32]{};int type=17;std::memcpy(gun,&type,4);Shot context(gun,peds.data()+0x8d0*2);WorldEntry()(from,to,result,victim,true,true,true,true,true,false,false,true);Check(victim==peds.data()&&windowStatus==0&&windowSounds==0,"precision obstruction query remains read-only until native impact checker consumes glass");}
+ Setup();Panel(-.8f,89,"windscreen_hi_ok");Panel(2);windowMode=true;{uint8_t gun[32]{};int type=17;std::memcpy(gun,&type,4);Shot context(gun,peds.data()+0x8d0*2);WorldEntry()(from,to,result,victim,true,true,true,true,true,false,false,true);Check(victim==peds.data()&&windowStatus==0&&windowSounds==0&&carglass::calls==0,"precision obstruction query remains read-only until native impact checker consumes glass");}
  for(int piece:{3,6}){
   Setup();Panel(-.8f,89,"door_lf_hi_ok");Panel(2);pedModel.spheres[0].piece=uint8_t(piece);FireShot();Check(victim==peds.data()&&result.pieceB==piece,"ordinary closed side-window glass permits native-style occupant body/head hit");FireShot();Check(victim==peds.data()&&result.pieceB==piece&&clump.atomics[0].flags==4&&clump.atomics[0].geo.mats[0].colour[3]==89,"embedded side glass cannot become a permanent shield when native never hides that door mesh");
   Setup();Panel(-.8f,89,"windscreen_hi_ok");Panel(-.8f,242,"windscreen_hi_dam");clump.atomics[1].id=2;clump.atomics[1].flags=0;Panel(2);windowMode=true;pedModel.spheres[0].piece=uint8_t(piece);FireShot();Check(victim==peds.data()&&result.pieceB==piece&&windowStatus==1&&windowSounds==1&&clump.atomics[0].flags==0&&clump.atomics[1].flags==4,"intact windscreen penetrates to body/head while native panel consumer selects cracked atomic");FireShot();Check(victim==peds.data()&&windowStatus==3&&windowSounds==2&&clump.atomics[1].flags==0,"second body/head shot retains native windscreen shatter and removes cracked atomic");

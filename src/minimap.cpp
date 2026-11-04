@@ -100,6 +100,7 @@
 #include "estatelighting.h"
 #include "ballistics.h"
 #include "shotcollision.h"
+#include "carglass.h"
 #include "planeflight.h"
 #include "flightmodel.h"
 #include "airportjets.h"
@@ -791,6 +792,8 @@ __attribute__((constructor)) void Init()
 		Log("aircraft damage: native bindings/hooks incomplete; original collision handling retained");
 	if (!shotcollision::Install())
 		Log("shot collision: native bindings/hooks missing; original vehicle shot collision retained");
+	if (!carglass::Install())
+		Log("car glass: native bindings/hooks missing; re-run install.sh");
 	if (!drivers::Install())
 		Log("drivers: missing world bindings; native driver behavior retained");
 	if (!reactions::Install())

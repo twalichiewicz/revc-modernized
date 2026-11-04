@@ -35,6 +35,7 @@ struct Config {
 	bool rainStreaks = true;    // dense, lit, wind-blown rain, none under cover (#32)
 	bool headBalance = true;    // first person in a car: his head levels a little against its roll (#37)
 	bool carHandling = true;    // GTA IV-style weight: mass by type, slower, softer springs, longer braking (#37)
+	bool carGlass = true;       // side/rear windows shatter independently; windscreen stays native (#37)
 	bool rainVehicles = true;   // soaked ground bogs cars down; aircraft thrown about in the rain (#32)
 	bool rainHaze = true;       // heavy rain closes the view in: the fog nearer, the far clip shorter (#32)
 	bool rainSplashes = true;   // splashes on the wet ground and car roofs, as the rain is heavy (#32)
