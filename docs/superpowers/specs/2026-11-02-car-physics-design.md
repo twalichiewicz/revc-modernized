@@ -111,6 +111,14 @@ in the verification record.
 The parts pass now tunes eight native components through damaged, swinging and detached stages, with
 one progression per contact episode and stronger later hits required. Native health, handling, locks,
 hinges, loose objects and repair remain in charge. See [parts design](2026-11-04-car-parts-design.md)
-and [verification record](../plans/2026-11-04-car-parts.md). Full offline, asset and exact-native tests
-pass; live parts presentation is the next driving check. Body deformation remains subsequent work,
-so #37 stays open.
+and [verification record](../plans/2026-11-04-car-parts.md). The user confirmed the driver/passenger/front
+responded in the Deluxo. Logs also confirm the rear bumper's complete detachment sequence. Their
+reported rear/quarter glass misses were reproduced and fixed: the shallow rear glass was excluded
+by the roof filter, and fixed quarter windows lacked a severe rear-crash trigger.
+
+Localized visual deformation is implemented and installed behind `CarDeformation`; see
+[deformation design](2026-11-04-car-deformation-design.md) and
+[verification record](../plans/2026-11-04-car-deformation.md). Private body copies retain dents and
+broken glass together and restore on repair. The full suite, native Single collision, real mesh builder,
+native dynamic-shadow CPU consumer, sanitizers and independent review pass. Live dent presentation,
+rear-glass confirmation and severity tuning remain to be checked, so #37 stays open.

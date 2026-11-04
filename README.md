@@ -376,6 +376,8 @@ know you by your description, and getting away leaves you under an APB until you
 - Hoods, trunks and doors retain their damaged and swinging stages before a stronger later hit tears
   them off (`CarParts`). Bumpers retain their damaged model before detaching. Continuous contact with
   a wall counts as one impact for each part. The game's own loose-part physics and repairs handle it.
+- Body metal dents near the collision (`CarDeformation`), with repeated hits deepening it up to a cap.
+  Dents stay on that car, preserve broken glass and restore on repair. Glass and wheels remain rigid.
 - Car radios can be heard from the street, muffled through the bodywork and coming from where the car is.
   Your own car keeps playing after you get out, and so do stopped cars nearby. Getting into a car, you
   hear only that car's radio, and a police car plays the police scanner, not the station you just heard.
@@ -548,6 +550,7 @@ updated after that. To pick up settings added by a newer version, delete it and 
 | `Planes` | The airliners up in the clouds, lit by the sky, with their lights |
 | `CarGlass` | Side and rear windows shatter from bullets and severe component damage |
 | `CarParts` | Damaged and swinging stages before native parts detach on stronger later hits |
+| `CarDeformation` | Localized persistent body dents from collisions, restored on repair |
 | `CarHandling` | GTA IV-style weight: mass by type, gentler acceleration, softer springs that lean, longer braking |
 | `HeadBalance` | First person in a car: the view leans with the car, his head levelling a little against it |
 

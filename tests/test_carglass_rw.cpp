@@ -9,6 +9,7 @@
 #include <cstring>
 #include <cstdlib>
 #include "../src/carglass.cpp"
+#include "nativejetshadowarm.h"
 
 namespace game {Api api{};}
 Config gConfig;
@@ -55,7 +56,27 @@ void Bind()
  r.sphere=[](void *m)->void *{return &static_cast<rw::MorphTarget *>(m)->boundingSphere;};
  r.setSphere=[](void *m,const void *s)->void *{static_cast<rw::MorphTarget *>(m)->boundingSphere=*static_cast<const rw::Sphere *>(s);return m;};
 }
-void Copy(bool strip,bool broken,bool glassOnly)
+const float *NativeLTM(void *f){return reinterpret_cast<float *>(static_cast<rw::Frame *>(f)->getLTM());}
+void Shadow(rw::Atomic *atomic,rw::Geometry *geometry)
+{
+ using namespace nativejetshadowtest;
+ Code code;code.Add(0x10016c540,0x10016ca90);code.Add(0x1002a9480,0x1002a94a4);
+ code.bindings={{0x10029c378,reinterpret_cast<void *>(NativeLTM)}};code.Finish();
+ std::vector<float> coordinates;coordinates.reserve(1024);
+ using Append=int (*)(std::vector<float> &,rw::Atomic *,bool,std::vector<float> *);
+ auto append=reinterpret_cast<Append>(code.Address(0x10016c540));
+ atomic->setGeometry(geometry,0);append(coordinates,atomic,false,nullptr);
+ size_t at=0;
+ for(int i=0;i<geometry->numTriangles;i++){
+  const auto &t=geometry->triangles[i];
+  for(auto index:t.v){const auto p=geometry->morphTargets[0].vertices[index];
+   Check(at+3<=coordinates.size(),"native shadow receives every metal vertex");
+   Check(coordinates[at]==p.x&&coordinates[at+1]==p.y&&coordinates[at+2]==p.z,"native shadow uses exact dented CPU vertex positions");at+=3;
+  }
+ }
+ Check(at==coordinates.size(),"native shadow retains all dynamic triangle ordinals");
+}
+void Copy(bool strip,bool broken,bool glassOnly,bool dented)
 {
  const unsigned flags=0x3eu|(strip?1u:0u);const int nv=glassOnly?4:8,nt=glassOnly?2:4;
  auto source=rw::Geometry::create(nv,nt,flags);
@@ -74,11 +95,13 @@ void Copy(bool strip,bool broken,bool glassOnly)
  auto atomic=rw::Atomic::create();atomic->setFrame(frame);atomic->setGeometry(source,0);
  carglass::Mesh mesh;Check(mesh.Read(source,atomic,root),"production mesh reads real geometry");
  size_t bytes=0;std::printf("real mesh builder: source strip=%d, broken=%d, glass only=%d\n",strip,broken,glassOnly);std::fflush(stdout);
- auto copy=static_cast<rw::Geometry *>(carglass::Copy(mesh,broken?glassmodel::Bit(glassmodel::Pane::LeftFront):0,bytes,carglass::kBudget));
+ std::vector<Vec3> offsets;if(dented){offsets.resize(size_t(nv));for(int i=4;i<nv;i++)offsets[i]={.15f,0,0};}
+ auto copy=static_cast<rw::Geometry *>(carglass::Copy(mesh,broken?glassmodel::Bit(glassmodel::Pane::LeftFront):0,bytes,carglass::kBudget,&offsets));
  Check(copy&&copy->meshHeader,"production copy rebuilt a real native mesh");
  Check(copy->numTriangles==nt&&copy->numVertices==nv,"triangle ordinals and vertex count retained");
  Check(source->flags==flags&&!std::memcmp(source->triangles,triangles,size_t(nt)*sizeof(triangles[0])),"shared original geometry untouched");
- Check(!std::memcmp(copy->morphTargets[0].vertices,vertices,size_t(nv)*sizeof(vertices[0])),"vertex data retained");
+ for(int i=0;i<nv;i++){const auto p=copy->morphTargets[0].vertices[i];Check(std::fabs(p.x-(vertices[i].x+(dented&&i>=4?.15f:0)))<1e-6f&&p.y==vertices[i].y&&p.z==vertices[i].z,"private metal offsets applied; glass stays rigid");}
+ if(dented){Check(copy->morphTargets[0].boundingSphere.radius>=source->morphTargets[0].boundingSphere.radius+.15f,"dented real mesh has conservative sphere");Shadow(atomic,copy);}
  for(int i=0;i<nt;i++){
   Check(copy->matList.materials[copy->triangles[i].matId]==source->matList.materials[source->triangles[i].matId],"material mapping retained");
   const auto &t=copy->triangles[i];Check((t.v[0]==t.v[1]&&t.v[0]==t.v[2])==(broken&&i<2),"only broken glass collapsed");
@@ -90,7 +113,7 @@ void Copy(bool strip,bool broken,bool glassOnly)
 int main()
 {
  Check(rw::Engine::init()&&rw::Engine::open(nullptr)&&rw::Engine::start(),"NULL renderer initialized");Bind();
- for(bool strip:{false,true})for(bool glassOnly:{false,true})for(bool broken:{false,true})Copy(strip,broken,glassOnly);
+ for(bool strip:{false,true})for(bool glassOnly:{false,true})for(bool broken:{false,true})for(bool dented:{false,true})Copy(strip,broken,glassOnly,dented);
  Check(rw::Geometry::numAllocated==0&&rw::Material::numAllocated==0,"all native geometry/material references released");
  rw::Engine::stop();rw::Engine::close();rw::Engine::term();std::puts("carglass real mesh builder: all passed");
 }

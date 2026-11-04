@@ -3,6 +3,7 @@
 #include "config.h"
 #include "hooks.h"
 #include "glassmodel.h"
+#include "dentmodel.h"
 #include <array>
 #include <vector>
 #include <string>
@@ -33,14 +34,15 @@ struct Geo {
 struct Frame {std::array<float,16> m{};Frame *parent=nullptr;std::string name;};
 struct Atomic {Frame *frame=nullptr;Geo *geo=nullptr;unsigned flags=4;};
 struct Clump {Frame root;std::vector<Atomic *> atomics;};
-alignas(16) std::array<uint8_t,0x6f0*2> cars{};
-uint8_t pool[24]{},carFlags[2]={1,2};void *poolPointer=pool;
-Clump clumps[2];Frame frames[2][3];Atomic atoms[2][3];Mat glass,metal;
+constexpr int kCars=20;
+alignas(16) std::array<uint8_t,0x6f0*kCars> cars{};
+uint8_t pool[24]{},carFlags[kCars]={1,2};void *poolPointer=pool;
+Clump clumps[kCars];Frame frames[kCars][3];Atomic atoms[kCars][3];Mat glass,metal;
 std::map<std::string,void *> entries;int failed=0,shards=0,sounds=0,created=0,destroyed=0,holders=0,nativeFix=0,nativeDelete=0,stripRebuilds=0;
 int failCreate=-1;bool protectDoor=false;Geo *base=nullptr;
 void Check(bool ok,const char *s){if(!ok){printf("FAIL: %s\n",s);++failed;}}
 void Identity(float *m){std::fill(m,m+16,0);m[0]=m[5]=m[10]=m[15]=1;}
-uint8_t *Car(int ref){int i=ref>>8;return i<2&&ref==((i<<8)|carFlags[i])&&!(carFlags[i]&0x80)?cars.data()+i*0x6f0:nullptr;}
+uint8_t *Car(int ref){int i=ref>>8;return i>=0&&i<kCars&&ref==((i<<8)|carFlags[i])&&!(carFlags[i]&0x80)?cars.data()+i*0x6f0:nullptr;}
 void DestroyGeo(void *g){auto x=static_cast<Geo *>(g);if(!--x->refs){++destroyed;delete x;}}
 void *SetGeometry(void *a,void *g,unsigned){auto x=static_cast<Atomic *>(a);if(x->geo)DestroyGeo(x->geo);x->geo=static_cast<Geo *>(g);if(g)++x->geo->refs;return a;}
 void *CreateAtomic(){++holders;return new Atomic;}
@@ -74,9 +76,9 @@ void *SetSphere(void *m,const void *s){memcpy(static_cast<Geo *>(m)->sphere.data
 void *Unlock(void *g){if(static_cast<Geo *>(g)->flags&1)++stripRebuilds;return g;}
 void Generate(unsigned,V,V,V,V,V,float,bool,bool,int,bool){++shards;}
 void Sound(uint8_t,const V &){++sounds;}
-int DoorStatus(void *d,int door){return static_cast<uint8_t *>(d)[6+door];}
+int DoorStatus(void *d,int door){return static_cast<uint8_t *>(d)[9+door];}
 int PanelStatus(void *d,int panel){return (reinterpret_cast<uint32_t *>(d)[5]>>(panel*4))&15;}
-void Door(uint8_t *c,int,int d,bool){if(protectDoor)c[0x34c+6+d]=1;}
+void Door(uint8_t *c,int,int d,bool){if(protectDoor)c[0x34c+9+d]=1;}
 void Bumper(uint8_t *,int,int,bool){}
 void Fix(uint8_t *){++nativeFix;}
 void Delete(uint8_t *){++nativeDelete;}
@@ -91,12 +93,12 @@ void Reset()
  base->vertices={{-.8f,0,.2f},{-.8f,1,.2f},{-.8f,1,1},{-.8f,0,1},{-.8f,0,-.3f},{-.8f,1,-.3f},{-.8f,1,.2f},{-.8f,0,.2f}};
  base->triangles={{{0,1,2},0},{{0,2,3},0},{{4,5,6},1},{{4,6,7},1}};
  for(int i=0;i<8;++i){base->normals[i]={1,0,0};base->colours[i]=0x12345678;base->uv[i]={float(i),.2f};}
- for(int i=0;i<2;i++){
+ for(int i=0;i<kCars;i++){
   auto c=cars.data()+i*0x6f0;Identity(reinterpret_cast<float *>(c+8));*reinterpret_cast<unsigned *>(c+0x60)=2|0x20;c[0x297]=0x40;
   *reinterpret_cast<int16_t *>(c+0x6a)=145;*reinterpret_cast<void **>(c+0x58)=&clumps[i];Identity(clumps[i].root.m.data());clumps[i].atomics.clear();
   for(int j=0;j<3;j++){auto &f=frames[i][j];Identity(f.m.data());f.parent=&clumps[i].root;f.name=j==0?"door_lf_hi_ok":j==1?"door_lf_hi_dam":"door_rf_hi_ok";atoms[i][j]={&f,nullptr,j==1?0u:4u};SetGeometry(&atoms[i][j],base,0);clumps[i].atomics.push_back(&atoms[i][j]);}
  }
- *reinterpret_cast<void **>(pool)=cars.data();*reinterpret_cast<void **>(pool+8)=carFlags;*reinterpret_cast<int *>(pool+16)=2;
+ *reinterpret_cast<void **>(pool)=cars.data();*reinterpret_cast<void **>(pool+8)=carFlags;*reinterpret_cast<int *>(pool+16)=kCars;
 }
 bool Collapsed(const Geo *g,int i){return g->triangles[i].v[0]==g->triangles[i].v[1]&&g->triangles[i].v[0]==g->triangles[i].v[2];}
 void Bullet(int a=0){carglass::Bullet(cars.data(),&atoms[0][a],0,{-.8f,.5f,.5f},{1,0,0});}
@@ -134,7 +136,7 @@ int main()
  entries["_ZN11CAutomobile15SetBumperDamageEi7ePanelsb"]=reinterpret_cast<void *>(Bumper);
  entries["_ZN11CAutomobile3FixEv"]=reinterpret_cast<void *>(Fix);
  entries["_ZN7CEntity14DeleteRwObjectEv"]=reinterpret_cast<void *>(Delete);
- game::api.PoolsGetVehicle=Car;gConfig.carGlass=false;Check(carglass::Install()&&!carglass::gReady,"disabled startup installs no glass hooks");gConfig.carGlass=true;
+ game::api.PoolsGetVehicle=Car;gConfig.carGlass=gConfig.carDeformation=false;Check(carglass::Install()&&!carglass::gReady,"disabled startup installs no glass hooks");gConfig.carGlass=gConfig.carDeformation=true;
  Check(carglass::Install(),"installed native bindings");Reset();
  Bullet();
  Check(!(atoms[0][0].geo->flags&1)&&stripRebuilds==0&&base->flags==0x3f,"broken copies use triangle lists and retain the original strip geometry");
@@ -159,13 +161,42 @@ int main()
  Reset();*reinterpret_cast<int *>(cars.data()+0x348)=4;Bullet();Check(atoms[0][0].geo==base&&!shards,"aircraft excluded");
  Reset();carFlags[0]=0x81;Bullet();Check(atoms[0][0].geo==base&&!shards,"unallocated pool slot excluded");
  Reset();Atomic foreign; carglass::Bullet(cars.data(),&foreign,0,{0,0,0},{1,0,0});Check(!shards,"foreign atomic refused before dereference");
- Reset();cars[0x34c+6+2]=1;reinterpret_cast<void (*)(uint8_t *,int,int,bool)>(entries["_ZN11CAutomobile13SetDoorDamageEi6eDoorsb"])(cars.data(),10,2,false);
- Check(!shards,"light door damage keeps glass");cars[0x34c+6+2]=2;reinterpret_cast<void (*)(uint8_t *,int,int,bool)>(entries["_ZN11CAutomobile13SetDoorDamageEi6eDoorsb"])(cars.data(),10,2,false);Check(shards==1,"severe native door damage shatters glass");
- Reset();protectDoor=true;cars[0x34c+6+2]=3;reinterpret_cast<void (*)(uint8_t *,int,int,bool)>(entries["_ZN11CAutomobile13SetDoorDamageEi6eDoorsb"])(cars.data(),10,2,false);Check(!shards,"native protected door result respected");
+ Reset();cars[0x34c+9+2]=1;reinterpret_cast<void (*)(uint8_t *,int,int,bool)>(entries["_ZN11CAutomobile13SetDoorDamageEi6eDoorsb"])(cars.data(),10,2,false);
+ Check(!shards,"light door damage keeps glass");cars[0x34c+9+2]=2;reinterpret_cast<void (*)(uint8_t *,int,int,bool)>(entries["_ZN11CAutomobile13SetDoorDamageEi6eDoorsb"])(cars.data(),10,2,false);Check(shards==1,"severe native door damage shatters glass");
+ Reset();protectDoor=true;cars[0x34c+9+2]=3;reinterpret_cast<void (*)(uint8_t *,int,int,bool)>(entries["_ZN11CAutomobile13SetDoorDamageEi6eDoorsb"])(cars.data(),10,2,false);Check(!shards,"native protected door result respected");
  Reset();frames[0][0].name="chassis_hi";frames[0][0].m[0]=0;frames[0][0].m[1]=1;frames[0][0].m[4]=-1;frames[0][0].m[5]=0;
  *reinterpret_cast<uint32_t *>(cars.data()+0x34c+0x14)=3u<<24;
  reinterpret_cast<void (*)(uint8_t *,int,int,bool)>(entries["_ZN11CAutomobile15SetBumperDamageEi7ePanelsb"])(cars.data(),13,6,false);
  Check(shards==1&&Collapsed(atoms[0][0].geo,0),"native missing rear bumper breaks rear window in chassis");
+ Reset();for(auto &f:frames[0])f.name="chassis_hi";
+ atoms[0][1].flags=4;
+ frames[0][0].m[0]=0;frames[0][0].m[1]=1;frames[0][0].m[4]=-1;frames[0][0].m[5]=0;
+ frames[0][1].m[13]=-1;frames[0][2].m[13]=-1;frames[0][2].m[0]=-1;
+ *reinterpret_cast<uint32_t *>(cars.data()+0x34c+0x14)=3u<<24;
+ reinterpret_cast<void (*)(uint8_t *,int,int,bool)>(entries["_ZN11CAutomobile15SetBumperDamageEi7ePanelsb"])(cars.data(),13,6,false);
+ Check(shards==3&&Collapsed(atoms[0][0].geo,0)&&Collapsed(atoms[0][1].geo,0)&&Collapsed(atoms[0][2].geo,0),"severe rear crash shatters fixed rear quarters on two-door cars");
+ Check(atoms[1][0].geo==base&&!Collapsed(base,0),"rear crash preserves another car's glass");
+ Reset();dentmodel::Impact dent;dentmodel::Make({-.8f,.5f,-.3f},{1,0,0},13,dent);
+ Check(carglass::Dent(cars.data(),dent),"collision creates a private body dent");
+ const float dentedX=atoms[0][0].geo->vertices[4].x;
+ Check(dentedX>-.8f&&dentedX<=-.55f&&atoms[0][1].geo->vertices[4].x==dentedX,"visible and hidden damaged metal share dent");
+ Check(atoms[0][0].geo->vertices[0].x==-.8f&&atoms[1][0].geo==base,"glass vertices and other car stay rigid");
+ Bullet();Check(Collapsed(atoms[0][0].geo,0)&&atoms[0][0].geo->vertices[4].x==dentedX,"glass break preserves existing dent");
+ Check(carglass::Dent(cars.data(),dent)&&Collapsed(atoms[0][0].geo,0)&&atoms[0][0].geo->vertices[4].x>dentedX,"later dent preserves broken glass");
+ for(int i=0;i<20;i++)carglass::Dent(cars.data(),dent);
+ Check(atoms[0][0].geo->vertices[4].x>=-.55001f&&std::isfinite(atoms[0][0].geo->normals[4].x),"repeated dents remain capped with finite normals");
+ Check(atoms[0][0].geo->sphere[3]>=3.25f,"dented mesh has conservative bounds");
+ reinterpret_cast<void (*)(uint8_t *)>(entries["_ZN11CAutomobile3FixEv"])(cars.data());
+ Check(atoms[0][0].geo==base&&holders==0,"repair restores both dent and broken glass");
+ Reset();Bullet();failCreate=1;Check(!carglass::Dent(cars.data(),dent)&&Collapsed(atoms[0][0].geo,0)&&atoms[0][0].geo->vertices[4].x==-.8f,"failed dent transaction preserves existing glass and metal");
+ Reset();gConfig.carDeformation=false;Check(!carglass::Dent(cars.data(),dent)&&atoms[0][0].geo==base,"deformation off leaves geometry native");gConfig.carDeformation=true;
+ Reset();for(int i=0;i<16;i++)Check(carglass::Dent(cars.data()+i*0x6f0,dent),"bounded owner admits first sixteen deformed cars");
+ Check(!carglass::Dent(cars.data()+16*0x6f0,dent)&&atoms[16][0].geo==base,"seventeenth car waits without restoring visible dents");
+ reinterpret_cast<void (*)(uint8_t *)>(entries["_ZN11CAutomobile3FixEv"])(cars.data());
+ Check(carglass::Dent(cars.data()+16*0x6f0,dent),"repair frees a deformation slot");
+ Reset();carglass::Dent(cars.data(),dent);const float beforeSwing=atoms[0][0].geo->vertices[4].x;
+ frames[0][0].m[0]=0;frames[0][0].m[1]=1;frames[0][0].m[4]=-1;frames[0][0].m[5]=0;
+ Bullet();Check(atoms[0][0].geo->vertices[4].x==beforeSwing,"glass rebuild retains dent in a swinging part's local frame");
  Reset();Bullet();++carFlags[0];reinterpret_cast<void (*)(uint8_t *)>(entries["_ZN7CEntity14DeleteRwObjectEv"])(cars.data());Check(holders==0,"stale generation releases holders without restoring stale atomics");
  Reset();Bullet();reinterpret_cast<void (*)(uint8_t *)>(entries["_ZN7CEntity14DeleteRwObjectEv"])(cars.data());Check(holders==0&&nativeDelete>0,"clump deletion releases references and chains native");
  Reset();for(auto &c:clumps)c.atomics.clear();for(auto &row:atoms)for(auto &a:row)if(a.geo){DestroyGeo(a.geo);a.geo=nullptr;}DestroyGeo(base);base=nullptr;

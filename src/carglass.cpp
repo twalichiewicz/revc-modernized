@@ -37,8 +37,8 @@ void (*gSound)(uint8_t,const CVector &);
 int (*gDoorStatus)(void *,int),(*gPanelStatus)(void *,int);
 void (*gDoor)(uint8_t *,int,int,bool),(*gBumper)(uint8_t *,int,int,bool),(*gFix)(uint8_t *),(*gDelete)(uint8_t *);
 bool gReady;
-struct Part {void *atomic,*holder,*copy;size_t bytes;};
-struct Car {uint8_t *car;int ref,model;void *clump;uint8_t broken=0;std::vector<Part> parts;};
+struct Part {void *atomic,*holder,*copy;size_t bytes;std::vector<Vec3> offsets;};
+struct Car {uint8_t *car;int ref,model;void *clump;uint8_t broken=0;std::vector<Part> parts;bool dented=false;};
 std::vector<Car> gCars;
 size_t gBytes;
 bool Finite(Vec3 p){return std::isfinite(p.x)&&std::isfinite(p.y)&&std::isfinite(p.z);}
@@ -123,16 +123,28 @@ struct Mesh {
 };
 struct Pending {
  void *atomic=nullptr,*copy=nullptr,*holder=nullptr;Part *was=nullptr;size_t bytes=0;
+ std::vector<Vec3> offsets;
  ~Pending(){if(copy)rw.destroyGeometry(copy);if(holder)rw.destroyAtomic(holder);}
  Pending()=default;Pending(const Pending &)=delete;Pending &operator=(const Pending &)=delete;
- Pending(Pending &&p)noexcept:atomic(p.atomic),copy(p.copy),holder(p.holder),was(p.was),bytes(p.bytes){p.copy=p.holder=nullptr;}
+ Pending(Pending &&p)noexcept:atomic(p.atomic),copy(p.copy),holder(p.holder),was(p.was),bytes(p.bytes),offsets(std::move(p.offsets)){p.copy=p.holder=nullptr;}
 };
-void *Copy(const Mesh &m,uint8_t mask,size_t &bytes,size_t available)
+void *Copy(const Mesh &m,uint8_t mask,size_t &bytes,size_t available,const std::vector<Vec3> *offsets=nullptr)
 {
  const unsigned flags=rw.flags(m.geometry);const int uvs=rw.uvCount(m.geometry);
  if(uvs<0||uvs>8)return nullptr;
- bytes=size_t(m.nv)*(12+((flags&16)?12:0)+((flags&8)?4:0)+uvs*8)+size_t(m.nt)*8+4096;
+ const bool dented=offsets&&!offsets->empty();if(dented&&offsets->size()!=size_t(m.nv))return nullptr;
+ float expansion=dentmodel::kCap;
+ if(dented)for(auto d:*offsets){if(!Finite(d))return nullptr;const float len=std::sqrt(d.x*d.x+d.y*d.y+d.z*d.z);if(!std::isfinite(len))return nullptr;expansion=std::max(expansion,len);}
+ bytes=size_t(m.nv)*(12+((flags&16)?12:0)+((flags&8)?4:0)+uvs*8)+size_t(m.nt)*8+4096+(dented?offsets->size()*sizeof(Vec3):0);
  if(bytes>available)return nullptr;
+ // Allocate scratch before owning a native geometry, so bad_alloc cannot leak it.
+ std::vector<Vec3> normalSum(dented&&(flags&16)?size_t(m.nv):0);
+ std::vector<uint8_t> pinned(dented?size_t(m.nv):0);
+ if(dented)for(int t=0;t<m.nt;t++){
+  const auto &tri=m.t[t];auto material=rw.material(m.geometry,tri.material);if(!material)return nullptr;
+  const auto colour=rw.colour(material);if(!colour)return nullptr;
+  if(colour[3]<255)for(auto index:tri.v)pinned[index]=1;
+ }
  // Broken panes retain zero-area triangles to preserve contact ordinals.
  // librw's strip verifier skips those triangles, then exits because they
  // were not seen. Build private copies as triangle lists; the shared source
@@ -142,6 +154,11 @@ void *Copy(const Mesh &m,uint8_t mask,size_t &bytes,size_t available)
  void *morph=rw.morph(g,0),*sourceMorph=rw.morph(m.geometry,0);
  auto copy=[&](void *to,const void *from,size_t n){if(!to||!from)return false;std::memcpy(to,from,n);return true;};
  bool ok=morph&&copy(rw.vertices(morph),m.v,size_t(m.nv)*12);
+ auto positions=ok?static_cast<Vec3 *>(rw.vertices(morph)):nullptr;
+ if(ok&&dented)for(int i=0;i<m.nv;i++){
+  const auto d=(*offsets)[i];positions[i]={m.v[i].x+d.x,m.v[i].y+d.y,m.v[i].z+d.z};
+  if(!Finite(positions[i]))ok=false;
+ }
  if(ok&&(flags&16))ok=copy(rw.normals(morph),rw.normals(sourceMorph),size_t(m.nv)*12);
  if(ok&&(flags&8))ok=copy(rw.colours(g),rw.colours(m.geometry),size_t(m.nv)*4);
  for(int i=0;ok&&i<uvs;i++)ok=copy(rw.uv(g,i+1),rw.uv(m.geometry,i+1),size_t(m.nv)*8);
@@ -155,8 +172,21 @@ void *Copy(const Mesh &m,uint8_t mask,size_t &bytes,size_t available)
   triangles[i].material=0xffff;
   void *material=rw.material(m.geometry,m.t[i].material);ok=material&&rw.triangleMaterial(g,&triangles[i],material);
  }
- const void *sphere=ok?rw.sphere(sourceMorph):nullptr;
- if(sphere)rw.setSphere(morph,sphere);else ok=false;
+ if(ok&&!normalSum.empty()){
+  for(int t=0;t<m.nt;t++){
+   const auto &tri=triangles[t];const auto n=Cross(Sub(positions[tri.v[1]],positions[tri.v[0]]),Sub(positions[tri.v[2]],positions[tri.v[0]]));
+   for(auto index:tri.v){auto &sum=normalSum[index];sum={sum.x+n.x,sum.y+n.y,sum.z+n.z};}
+  }
+  auto normals=static_cast<Vec3 *>(rw.normals(morph));
+  for(int i=0;i<m.nv;i++)if(!pinned[i]){const auto n=normalSum[i];const float len=std::sqrt(n.x*n.x+n.y*n.y+n.z*n.z);if(std::isfinite(len)&&len>1e-8f)normals[i]={n.x/len,n.y/len,n.z/len};}
+ }
+ const auto sphere=ok?static_cast<const float *>(rw.sphere(sourceMorph)):nullptr;
+ if(sphere){
+  if(dented){float expanded[4];std::memcpy(expanded,sphere,sizeof expanded);expanded[3]+=expansion;
+   if(!Finite({expanded[0],expanded[1],expanded[2]})||!std::isfinite(expanded[3])||sphere[3]<0)ok=false;
+   else rw.setSphere(morph,expanded);
+  }else rw.setSphere(morph,sphere);
+ }else ok=false;
  if(ok)ok=rw.unlock(g)!=nullptr;
  if(!ok){rw.destroyGeometry(g);return nullptr;}return g;
 }
@@ -181,7 +211,7 @@ void Break(uint8_t *v,Pane pane,Vec3 hit)
   if(!changed)continue;
   if(pending.size()>=kMaxParts||car.parts.size()+newParts+(old==car.parts.end())>kMaxParts)return;
   pending.emplace_back();Pending &p=pending.back();p.atomic=atomic;p.was=old==car.parts.end()?nullptr:&*old;
-  p.copy=Copy(m,car.broken|bit,p.bytes,kBudget-gBytes-extra);if(!p.copy)return;
+  p.copy=Copy(m,car.broken|bit,p.bytes,kBudget-gBytes-extra,old==car.parts.end()?nullptr:&old->offsets);if(!p.copy)return;
   extra+=p.bytes;if(gBytes+extra>kBudget)return;
   if(!p.was){p.holder=rw.createAtomic();if(!p.holder)return;rw.setGeometry(p.holder,source,0);++newParts;}
  }
@@ -191,7 +221,7 @@ void Break(uint8_t *v,Pane pane,Vec3 hit)
  for(auto &p:pending){
   rw.setGeometry(p.atomic,p.copy,0);
   if(p.was){gBytes-=p.was->bytes;p.was->copy=p.copy;p.was->bytes=p.bytes;}
-  else{car.parts.push_back({p.atomic,p.holder,p.copy,p.bytes});p.holder=nullptr;}
+  else{car.parts.push_back({p.atomic,p.holder,p.copy,p.bytes,{}});p.holder=nullptr;}
   gBytes+=p.bytes;
  }
  car.broken|=bit;
@@ -206,6 +236,61 @@ void Break(uint8_t *v,Pane pane,Vec3 hit)
   }
  }
 }
+bool Deform(uint8_t *v,const dentmodel::Impact &hit)
+{
+ Collect();auto found=std::find_if(gCars.begin(),gCars.end(),[&](const Car &c){return c.car==v;});
+ if(found==gCars.end()&&gCars.size()>=kMaxCars)return false;
+ if((found==gCars.end()||!found->dented)&&std::count_if(gCars.begin(),gCars.end(),[](const Car &c){return c.dented;})>=16)return false;
+ Car fresh{v,Ref(v),game::EntityModel(v),game::EntityClump(v),0,{}};
+ Car &car=found==gCars.end()?fresh:*found;if(found==gCars.end())car.parts.reserve(kMaxParts);
+ Objects objects;rw.atomics(car.clump,Gather,&objects);if(!objects.valid)return false;
+ std::vector<Pending> pending;pending.reserve(kMaxParts);size_t extra=0,newParts=0;
+ for(size_t i=0;i<objects.n;i++){
+  void *atomic=objects.a[i];auto old=std::find_if(car.parts.begin(),car.parts.end(),[&](const Part &p){return p.atomic==atomic;});
+  if(old!=car.parts.end()&&rw.geometry(atomic)!=old->copy)return false;
+  void *source=old==car.parts.end()?rw.geometry(atomic):rw.geometry(old->holder);
+  Mesh m;if(!m.Read(source,atomic,rw.root(car.clump))||!dentmodel::Body(m.name))continue;
+  Vec3 origin,basis[3];if(!InCar(m.frame,m.root,{0,0,0},origin))continue;
+  bool valid=true;for(int a=0;a<3;a++){Vec3 unit{float(a==0),float(a==1),float(a==2)};valid&=InCar(m.frame,m.root,unit,basis[a]);}
+  if(!valid)continue;
+  float toCar[16]{};for(int a=0;a<3;a++){auto b=Sub(basis[a],origin);toCar[4*a]=b.x;toCar[4*a+1]=b.y;toCar[4*a+2]=b.z;}
+  toCar[12]=origin.x;toCar[13]=origin.y;toCar[14]=origin.z;Vec3 probe;
+  if(!dentmodel::Local(toCar,origin,false,probe))continue;
+  std::vector<Vec3> offsets=old==car.parts.end()?std::vector<Vec3>(size_t(m.nv)):old->offsets;
+  if(offsets.empty())offsets.resize(size_t(m.nv));if(offsets.size()!=size_t(m.nv))return false;
+  std::vector<uint8_t> pinned(size_t(m.nv),0);
+  for(int t=0;t<m.nt;t++){
+   const auto &tri=m.t[t];auto material=rw.material(m.geometry,tri.material);if(!material)return false;
+   auto colour=rw.colour(material);if(!colour)return false;
+   if(colour[3]<255)for(auto index:tri.v)pinned[index]=1;
+  }
+  bool changed=false;
+  for(int n=0;n<m.nv;n++)if(!pinned[n]){
+   const auto start=Transform(toCar,m.v[n]);const Vec3 local{m.v[n].x+offsets[n].x,m.v[n].y+offsets[n].y,m.v[n].z+offsets[n].z};
+   const auto current=Transform(toCar,local),next=dentmodel::Move(start,current,hit);
+   if(std::fabs(next.x-current.x)+std::fabs(next.y-current.y)+std::fabs(next.z-current.z)<1e-6f)continue;
+   Vec3 result;if(!dentmodel::Local(toCar,next,false,result))return false;
+   offsets[n]=Sub(result,m.v[n]);changed=true;
+  }
+  if(!changed)continue;
+  if(pending.size()>=kMaxParts||car.parts.size()+newParts+(old==car.parts.end())>kMaxParts)return false;
+  pending.emplace_back();auto &p=pending.back();p.atomic=atomic;p.was=old==car.parts.end()?nullptr:&*old;p.offsets=std::move(offsets);
+  p.copy=Copy(m,car.broken,p.bytes,kBudget-gBytes-extra,&p.offsets);if(!p.copy)return false;extra+=p.bytes;
+  if(!p.was){p.holder=rw.createAtomic();if(!p.holder)return false;rw.setGeometry(p.holder,source,0);++newParts;}
+ }
+ if(pending.empty())return false;
+ if(found==gCars.end()){gCars.push_back(std::move(fresh));found=gCars.end()-1;}
+ for(auto &p:pending){
+  rw.setGeometry(p.atomic,p.copy,0);
+  if(p.was){gBytes-=p.was->bytes;p.was->copy=p.copy;p.was->bytes=p.bytes;p.was->offsets=std::move(p.offsets);}
+  else{found->parts.push_back({p.atomic,p.holder,p.copy,p.bytes,std::move(p.offsets)});p.holder=nullptr;}
+  gBytes+=p.bytes;
+ }
+ found->dented=true;
+ Log("car deformation: model %d dent at %.2f %.2f %.2f, depth %.2f m (%zu private atomics; %zu KiB total)",
+     found->model,hit.point.x,hit.point.y,hit.point.z,hit.depth,found->parts.size(),gBytes/1024);
+ return true;
+}
 void Door(uint8_t *v,int node,int door,bool noFlying)
 {
  gDoor(v,node,door,noFlying);
@@ -216,11 +301,22 @@ void Bumper(uint8_t *v,int node,int panel,bool noFlying)
 {
  gBumper(v,node,panel,noFlying);
  if(gReady&&gConfig.carGlass&&panel==6&&Eligible(v)&&gPanelStatus(v+kDamage,panel)==3)
-  try{Break(v,Pane::Rear,Vec3{game::EntityPos(v).x,game::EntityPos(v).y,game::EntityPos(v).z});}catch(const std::bad_alloc &){}
+  try{
+   const auto p=game::EntityPos(v);const Vec3 hit{p.x,p.y,p.z};
+   // Two-door cars have fixed quarter glass with no rear door damage callback.
+   for(auto pane:{Pane::Rear,Pane::LeftRear,Pane::RightRear})Break(v,pane,hit);
+  }catch(const std::bad_alloc &){}
 }
 void Fix(uint8_t *v){Forget(v,true);gFix(v);}
 void Delete(uint8_t *v){Forget(v,false);gDelete(v);}
 } // namespace
+bool Dent(uint8_t *v,const dentmodel::Impact &hit)
+{
+ dentmodel::Impact checked;
+ if(!gReady||!gConfig.carDeformation||!Eligible(v)||game::EntityModel(v)==162||
+    (game::EntityFlags(v)&(1u<<27))||!dentmodel::Make(hit.point,hit.inward,3+hit.depth/.018f,checked))return false;
+ try{return Deform(v,checked);}catch(const std::bad_alloc &){return false;}
+}
 void Bullet(uint8_t *v,const void *atomic,int triangle,Vec3 hit,Vec3 normal)
 {
  if(!gReady||!gConfig.carGlass||!Eligible(v)||(game::EntityFlags(v)&(1u<<17))||!Finite(hit)||!Finite(normal))return;
@@ -232,7 +328,7 @@ void Bullet(uint8_t *v,const void *atomic,int triangle,Vec3 hit,Vec3 normal)
 }
 bool Install()
 {
- if(gReady||!gConfig.carGlass)return true;
+ if(gReady||(!gConfig.carGlass&&!gConfig.carDeformation))return true;
 #define BIND(v,s) v=reinterpret_cast<decltype(v)>(dlsym(RTLD_MAIN_ONLY,s));if(!v)return false
  BIND(gPool,"_ZN6CPools15ms_pVehiclePoolE");
  BIND(rw.atomics,"_Z20RpClumpForAllAtomicsPN2rw5ClumpEPFPNS_6AtomicES3_PvES4_");
@@ -262,7 +358,8 @@ bool Install()
 #undef CHAIN
  gReady=gDoor&&gBumper&&gFix&&gDelete;
  if(!gReady)Log("car glass: native lifecycle hooks missing; re-run install.sh");
- else Log("car glass: side/rear panes enabled; windscreen damage stays native");
+ else if(gConfig.carGlass)Log("car glass: side/rear panes enabled; windscreen damage stays native");
+ else Log("car meshes: private body geometry enabled");
  return gReady;
 }
 } // namespace carglass

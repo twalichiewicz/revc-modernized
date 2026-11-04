@@ -17,7 +17,9 @@ Pane Classify(const char *name,Vec3 p,Vec3 n,uint8_t alpha,const char *texture)
  }
  if(std::strstr(name,"_lo")||std::strstr(name,"_vlo"))return Pane::None;
  const float x=std::fabs(n.x),y=std::fabs(n.y),z=std::fabs(n.z);
- if(x+y<1e-8f||x+y<.25f*z)return Pane::None;
+ // The Deluxo's raked rear glass is only 11–13 degrees above horizontal.
+ // Retain it while excluding horizontal roofs and degenerate faces.
+ if(x+y<1e-8f||x+y<.15f*z)return Pane::None;
  if(std::strstr(name,"windscreen"))return Pane::Front;
  if(std::strstr(name,"door_lf"))return Pane::LeftFront;
  if(std::strstr(name,"door_rf"))return Pane::RightFront;

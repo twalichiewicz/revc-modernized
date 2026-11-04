@@ -50,6 +50,8 @@ int main()
   if(!layout){printf("FAIL: %s exceeds geometry copy bound\n",name.c_str());++fail;}
   int count=0;for(int i=0;i<6;i++)count+=(panes>>i)&1;windows+=count;
   if((name=="admiral"||name=="police"||name=="infernus"||name=="voodoo"||name=="stretch")&&!(panes&glassmodel::Bit(glassmodel::Pane::Rear)))standardMissing.insert(name);
+  if(name=="deluxo")for(auto pane:{glassmodel::Pane::Rear,glassmodel::Pane::LeftRear,glassmodel::Pane::RightRear})
+   if(!(panes&glassmodel::Bit(pane))){printf("FAIL: Deluxo rear/quarter pane %u unavailable for breakage\n",unsigned(pane));++fail;}
   printf("glass assets: %-10s panes %02x (%d), translucent %d/%d faces\n",name.c_str(),panes,count,glass,total);
  }
  for(auto &name:standardMissing){printf("FAIL: %s rear pane not classified\n",name.c_str());++fail;}

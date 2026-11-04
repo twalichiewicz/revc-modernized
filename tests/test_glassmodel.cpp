@@ -17,6 +17,9 @@ int main()
  check(Classify("chassis_vlo",{0,-1,.5f},{0,1,0},160)==Pane::None,"LOD untouched");
  check(Classify("bump_rear_hi_ok",{0,-1,.5f},{0,1,0},160)==Pane::None,"translucent bumper stays");
  check(Classify("chassis_hi",{0,0,.5f},{0,0,1},160)==Pane::None,"horizontal sunroof stays");
+ check(Classify("chassis_hi",{-.375f,-1.515f,.621f},{-.007f,-.046f,.240f},102)==Pane::Rear,"actual shallow Deluxo rear glass");
+ check(Classify("chassis_hi",{-.193f,-2.207f,.474f},{0,-.162f,.769f},102)==Pane::Rear,"actual lower Deluxo rear glass");
+ check(Classify("chassis_hi",{0,-1,.5f},{0,.05f,1},160)==Pane::None,"nearly horizontal roof remains excluded");
  check(Classify("chassis_hi",{0,-1,.5f},{0,0,0},160)==Pane::None,"degenerate triangle");
  check(Classify(nullptr,{0,-1,.5f},{0,1,0},160)==Pane::None,"missing frame");
  check(Classify("chassis_hi",{0,-1,.5f},{0,1,0},0)==Pane::None,"invisible material");

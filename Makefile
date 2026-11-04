@@ -33,6 +33,7 @@ PLUGIN += src/jetboardingpose.cpp
 PLUGIN += src/handlingmodel.cpp src/handling.cpp src/drivelog.cpp src/headbalance.cpp
 PLUGIN += src/glassmodel.cpp src/carglass.cpp
 PLUGIN += src/partsmodel.cpp src/carparts.cpp
+PLUGIN += src/dentmodel.cpp src/cardeform.cpp
 GUNS      ?= $(wildcard assets/guns/*.vmg)  # every gun built (GUNS="..." to build in only some)
 CXXFLAGS  += -I$(BUILD)
 BLENDER   ?= blender
@@ -125,8 +126,8 @@ $(BUILD)/test_handlingmodel: tests/test_handlingmodel.cpp src/handlingmodel.cpp 
 $(BUILD)/test_glassmodel: tests/test_glassmodel.cpp src/glassmodel.cpp src/glassmodel.h | $(BUILD)
 	$(CXX) $(CXXFLAGS) -Isrc -o $@ tests/test_glassmodel.cpp src/glassmodel.cpp
 
-$(BUILD)/test_carglass: tests/test_carglass.cpp src/carglass.cpp src/carglass.h src/glassmodel.cpp $(wildcard src/*.h) | $(BUILD)
-	$(CXX) $(CXXFLAGS) -Isrc -o $@ tests/test_carglass.cpp src/glassmodel.cpp
+$(BUILD)/test_carglass: tests/test_carglass.cpp src/carglass.cpp src/carglass.h src/glassmodel.cpp src/dentmodel.cpp $(wildcard src/*.h) | $(BUILD)
+	$(CXX) $(CXXFLAGS) -Isrc -o $@ tests/test_carglass.cpp src/glassmodel.cpp src/dentmodel.cpp
 
 $(BUILD)/test_partsmodel: tests/test_partsmodel.cpp src/partsmodel.cpp src/partsmodel.h | $(BUILD)
 	$(CXX) $(CXXFLAGS) -Isrc -o $@ tests/test_partsmodel.cpp src/partsmodel.cpp
@@ -134,13 +135,13 @@ $(BUILD)/test_partsmodel: tests/test_partsmodel.cpp src/partsmodel.cpp src/parts
 $(BUILD)/test_carparts: tests/test_carparts.cpp tests/nativepartdamagearm.h tests/nativeweavearm.h src/carparts.cpp src/partsmodel.cpp $(wildcard src/*.h) | $(BUILD)
 	$(CXX) $(CXXFLAGS) -Isrc -o $@ tests/test_carparts.cpp src/partsmodel.cpp
 
-test-game-assets: $(BUILD)/test_carparts
+test-game-assets: $(BUILD)/test_carparts $(BUILD)/test_cardeform
 
 # Optional real mesh-builder regression, using an explicitly supplied NULL librw build.
 .PHONY: test-carglass-rw
 test-carglass-rw: | $(BUILD)
 	@test -n "$(LIBRW_ROOT)" -a -n "$(LIBRW_STATIC)" || { echo 'Set LIBRW_ROOT and LIBRW_STATIC to a NULL-backend librw source/build'; exit 2; }
-	$(CXX) $(CXXFLAGS) -DRW_NULL -isystem "$(LIBRW_ROOT)" -Isrc -o $(BUILD)/test_carglass_rw tests/test_carglass_rw.cpp src/glassmodel.cpp "$(LIBRW_STATIC)"
+	$(CXX) $(CXXFLAGS) -DRW_NULL -isystem "$(LIBRW_ROOT)" -Isrc -o $(BUILD)/test_carglass_rw tests/test_carglass_rw.cpp src/glassmodel.cpp src/dentmodel.cpp "$(LIBRW_STATIC)"
 	$(BUILD)/test_carglass_rw
 
 $(BUILD)/test_glass_assets: tests/test_glass_assets.cpp src/glassmodel.cpp tools/bake/visualmodel.cpp tools/bake/gamefiles.cpp src/mapdata.cpp $(wildcard src/*.h tools/bake/*.h) | $(BUILD)
@@ -338,6 +339,7 @@ $(BUILD)/test_mapassets: tests/test_mapassets.cpp tools/bake/bake.cpp $(GAMEFILE
 test-game-assets: $(BUILD)/test_glass_assets $(BUILD)/test_estateassets $(BUILD)/test_handling_assets $(BUILD)/test_mapassets $(BUILD)/test_shotcollision $(BUILD)/test_rotorassets $(BUILD)/test_planeflight_assets $(BUILD)/test_flightpath_assets $(BUILD)/test_planeflight_nativecaller $(BUILD)/test_airportjets_assets $(BUILD)/test_planestream $(BUILD)/test_airportjetmodel $(BUILD)/test_airworld_native $(BUILD)/test_learjetseat_assets $(BUILD)/test_jetwash_assets $(BUILD)/test_trafficweave $(BUILD)/test_towercollision_assets $(BUILD)/test_towercollision_native $(BUILD)/test_jetboarding_assets $(BUILD)/test_jetboarding_native $(BUILD)/test_jetshadow_assets $(BUILD)/test_jetshadow_native $(BUILD)/test_jetboardingpose $(BUILD)/test_airportjetspawners_native $(BUILD)/test_jetcrouchgait
 	GAMEDATA="$(GAMEDATA)" $(BUILD)/test_glass_assets
 	MACVC_NATIVE="$(MACVC_NATIVE)" $(BUILD)/test_carparts --native
+	MACVC_NATIVE="$(MACVC_NATIVE)" $(BUILD)/test_cardeform --native
 	GAMEDATA="$(GAMEDATA)" $(BUILD)/test_estateassets
 	GAMEDATA="$(GAMEDATA)" $(BUILD)/test_handling_assets
 	GAMEDATA="$(GAMEDATA)" $(BUILD)/test_mapassets
@@ -432,7 +434,7 @@ $(BUILD)/test_trafficweave: tests/test_trafficweave.cpp tests/nativeweavearm.h s
 
 FEEDBACK_TESTS += test_handlingmodel test_handlinghook test_drivelog test_headbalance
 FEEDBACK_TESTS += test_glassmodel test_carglass
-FEEDBACK_TESTS += test_partsmodel test_carparts
+FEEDBACK_TESTS += test_partsmodel test_carparts test_dentmodel test_cardeform
 
 test-feedback: $(addprefix $(BUILD)/,$(FEEDBACK_TESTS))
 	@set -e; for test in $(FEEDBACK_TESTS); do $(BUILD)/$$test; done
@@ -735,3 +737,9 @@ clean:
 	rm -rf $(BUILD)/*.dylib $(BUILD)/vcmm-* $(BUILD)/test_*
 
 .PHONY: guns gun viewmodel FORCE all test preview clean
+
+$(BUILD)/test_dentmodel: tests/test_dentmodel.cpp src/dentmodel.cpp src/dentmodel.h | $(BUILD)
+	$(CXX) $(CXXFLAGS) -Isrc -o $@ tests/test_dentmodel.cpp src/dentmodel.cpp
+
+$(BUILD)/test_cardeform: tests/test_cardeform.cpp src/cardeform.cpp src/dentmodel.cpp src/partsmodel.cpp $(wildcard src/*.h) | $(BUILD)
+	$(CXX) $(CXXFLAGS) -Isrc -o $@ tests/test_cardeform.cpp src/dentmodel.cpp src/partsmodel.cpp
