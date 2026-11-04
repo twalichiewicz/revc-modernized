@@ -174,6 +174,7 @@ DEFAULT_HOOKS = [
     "_ZN11CAutomobile14ProcessControlEv",
     "_ZN11CAutomobile13VehicleDamageEft",
     "_ZN14CDamageManager11ApplyDamageE10tComponentff",
+    "_ZN13cTransmission26CalculateDriveAccelerationERKfRhRfS1_b",
     "_ZN9CPhysical14ApplyCollisionEPS_R9CColPointRfS3_",
     "_ZN9CPhysical14ApplyCollisionER9CColPointRf",
     "_ZN9CPhysical17ApplyCollisionAltEP7CEntityR9CColPointRfR7CVectorS6_",

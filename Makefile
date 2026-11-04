@@ -33,7 +33,8 @@ PLUGIN += src/jetboardingpose.cpp
 PLUGIN += src/handlingmodel.cpp src/handling.cpp src/drivelog.cpp src/headbalance.cpp
 PLUGIN += src/glassmodel.cpp src/carglass.cpp
 PLUGIN += src/partsmodel.cpp src/carparts.cpp
-PLUGIN += src/dentmodel.cpp src/cardeform.cpp
+PLUGIN += src/dentmodel.cpp src/carimpact.cpp
+PLUGIN += src/mechanicalmodel.cpp src/carmechanics.cpp
 GUNS      ?= $(wildcard assets/guns/*.vmg)  # every gun built (GUNS="..." to build in only some)
 CXXFLAGS  += -I$(BUILD)
 BLENDER   ?= blender
@@ -135,7 +136,7 @@ $(BUILD)/test_partsmodel: tests/test_partsmodel.cpp src/partsmodel.cpp src/parts
 $(BUILD)/test_carparts: tests/test_carparts.cpp tests/nativepartdamagearm.h tests/nativeweavearm.h src/carparts.cpp src/partsmodel.cpp $(wildcard src/*.h) | $(BUILD)
 	$(CXX) $(CXXFLAGS) -Isrc -o $@ tests/test_carparts.cpp src/partsmodel.cpp
 
-test-game-assets: $(BUILD)/test_carparts $(BUILD)/test_cardeform
+test-game-assets: $(BUILD)/test_carparts $(BUILD)/test_cardeform $(BUILD)/test_mechanical_assets $(BUILD)/test_mechanical_native
 
 # Optional real mesh-builder regression, using an explicitly supplied NULL librw build.
 .PHONY: test-carglass-rw
@@ -340,6 +341,8 @@ test-game-assets: $(BUILD)/test_glass_assets $(BUILD)/test_estateassets $(BUILD)
 	GAMEDATA="$(GAMEDATA)" $(BUILD)/test_glass_assets
 	MACVC_NATIVE="$(MACVC_NATIVE)" $(BUILD)/test_carparts --native
 	MACVC_NATIVE="$(MACVC_NATIVE)" $(BUILD)/test_cardeform --native
+	GAMEDATA="$(GAMEDATA)" $(BUILD)/test_mechanical_assets
+	MACVC_NATIVE="$(MACVC_NATIVE)" $(BUILD)/test_mechanical_native
 	GAMEDATA="$(GAMEDATA)" $(BUILD)/test_estateassets
 	GAMEDATA="$(GAMEDATA)" $(BUILD)/test_handling_assets
 	GAMEDATA="$(GAMEDATA)" $(BUILD)/test_mapassets
@@ -434,7 +437,7 @@ $(BUILD)/test_trafficweave: tests/test_trafficweave.cpp tests/nativeweavearm.h s
 
 FEEDBACK_TESTS += test_handlingmodel test_handlinghook test_drivelog test_headbalance
 FEEDBACK_TESTS += test_glassmodel test_carglass
-FEEDBACK_TESTS += test_partsmodel test_carparts test_dentmodel test_cardeform
+FEEDBACK_TESTS += test_partsmodel test_carparts test_dentmodel test_cardeform test_mechanicalmodel test_carmechanics
 
 test-feedback: $(addprefix $(BUILD)/,$(FEEDBACK_TESTS))
 	@set -e; for test in $(FEEDBACK_TESTS); do $(BUILD)/$$test; done
@@ -741,5 +744,17 @@ clean:
 $(BUILD)/test_dentmodel: tests/test_dentmodel.cpp src/dentmodel.cpp src/dentmodel.h | $(BUILD)
 	$(CXX) $(CXXFLAGS) -Isrc -o $@ tests/test_dentmodel.cpp src/dentmodel.cpp
 
-$(BUILD)/test_cardeform: tests/test_cardeform.cpp src/cardeform.cpp src/dentmodel.cpp src/partsmodel.cpp $(wildcard src/*.h) | $(BUILD)
+$(BUILD)/test_cardeform: tests/test_cardeform.cpp src/carimpact.cpp src/dentmodel.cpp src/partsmodel.cpp $(wildcard src/*.h) | $(BUILD)
 	$(CXX) $(CXXFLAGS) -Isrc -o $@ tests/test_cardeform.cpp src/dentmodel.cpp src/partsmodel.cpp
+
+$(BUILD)/test_mechanicalmodel: tests/test_mechanicalmodel.cpp src/mechanicalmodel.cpp src/mechanicalmodel.h | $(BUILD)
+	$(CXX) $(CXXFLAGS) -Isrc -o $@ tests/test_mechanicalmodel.cpp src/mechanicalmodel.cpp
+
+$(BUILD)/test_carmechanics: tests/test_carmechanics.cpp src/carmechanics.cpp src/mechanicalmodel.cpp src/partsmodel.cpp $(wildcard src/*.h) | $(BUILD)
+	$(CXX) $(CXXFLAGS) -Isrc -o $@ tests/test_carmechanics.cpp src/mechanicalmodel.cpp src/partsmodel.cpp
+
+$(BUILD)/test_mechanical_assets: tests/test_mechanical_assets.cpp src/mechanicalmodel.cpp tools/bake/gamefiles.cpp $(wildcard src/*.h tools/bake/*.h) | $(BUILD)
+	$(CXX) $(CXXFLAGS) -Isrc -o $@ tests/test_mechanical_assets.cpp src/mechanicalmodel.cpp tools/bake/gamefiles.cpp -lz
+
+$(BUILD)/test_mechanical_native: tests/test_mechanical_native.cpp tests/test_carmechanics.cpp tests/nativejetshadowarm.h tests/nativeweavearm.h src/carmechanics.cpp src/mechanicalmodel.cpp src/partsmodel.cpp $(wildcard src/*.h) | $(BUILD)
+	$(CXX) $(CXXFLAGS) -Isrc -o $@ tests/test_mechanical_native.cpp src/mechanicalmodel.cpp src/partsmodel.cpp

@@ -1,4 +1,5 @@
-#include "cardeform.h"
+#include "carimpact.h"
+#include "carmechanics.h"
 #include "carglass.h"
 #include "partsmodel.h"
 #include "config.h"
@@ -10,7 +11,7 @@
 #include <cmath>
 #include <cstring>
 #include <dlfcn.h>
-namespace cardeform {namespace {
+namespace carimpact {namespace {
 struct Point {CVector p;uint32_t padA;CVector n;uint32_t padB;uint8_t surfaceA,pieceA,surfaceB,pieceB;float depth;};
 static_assert(sizeof(Point)==0x28);
 constexpr size_t kStride=0x6f0,kSlots=256;
@@ -39,10 +40,11 @@ struct History {Identity id;Contact hit;std::array<partsmodel::Episode,5> region
 std::array<History,kSlots> gHistory;
 History &Record(const Identity &id){auto &h=gHistory[size_t(id.ref>>8)];if(!Same(h.id,id)){h={};h.id=id;}return h;}
 struct Capture {Identity id;Contact hit;};
+bool Enabled(){return gConfig.carDeformation||gConfig.carMechanics;}
 Capture Preview(uint8_t *v,uint8_t *other,const Point &p,bool secondary=false,bool knownOther=true)
 {
- Capture c;if(!gReady||!gConfig.carDeformation||!game::api.timeMs||!Identify(v,c.id)||!Eligible(c.id))return c;
- const auto piece=secondary?p.pieceB:p.pieceA;if((piece>=1&&piece<=4)||piece>17)return c;
+ Capture c;if(!gReady||!Enabled()||!game::api.timeMs||!Identify(v,c.id)||!Eligible(c.id))return c;
+ const auto piece=secondary?p.pieceB:p.pieceA;if(piece>17)return c;
  const auto matrix=reinterpret_cast<const float *>(v+8);const float sign=secondary?-1.0f:1.0f;
  Vec3 point,inward;if(!dentmodel::Local(matrix,{p.p.x,p.p.y,p.p.z},false,point)||
   !dentmodel::Local(matrix,{sign*p.n.x,sign*p.n.y,sign*p.n.z},true,inward))return c;
@@ -73,7 +75,7 @@ bool Alt(uint8_t *v,uint8_t *other,Point &p,float &a,CVector &b,CVector &c)
 }
 struct Controller;thread_local Controller *gController;
 struct Controller {Controller *previous=gController;Identity id;bool owned=false;
- explicit Controller(uint8_t *v){owned=gReady&&gConfig.carDeformation&&Identify(v,id)&&Eligible(id);gController=this;}
+ explicit Controller(uint8_t *v){owned=gReady&&Enabled()&&Identify(v,id)&&Eligible(id);gController=this;}
  ~Controller(){gController=previous;}
 };
 struct DamageScope;thread_local DamageScope *gDamaging;
@@ -94,25 +96,30 @@ bool Matches(uint8_t *v,const Contact &hit,uint32_t now)
 }
 void Damage(uint8_t *v,float amount,uint16_t component)
 {
- Identity id;const bool owned=gReady&&gConfig.carDeformation&&amount==0&&game::api.timeMs&&gController&&gController->owned&&
+ Identity id;const bool owned=gReady&&Enabled()&&amount==0&&game::api.timeMs&&gController&&gController->owned&&
   Identify(v,id)&&Same(id,gController->id)&&Eligible(id);
  if(!owned)Invalidate(v);
- DamageScope scope(id,owned);Contact hit;History *history=nullptr;bool contact=false;dentmodel::Impact impact;
+ DamageScope scope(id,owned);Contact hit;History *history=nullptr;bool contact=false,matched=false;float severity=0;dentmodel::Impact impact;
  const float health=owned?*reinterpret_cast<const float *>(v+0x2a0):0;std::array<uint8_t,24> before{};
  if(owned){
   history=&Record(id);hit=history->hit;history->hit.valid=false;memcpy(before.data(),v+0x34c,before.size());
   const uint32_t now=*game::api.timeMs;
   if(Matches(v,hit,now)){
-   contact=partsmodel::Contact(history->regions[dentmodel::Region(hit.point,hit.inward)],now);
    const float mass=*reinterpret_cast<const float *>(v+0xcc);
-   contact=contact&&std::isfinite(mass)&&mass>=100&&mass<=1000000&&dentmodel::Make(hit.point,hit.inward,hit.force/mass*50,impact);
+   matched=std::isfinite(mass)&&mass>=100&&mass<=1000000;
+   if(matched){severity=hit.force/mass*50;matched=std::isfinite(severity);}
+   // Collision pieces13..16 are tyres; ApplyDamage components1..4 are a
+   // separate numbering scheme. Body collision pieces1..4 remain deformable.
+   if(gConfig.carDeformation&&!(hit.piece>=13&&hit.piece<=16))
+    contact=partsmodel::Contact(history->regions[dentmodel::Region(hit.point,hit.inward)],now)&&matched&&dentmodel::Make(hit.point,hit.inward,severity,impact);
   }
  }
  gDamage(v,amount,component);
- if(!contact||!scope.valid||!Current(id)||!Eligible(id)||!gConfig.carDeformation)return;
+ if(!matched||!scope.valid||!Current(id)||!Eligible(id)||!Enabled())return;
  const float after=*reinterpret_cast<const float *>(v+0x2a0);
  if(!(std::isfinite(health)&&std::isfinite(after)&&after<health)&&!std::memcmp(before.data(),v+0x34c,before.size()))return;
- if(carglass::Dent(v,impact))partsmodel::Commit(history->regions[dentmodel::Region(hit.point,hit.inward)]);
+ if(gConfig.carMechanics)carmechanics::Collision(v,{hit.point,hit.inward,severity,hit.piece});
+ if(contact&&gConfig.carDeformation&&Current(id)&&carglass::Dent(v,impact))partsmodel::Commit(history->regions[dentmodel::Region(hit.point,hit.inward)]);
 }
 void Forget(uint8_t *v){Invalidate(v);Identity id;if(Identify(v,id))gHistory[size_t(id.ref>>8)]={};}
 void Fix(uint8_t *v){Forget(v);gFix(v);}
@@ -120,9 +127,9 @@ void Delete(uint8_t *v){Forget(v);gDelete(v);}
 } // namespace
 bool Install()
 {
- if(gReady||!gConfig.carDeformation)return true;
+ if(gReady||!Enabled())return true;
  gPool=reinterpret_cast<void **>(dlsym(RTLD_MAIN_ONLY,"_ZN6CPools15ms_pVehiclePoolE"));
- if(!gPool||!game::api.PoolsGetVehicle||!game::api.timeMs||!carglass::Install())return false;
+ if(!gPool||!game::api.PoolsGetVehicle||!game::api.timeMs||(gConfig.carDeformation&&!carglass::Install()))return false;
 #define CHAIN(v,s,f) if(!v)v=reinterpret_cast<decltype(v)>(hooks::Chain(s,reinterpret_cast<void *>(f)))
  CHAIN(gPair,"_ZN9CPhysical14ApplyCollisionEPS_R9CColPointRfS3_",Pair);
  CHAIN(gSingle,"_ZN9CPhysical14ApplyCollisionER9CColPointRf",Single);
@@ -131,7 +138,7 @@ bool Install()
  CHAIN(gFix,"_ZN11CAutomobile3FixEv",Fix);CHAIN(gDelete,"_ZN7CEntity14DeleteRwObjectEv",Delete);
 #undef CHAIN
  gReady=gPair&&gSingle&&gAlt&&gControl&&gDamage&&gFix&&gDelete;
- if(gReady)Log("car deformation: localized native collision dents enabled; 16 cars, 25 cm cap");
+ if(gReady){Log("car impacts: certified native collision damage enabled");if(gConfig.carDeformation)Log("car deformation: localized native collision dents enabled; 16 cars, 25 cm cap");}
  return gReady;
 }
 }

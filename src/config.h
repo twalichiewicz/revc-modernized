@@ -38,6 +38,7 @@ struct Config {
 	bool carGlass = true;       // side/rear windows shatter independently; windscreen stays native (#37)
 	bool carParts = true;       // native parts loosen, swing and detach on stronger later hits (#37)
 	bool carDeformation = true; // localized capped dents in private body meshes (#37)
+	bool carMechanics = true;   // engine/cooling and individual wheel damage affect driving (#37)
 	bool rainVehicles = true;   // soaked ground bogs cars down; aircraft thrown about in the rain (#32)
 	bool rainHaze = true;       // heavy rain closes the view in: the fog nearer, the far clip shorter (#32)
 	bool rainSplashes = true;   // splashes on the wet ground and car roofs, as the rain is heavy (#32)

@@ -79,7 +79,9 @@ off.
 
 ## Non-goals
 
-- Damage that changes how a car drives: bent wheels, a dragging bumper. Maybe later, after deformation.
+- A dragging bumper or detailed material/penetration simulation. Engine/cooling and wheel performance
+  damage was subsequently brought into scope by the user's 2026-11-04 clarification; see the
+  [mechanical damage design](2026-11-04-car-mechanics-design.md).
 - New car models or interiors.
 - Changing traffic AI.
 
@@ -122,3 +124,15 @@ Localized visual deformation is implemented and installed behind `CarDeformation
 broken glass together and restore on repair. The full suite, native Single collision, real mesh builder,
 native dynamic-shadow CPU consumer, sanitizers and independent review pass. Live dent presentation,
 rear-glass confirmation and severity tuning remain to be checked, so #37 stays open.
+
+The user subsequently confirmed visible deformation and requested mechanical consequences, selecting
+mechanical damage before stronger crumpling. Independent engine/cooling/four-wheel states and native
+performance effects are implemented and installed behind `CarMechanics`; see
+[mechanical design](2026-11-04-car-mechanics-design.md) and
+[verification record](../plans/2026-11-04-car-mechanics.md). Collision routing now correctly distinguishes
+body pieces1..4 from tyre pieces13..16. Engine damage reduces drive, cooling breaches leak and overheat,
+and wheel assemblies change their own alignment/grip/braking. Native repair restores systems.
+Full/native/asset/sanitizer checks pass; independent review has no blocking findings. Initial volumes
+are coarse and collision-driven; detailed internals, projectiles, extra systems and persistence are
+subsequent work toward the user's longer-term localized-system simulation. Live performance tuning
+and a documented slow-update thermal edge remain outstanding.

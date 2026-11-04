@@ -102,7 +102,8 @@
 #include "shotcollision.h"
 #include "carglass.h"
 #include "carparts.h"
-#include "cardeform.h"
+#include "carimpact.h"
+#include "carmechanics.h"
 #include "planeflight.h"
 #include "flightmodel.h"
 #include "airportjets.h"
@@ -811,8 +812,10 @@ __attribute__((constructor)) void Init()
 	handling::Install();
 	if (!carparts::Install())
 		Log("car parts: native collision hook missing; re-run install.sh");
-	if (!cardeform::Install())
-		Log("car deformation: native collision hooks missing; re-run install.sh");
+	if (!carmechanics::Install())
+		Log("car mechanics: native performance hooks missing; re-run install.sh");
+	if (!carimpact::Install())
+		Log("car impacts: native collision hooks missing; re-run install.sh");
 	if (!rtshadows::Install())
 		Log("rt shadows: no re3_debug hook (re-run install.sh); their reports stay in the terminal");
 }
