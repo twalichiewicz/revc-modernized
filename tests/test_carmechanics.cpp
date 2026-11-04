@@ -22,14 +22,14 @@ Control control,fix,removeRw;void (*restart)();Calc calc;WheelFn wheel;
 alignas(16) uint8_t cars[2][0x6f0]{},pool[24]{},handling[0xdc]{},infos[2][0x260]{},cols[2][0x68]{};
 uint8_t flags[2]={1,1};void *poolPointer=pool;std::array<uint8_t *,6500> models{};uint32_t now=1000;
 struct Frame{float m[16]{};};Frame frames[4];int modelClump;
-int fails=0,bursts=0,nativeFixes=0;bool nested=false,repairInside=false,recycleInside=false,throwInside=false,foreignCalc=false,deleteInside=false;
+int fails=0,bursts=0,nativeFixes=0;bool nested=false,repairInside=false,recycleInside=false,throwInside=false,foreignCalc=false,deleteInside=false,repairDuringFrames=false;
 std::array<std::vector<carimpact::Collision>,2> hits;
 float steerAngle=0;float torque[2]{},foreignTorque=0;const uint8_t *retained=nullptr;
 struct WCall {float thrust,brake,grip,toe;CVector direction;};WCall wheels[2][4];
 float &F(uint8_t *p,size_t at){return *reinterpret_cast<float *>(p+at);}
 void Check(bool b,const char *s){if(!b){printf("FAIL: %s\n",s);++fails;}}
 uint8_t *Car(int ref){int i=ref>>8;return i>=0&&i<2&&!(flags[i]&0x80)&&ref==((i<<8)|flags[i])?cars[i]:nullptr;}
-void *FrameId(void *,int id){int ids[]={4,6,1,3};for(int i=0;i<4;i++)if(id==ids[i])return &frames[i];return nullptr;}
+void *FrameId(void *,int id){if(repairDuringFrames){repairDuringFrames=false;fix(cars[0]);}int ids[]={4,6,1,3};for(int i=0;i<4;i++)if(id==ids[i])return &frames[i];return nullptr;}
 float *Matrix(void *p){return static_cast<Frame *>(p)->m;}
 int Status(void *p,int i){return static_cast<uint8_t *>(p)[5+i];}
 void Burst(uint8_t *v,uint8_t w,bool random){Check(w<4&&!random,"native puncture gets exact wheel without random extra forces");++bursts;if(!(v[0x299]&2))v[0x34c+5+w]=1;}
@@ -166,5 +166,12 @@ int main(){using namespace fixture;
  for(int i=0;i<8;i++){token=carmechanics::BeginBullet(cars[0]);carmechanics::Projectile(cars[0],token,wheelShot);}Run();
  Check(wheels[0][0].grip<.05f&&wheels[0][0].brake<.01f&&Status(cars[0]+0x34c,0)==1,"local projectile path changes wheel/caliper performance and composes with native punctures");
  Check(carmechanics::gHistory[0].state.toe==std::array<float,4>{}&&carmechanics::gHistory[0].state.steeringBias==0,"projectile integrity damage has no invented collision bending impulse");
+ Reset();const auto intactFire=carmechanics::FireInput(cars[0]);Check(intactFire.fuel==1&&intactFire.breach==0,"fire input defaults to intact reservoirs");
+ {carmechanics::Controller scope(cars[0]);scope.history->state.heat=1.3f;scope.history->state.damage[mechanicalmodel::kFuel]=.4f;}
+ const auto fireInput=carmechanics::FireInput(cars[0]);Check(fireInput.heat==1.3f&&fireInput.breach==.4f&&fireInput.running,"fire input reads existing actor systems outside control");
+ carmechanics::Burn(cars[0],1);Run();Check(torque[0]<.04f&&carmechanics::FireInput(cars[0]).electrical>0,"native fire exposure damages existing drive and electrical systems");
+ const float burnPower=torque[0];carmechanics::Burn(cars[0],5);Run();Check(std::fabs(torque[0]-burnPower)<1e-6f,"large fire exposure discontinuity cannot inject module damage");
+ fix(cars[0]);Check(carmechanics::FireInput(cars[0]).electrical==0,"repair clears fire injury");gConfig.carMechanics=false;carmechanics::Burn(cars[0],1);gConfig.carMechanics=true;Run();Check(torque[0]==.04f,"mechanics off disables extra fire injuries");
+ Reset();repairDuringFrames=true;carmechanics::Burn(cars[0],1);Run();Check(torque[0]==.04f,"repair during native layout sampling retires pending fire exposure");
  printf("carmechanics: %s\n",fails?"FAILED":"all passed");return fails?1:0;
 }

@@ -35,6 +35,7 @@ PLUGIN += src/glassmodel.cpp src/carglass.cpp
 PLUGIN += src/partsmodel.cpp src/carparts.cpp
 PLUGIN += src/dentmodel.cpp src/carimpact.cpp
 PLUGIN += src/mechanicalmodel.cpp src/carmechanics.cpp src/projectilemodel.cpp
+PLUGIN += src/firemodel.cpp
 GUNS      ?= $(wildcard assets/guns/*.vmg)  # every gun built (GUNS="..." to build in only some)
 CXXFLAGS  += -I$(BUILD)
 BLENDER   ?= blender
@@ -439,6 +440,7 @@ $(BUILD)/test_trafficweave: tests/test_trafficweave.cpp tests/nativeweavearm.h s
 FEEDBACK_TESTS += test_handlingmodel test_handlinghook test_drivelog test_headbalance
 FEEDBACK_TESTS += test_glassmodel test_carglass
 FEEDBACK_TESTS += test_partsmodel test_carparts test_dentmodel test_cardeform test_mechanicalmodel test_projectilemodel test_carmechanics test_carsystem_lights
+FEEDBACK_TESTS += test_firemodel
 
 test-feedback: $(addprefix $(BUILD)/,$(FEEDBACK_TESTS))
 	@set -e; for test in $(FEEDBACK_TESTS); do $(BUILD)/$$test; done
@@ -770,3 +772,6 @@ test-game-assets: $(BUILD)/test_utility_native
 
 $(BUILD)/test_projectilemodel: tests/test_projectilemodel.cpp src/projectilemodel.cpp src/mechanicalmodel.cpp src/projectilemodel.h src/mechanicalmodel.h | $(BUILD)
 	$(CXX) $(CXXFLAGS) -Isrc -o $@ tests/test_projectilemodel.cpp src/projectilemodel.cpp src/mechanicalmodel.cpp
+
+$(BUILD)/test_firemodel: tests/test_firemodel.cpp src/firemodel.cpp src/firemodel.h | $(BUILD)
+	$(CXX) $(CXXFLAGS) -Isrc -o $@ tests/test_firemodel.cpp src/firemodel.cpp

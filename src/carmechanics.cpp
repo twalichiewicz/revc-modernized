@@ -164,6 +164,20 @@ void Projectile(uint8_t *v,const BulletToken &token,const projectilemodel::Ray &
   if(status==0&&BulletCurrent(v,token,now))gBurst(v,uint8_t(i),false);
  }
 }
+firemodel::Input FireInput(const uint8_t *v)
+{
+ firemodel::Input out;Identity id;if(!gReady||!gConfig.carMechanics||!Identify(const_cast<uint8_t *>(v),id)||!Eligible(id))return out;
+ out.health=game::VehicleHealth(v);out.running=(v[0x295]&0x10)!=0;const auto &h=gHistory[size_t(id.ref>>8)];
+ if(Same(h.id,id)&&h.layoutValid&&LayoutCurrent(h,id)){out.heat=h.state.heat;out.fuel=h.state.fuel;out.engine=h.state.damage[mechanicalmodel::kEngine];out.electrical=h.state.damage[mechanicalmodel::kElectrical];out.breach=h.state.damage[mechanicalmodel::kFuel];}
+ return out;
+}
+void Burn(uint8_t *v,float dt)
+{
+ Identity id;if(!gReady||!gConfig.carMechanics||!std::isfinite(dt)||dt<=0||dt>1||!Identify(v,id)||!Eligible(id)||(game::EntityFlags(v)&(1u<<26)))return;
+ auto &h=Record(id);const auto revision=h.revision;if(!Layout(h))return;Identity now;if(!Identify(v,now)||!Same(id,now)||!Eligible(now)||h.revision!=revision)return;
+ std::array<float,mechanicalmodel::kModules> dose{};dose[mechanicalmodel::kEngine]=.018f*dt;dose[mechanicalmodel::kCooling]=.025f*dt;
+ dose[mechanicalmodel::kElectrical]=.03f*dt;dose[mechanicalmodel::kFuel]=.01f*dt;mechanicalmodel::Apply(h.state,dose);Report(h);
+}
 float LightingPower(const uint8_t *v)
 {
  Identity id;if(!gReady||!gConfig.carMechanics||!Identify(const_cast<uint8_t *>(v),id)||!Eligible(id))return 1;

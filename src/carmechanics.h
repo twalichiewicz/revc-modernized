@@ -1,6 +1,7 @@
 #pragma once
 #include "carimpact.h"
 #include "projectilemodel.h"
+#include "firemodel.h"
 namespace carmechanics {
 bool Install();
 bool Enabled();
@@ -17,4 +18,8 @@ struct BulletToken {
 };
 BulletToken BeginBullet(uint8_t *vehicle);
 void Projectile(uint8_t *vehicle,const BulletToken &,const projectilemodel::Ray &);
+// Native fire owner only. Reading never creates history; exposure changes
+// integrity without inventing collision alignment impulses.
+firemodel::Input FireInput(const uint8_t *vehicle);
+void Burn(uint8_t *vehicle,float seconds);
 }
