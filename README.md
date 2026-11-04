@@ -393,7 +393,7 @@ know you by your description, and getting away leaves you under an APB until you
   penetration budget, angled surfaces resist more, and intervening components absorb what remains.
   Ordinary gunfire, drive-bys, mounted rounds and deferred bullets share the same system damage.
   The internals and material resistance are approximations; detailed per-model authoring, complete
-  bullet continuation through the world, fire propagation and saved mechanical damage remain open.
+  bullet continuation through the world, detailed fluid/fire spread and saved mechanical damage remain open.
 - In free roam, damaged cars develop a fire over time (`CarFire`), and hot or shorting systems can
   ignite a fuel leak. Fires grow, can be put out with the native water cannon, and eventually leave
   a disabled wreck without an automatic explosion. A single nearby registered fire can trigger the

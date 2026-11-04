@@ -136,3 +136,18 @@ Full/native/asset/sanitizer checks pass; independent review has no blocking find
 are coarse and collision-driven; detailed internals, projectiles, extra systems and persistence are
 subsequent work toward the user's longer-term localized-system simulation. Live performance tuning
 and a documented slow-update thermal edge remain outstanding.
+
+The mechanical implementation now has fourteen modules, including independent brakes, steering,
+drivetrain, fuel and electrical supply; the slow-update reservoir edge is fixed. Material-limited
+projectiles share that state, with native accepted-hit ownership and cover clipping; see
+[projectile verification](../plans/2026-11-04-car-projectiles.md). The user's latest10:57:34–11:06:42
+playtest log confirms cooling injury on model220 and projectile engine injury/power96% on model156,
+plus collision-driven cooling loss and zero drive. Those model-only log records are not individual
+actor histories or a complete live balance result.
+
+Progressive free-roam fire and native firetruck response are the next implemented phase; see
+[fire design](2026-11-04-car-fire-design.md) and [verification](../plans/2026-11-04-car-fire.md).
+Real native fire/water/dispatch/AI cannon callers pass isolated checks; review and installation are
+recorded there. Detailed internal authoring, material/tyre/contact interaction, fluid/fire spread,
+inspection/persistence and presentation/severity tuning remain open. #37 and #44 remain open pending
+live acceptance; no issue status was changed by this local work.

@@ -14,6 +14,8 @@ int main(){int fails=0;auto check=[&](bool b,const char *s){if(!b){printf("FAIL:
  State grow;Ignite(grow);check(std::fabs(Intensity(grow)-.3f)<1e-6f,"small initial native fire");for(int n=0;n<15;n++)Tick(grow,Input{},1);check(std::fabs(Intensity(grow)-1)<1e-5f,"fire grows over15s");
  const auto age=grow.age;Tick(grow,Input{},5);Tick(grow,Input{},NAN);Tick(grow,Input{},-1);check(grow.age==age,"discontinuities do not fast-forward burning");
  State intermittent;for(int n=0;n<20;n++)Tick(intermittent,i,.1f);Tick(intermittent,Input{},.1f);for(int n=0;n<10;n++)Tick(intermittent,i,.1f);check(!intermittent.lit,"ignition requires continuous exposure");
+ State repeatedlyHit;for(int n=0;n<26;n++){Rearm(repeatedlyHit);Tick(repeatedlyHit,i,.1f);}check(repeatedlyHit.lit,"new hits preserve continuous unsuppressed ignition exposure");
+ Extinguish(repeatedlyHit);for(int n=0;n<26;n++){Rearm(repeatedlyHit);Tick(repeatedlyHit,i,.1f);}check(repeatedlyHit.lit,"repeated damage after water suppression is lifted preserves ignition exposure");
  printf("firemodel: %s\n",fails?"FAILED":"all passed");return fails?1:0;
 }
 #else

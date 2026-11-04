@@ -95,6 +95,8 @@ int main(){using namespace fixture;*reinterpret_cast<void **>(pool)=cars;*reinte
  Reset();auto *external=Start(manager,cars[0],nullptr,.8f,0);Process()(external);Check(carfire::Burning(cars[0],false),"real external fire is adopted immediately");
  Reset();for(int i=0;i<39;i++){manager[8+i*0x38]=1;manager[9+i*0x38]=1;}external=Start(manager,cars[0],nullptr,.8f,0);Process()(external);Check(carfire::Burning(cars[0],false),"last native fire slot is eligible for managed external fire");
  Reset();F(cars[0],0x2a0)=200;recycleStart=true;for(int i=0;i<28;i++)Step();Check(F(cars[0],0x2a0)==1000&&Engine(cars[0]+0x34c)==0&&!carfire::Burning(cars[0],false),"recycled actor inside native fire creation cannot inherit fire or status loan");
+ Reset();F(cars[0],0x2a0)=200;for(int i=0;i<30;i++){Hit()(cars[0],nullptr,17,1,{});Step();}Check(starts==1,"continuous accepted small hits do not postpone first ignition");
+ Extinguish()(*reinterpret_cast<uint8_t **>(cars[0]+0x280));for(int i=0;i<30;i++){Hit()(cars[0],nullptr,17,1,{});Step();}Check(starts==2,"continuous small hits after extinguishing relight after the normal dwell");
  printf("carfire: %s\n",failures?"FAILED":"all passed");return failures?1:0;
 }
 #else

@@ -4,7 +4,7 @@
 namespace firemodel {
 void Ignite(State &s){if(!s.spent){s.lit=true;s.suppressed=false;s.exposure=0;}}
 void Extinguish(State &s){s.lit=false;s.age=s.exposure=0;s.suppressed=true;}
-void Rearm(State &s){s.suppressed=false;s.exposure=0;}
+void Rearm(State &s){if(s.suppressed){s.suppressed=false;s.exposure=0;}}
 float Intensity(const State &s){return s.lit?float(.3+.7*std::clamp(s.age/15.,0.,1.)):0;}
 void Tick(State &s,const Input &i,float dt)
 {
