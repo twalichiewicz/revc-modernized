@@ -437,7 +437,7 @@ $(BUILD)/test_trafficweave: tests/test_trafficweave.cpp tests/nativeweavearm.h s
 
 FEEDBACK_TESTS += test_handlingmodel test_handlinghook test_drivelog test_headbalance
 FEEDBACK_TESTS += test_glassmodel test_carglass
-FEEDBACK_TESTS += test_partsmodel test_carparts test_dentmodel test_cardeform test_mechanicalmodel test_carmechanics
+FEEDBACK_TESTS += test_partsmodel test_carparts test_dentmodel test_cardeform test_mechanicalmodel test_carmechanics test_carsystem_lights
 
 test-feedback: $(addprefix $(BUILD)/,$(FEEDBACK_TESTS))
 	@set -e; for test in $(FEEDBACK_TESTS); do $(BUILD)/$$test; done
@@ -752,6 +752,9 @@ $(BUILD)/test_mechanicalmodel: tests/test_mechanicalmodel.cpp src/mechanicalmode
 
 $(BUILD)/test_carmechanics: tests/test_carmechanics.cpp src/carmechanics.cpp src/mechanicalmodel.cpp src/partsmodel.cpp $(wildcard src/*.h) | $(BUILD)
 	$(CXX) $(CXXFLAGS) -Isrc -o $@ tests/test_carmechanics.cpp src/mechanicalmodel.cpp src/partsmodel.cpp
+
+$(BUILD)/test_carsystem_lights: tests/test_carsystem_lights.cpp src/carlights.cpp $(wildcard src/*.h) | $(BUILD)
+	$(CXX) $(CXXFLAGS) -Isrc -Wl,-dead_strip -o $@ tests/test_carsystem_lights.cpp
 
 $(BUILD)/test_mechanical_assets: tests/test_mechanical_assets.cpp src/mechanicalmodel.cpp tools/bake/gamefiles.cpp $(wildcard src/*.h tools/bake/*.h) | $(BUILD)
 	$(CXX) $(CXXFLAGS) -Isrc -o $@ tests/test_mechanical_assets.cpp src/mechanicalmodel.cpp tools/bake/gamefiles.cpp -lz

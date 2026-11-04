@@ -1,5 +1,6 @@
 #include "carlights.h"
 #include "carlightrules.h"
+#include "carmechanics.h"
 #include "carmaterials.h"
 #include "camera.h"
 #include "config.h"
@@ -391,6 +392,7 @@ int Signal(const uint8_t *car) { return car == gSignalCar ? gSignal : 0; }
 
 State LightsOf(uint8_t *car)
 {
+	const float supply = carmechanics::LightingPower(car);
 	const uint8_t flags = car[kVehicleFlags];
 	const bool engine = flags & kEngineOn, on = engine && (flags & kLightsOn);
 	const float brake = *reinterpret_cast<const float *>(car + kBrakePedal);
@@ -408,11 +410,11 @@ State LightsOf(uint8_t *car)
 		const bool rearOk = rw.LightStatus(damage, kRearLeft + side) == 0;
 		const bool frontOk = rw.LightStatus(damage, kFrontLeft + side) == 0;
 		const bool signals = signal == (side == 0 ? turns::kLeft : turns::kRight);
-		s.tail[side] = rearOk ? (signals ? (blink ? kBraking : on ? kTailOn : 0.0f) : tail) : 0.0f;
-		s.reverse[side] = rearOk ? reverse : 0.0f;
-		s.head[side] = frontOk ? head : 0.0f;
-		s.amberRear[side] = rearOk && signals && blink ? 1.0f : 0.0f;
-		s.amberFront[side] = frontOk && signals && blink ? 1.0f : 0.0f;
+		s.tail[side] = (rearOk ? (signals ? (blink ? kBraking : on ? kTailOn : 0.0f) : tail) : 0.0f) * supply;
+		s.reverse[side] = (rearOk ? reverse : 0.0f) * supply;
+		s.head[side] = (frontOk ? head : 0.0f) * supply;
+		s.amberRear[side] = rearOk && signals && blink ? supply : 0.0f;
+		s.amberFront[side] = frontOk && signals && blink ? supply : 0.0f;
 	}
 	return s;
 }
@@ -540,9 +542,12 @@ void Hook_SpecialFXRender()
 
 void Hook_PreRender(uint8_t *car)
 {
+	struct Scope {
+		const uint8_t *previous = gPreRendering;
+		~Scope() { gPreRendering = previous; }
+	} scope;
 	gPreRendering = car;
 	orig_PreRender(car);
-	gPreRendering = nullptr;
 }
 
 void Hook_RegisterCorona(uint32_t id, uint8_t r, uint8_t g, uint8_t b, uint8_t a, const CVector &at, float size,
@@ -556,6 +561,11 @@ void Hook_RegisterCorona(uint32_t id, uint8_t r, uint8_t g, uint8_t b, uint8_t a
 	if (car && id - uint32_t(uintptr_t(car)) - kTailCorona < 2 && gShader && Close(car) &&
 	    gModelsWithTail.count(*reinterpret_cast<const int16_t *>(car + kModelIndex)))
 		return; // its tail lights glow on the model instead
+	if (car) {
+		const float supply = carmechanics::LightingPower(car);
+		if (supply <= 0) return;
+		a = uint8_t(a * supply);
+	}
 	orig_RegisterCorona(id, r, g, b, a, at, size, drawDist, type, flare, reflection, los, streak, angle, useNear, nearDist);
 }
 
@@ -603,7 +613,9 @@ __attribute__((noinline)) void Hook_AddLight(uint8_t type, CVector pos, CVector 
 	if (carlightrules::SuppressCabinLight(camera::InSeat(), gPreRendering && gPreRendering == camera::SeatVehicle(),
 	                                      site))
 		return;
-	orig_AddLight(type, pos, direction, radius, red, green, blue, fog, extra);
+	const float supply = gPreRendering ? carmechanics::LightingPower(gPreRendering) : 1;
+	if (supply <= 0) return;
+	orig_AddLight(type, pos, direction, radius, red * supply, green * supply, blue * supply, fog, extra);
 }
 
 template <typename T>

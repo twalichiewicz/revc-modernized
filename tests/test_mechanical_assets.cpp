@@ -1,4 +1,5 @@
 #include "mechanicalmodel.h"
+#include <cmath>
 #include "game.h"
 #include "../tools/bake/gamefiles.h"
 #include <algorithm>
@@ -35,6 +36,10 @@ int main(){
   mechanicalmodel::Layout layout;const auto box=bounds.find(name);
   if(seen!=15||box==bounds.end()||!mechanicalmodel::Build(id,box->second.first,box->second.second,wheels,layout)){printf("FAIL: native mechanical layout %s, wheel mask %x, COL %d\n",name.c_str(),seen,box!=bounds.end());++fails;continue;}
   if(id==211&&layout.volumes[0].hi.y>=0){puts("FAIL: actual Deluxo engine volume belongs at rear");++fails;}
+  for(int m=0;m<mechanicalmodel::kModules;m++){
+   const auto &v=layout.volumes[m];
+   if(!std::isfinite(v.lo.x)||!std::isfinite(v.hi.y)||!std::isfinite(v.lo.z)||v.lo.x>=v.hi.x||v.lo.y>=v.hi.y||v.lo.z>=v.hi.z){printf("FAIL: invalid %s volume for %s\n",mechanicalmodel::Name(m),name.c_str());++fails;}
+  }
   ++count;
  }
  if(count<70){puts("FAIL: insufficient actual mechanical layouts");++fails;}

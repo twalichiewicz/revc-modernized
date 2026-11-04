@@ -26,6 +26,15 @@ Motion OneWheel(nativejetshadowtest::Code &code,bool hurt,bool sideSlip)
  Check(std::isfinite(F(cars[0],0x5ec))&&f.x==0&&r.y==0,"real native wheel output and caller vectors preserved");
  return {F(cars[0],0x84),F(cars[0],0x88),F(cars[0],0x98)};
 }
+Motion SystemWheel(nativejetshadowtest::Code &code,int module,float steer,float brake)
+{
+ using namespace fixture;Reset();NativeRecord(code);carmechanics::Controller scope(cars[0]);
+ if(module>=0)scope.history->state.damage[module]=1;
+ CVector f{std::sin(steer),std::cos(steer),0},r{std::cos(steer),-std::sin(steer),0},speed{0,.25f,0},point{-1,1.4f,-.35f};int32_t state=0;
+ fixture::wheel(cars[0],f,r,speed,point,4,0,brake,.1f,0,&F(cars[0],0x5ec),&state,0);
+ Check(f.x==std::sin(steer)&&r.y==-std::sin(steer),"native system effects preserve caller steering vectors");
+ return {F(cars[0],0x84),F(cars[0],0x88),F(cars[0],0x98)};
+}
 }
 int main(){
  if(ExistingMechanicsChecks())return 1;
@@ -36,12 +45,19 @@ int main(){
   {0x100172e50,reinterpret_cast<void *>(Normalise)},{0x100143f28,reinterpret_cast<void *>(Rand)}};
  code.Finish();carmechanics::gCalculate=reinterpret_cast<Calc>(code.Address(0x100279a1c));
  Reset();NativeRecord(code);Run();const float intact=torque[0];Check(intact>0,"actual native transmission produces positive drive");
- hits[0]={Nose()};Run();Check(torque[0]>0&&torque[0]<intact*.9f,"localized engine injury reduces actual native drive acceleration");
+ hits[0]={Nose()};Run();const float injured=torque[0];Check(torque[0]>0&&torque[0]<intact*.9f,"localized engine injury reduces actual native drive acceleration");
  const auto retainedGear=Read<uint8_t *>(code.Page(0x1007f4598));Check(retainedGear>=handling+0x34&&retainedGear<handling+0x7c&&std::fabs(F(handling,0x90)-.2f)<1e-6f,"actual native transmission scratch and retained gear pointer use original allocation");
  carmechanics::gWheel=reinterpret_cast<WheelFn>(code.Address(0x10027ca40));
  const auto straight=OneWheel(code,false,false),bent=OneWheel(code,true,false);
  Check(std::fabs(bent.x)>std::fabs(straight.x)+1e-6f&&std::fabs(bent.yaw-straight.yaw)>1e-6f,"bent individual wheel produces real native lateral force and yaw");
  const auto grip=OneWheel(code,false,true),slip=OneWheel(code,true,true);
  Check(std::hypot(slip.x,slip.y)<std::hypot(grip.x,grip.y)*.9f,"damaged wheel has lower real native traction-circle force");
- printf("mechanical native: drive %.6f -> %.6f; bent lateral %.6f yaw %.6f; %s\n",intact,torque[0],bent.x,bent.yaw,fails?"FAILED":"all passed");return fails?1:0;
+ const auto braking=SystemWheel(code,-1,0,.01f),failedBrake=SystemWheel(code,mechanicalmodel::kBrakeLF,0,.01f);
+ Check(braking.y<0&&std::fabs(failedBrake.y)<std::fabs(braking.y)*.01f,"failed caliper removes actual native braking deceleration");
+ const auto steering=SystemWheel(code,-1,.4f,0),failedRack=SystemWheel(code,mechanicalmodel::kSteering,.4f,0);
+ Check(std::fabs(steering.yaw)>1e-6f&&std::fabs(failedRack.yaw)<std::fabs(steering.yaw)*.5f,"failed rack reduces real native steering yaw");
+ carmechanics::gWheel=WheelNative;Reset();NativeRecord(code);{carmechanics::Controller scope(cars[0]);scope.history->state.damage[mechanicalmodel::kDrivetrain]=1;}Run();
+ Check(torque[0]==0,"failed drivetrain removes actual native transmission output");fix(cars[0]);Run();Check(torque[0]>0,"repair reconnects native drivetrain");
+ printf("mechanical systems native: brake %.6f -> %.6f; steering yaw %.6f -> %.6f\n",braking.y,failedBrake.y,steering.yaw,failedRack.yaw);
+ printf("mechanical native: drive %.6f -> %.6f; bent lateral %.6f yaw %.6f; %s\n",intact,injured,bent.x,bent.yaw,fails?"FAILED":"all passed");return fails?1:0;
 }

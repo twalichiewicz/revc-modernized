@@ -35,7 +35,7 @@ bool Eligible(const Identity &id){return id.vtable&&id.model>=0&&id.model<6500&&
 struct History {
  Identity id;mechanicalmodel::State state;mechanicalmodel::Layout layout;
  std::array<partsmodel::Episode,mechanicalmodel::kModules> episodes{};
- uint8_t *info=nullptr,*col=nullptr;void *source=nullptr;bool layoutValid=false,tickSeen=false;uint32_t lastTick=0;int powerBand=10;
+ uint8_t *info=nullptr,*col=nullptr;void *source=nullptr;bool layoutValid=false,tickSeen=false;uint32_t lastTick=0;int powerBand=10,fuelBand=10;
 };
 std::array<History,kSlots> gHistory;
 History &Record(const Identity &id){auto &h=gHistory[size_t(id.ref>>8)];if(!Same(h.id,id)){h={};h.id=id;}return h;}
@@ -73,7 +73,9 @@ void Invalidate(uint8_t *v){for(auto c=gController;c;c=c->previous)if(c->id.v==v
 void Report(History &h)
 {
  const float power=mechanicalmodel::Power(h.state);const int band=int(power*10);
- if(band!=h.powerBand){h.powerBand=band;Log("car mechanics: model %d power %.0f%%, coolant %.0f%%, heat %.2f",h.id.model,power*100,h.state.coolant*100,h.state.heat);}
+ const int fuelBand=int(h.state.fuel*10);
+ if(band!=h.powerBand||fuelBand!=h.fuelBand){h.powerBand=band;h.fuelBand=fuelBand;
+  Log("car mechanics: model %d power %.0f%%, coolant %.0f%%, heat %.2f, fuel %.0f%%",h.id.model,power*100,h.state.coolant*100,h.state.heat,h.state.fuel*100);}
 }
 void Control(uint8_t *v)
 {
@@ -105,8 +107,17 @@ void Wheel(uint8_t *v,CVector &f,CVector &r,CVector &speed,CVector &point,int co
   gWheel(v,f,r,speed,point,count,thrust,brake,grip,wheel,spin,state,status);return;
  }
  const auto effect=mechanicalmodel::Wheel(c->history->state,wheel);
- if(effect.grip==1&&effect.drive==1&&effect.brake==1&&effect.toe==0){gWheel(v,f,r,speed,point,count,thrust,brake,grip,wheel,spin,state,status);return;}
- const float cs=std::cos(effect.toe),sn=std::sin(effect.toe);
+ if(effect.grip==1&&effect.drive==1&&effect.brake==1&&effect.toe==0&&effect.steering==1){gWheel(v,f,r,speed,point,count,thrust,brake,grip,wheel,spin,state,status);return;}
+ float turn=effect.toe;
+ if(effect.steering!=1){
+  const auto &right=*reinterpret_cast<const CVector *>(v+0x8),&forward=game::EntityForward(v);
+  const float across=f.x*right.x+f.y*right.y+f.z*right.z,along=f.x*forward.x+f.y*forward.y+f.z*forward.z;
+  // The native solver receives already-steered wheel axes. Reduce their
+  // angle relative to the actor, preserving the original pedal/steer inputs.
+  const float angle=std::atan2(across,along);
+  if(std::isfinite(angle)&&std::isfinite(across)&&std::isfinite(along)&&std::fabs(angle)<1.57f)turn+=(effect.steering-1)*angle;
+ }
+ const float cs=std::cos(turn),sn=std::sin(turn);
  CVector forward{f.x*cs+r.x*sn,f.y*cs+r.y*sn,f.z*cs+r.z*sn},right{r.x*cs-f.x*sn,r.y*cs-f.y*sn,r.z*cs-f.z*sn};
  gWheel(v,forward,right,speed,point,count,thrust*effect.drive,brake*effect.brake,grip*effect.grip,wheel,spin,state,status);
 }
@@ -114,6 +125,16 @@ void Fix(uint8_t *v){Invalidate(v);Identity id;if(Identify(v,id)){auto &h=gHisto
 void Delete(uint8_t *v){Invalidate(v);gDelete(v);} // render streaming must not heal physical systems
 void Restart(){++gEpoch;for(auto c=gController;c;c=c->previous)c->valid=false;gHistory={};gRestart();}
 } // namespace
+float LightingPower(const uint8_t *v)
+{
+ Identity id;if(!gReady||!gConfig.carMechanics||!Identify(const_cast<uint8_t *>(v),id)||!Eligible(id))return 1;
+ const auto &h=gHistory[size_t(id.ref>>8)];
+ // Rendering occurs outside ProcessControl. Validate existing history without
+ // creating a new record, ticking reservoirs or depending on a render clump.
+ if(!Same(h.id,id)||!h.layoutValid||!game::api.modelInfoPtrs||game::api.modelInfoPtrs[id.model]!=h.info||!h.info||
+    *reinterpret_cast<void **>(h.info+0x30)!=h.source||*reinterpret_cast<uint8_t **>(h.info+0x20)!=h.col)return 1;
+ return mechanicalmodel::Lighting(h.state);
+}
 void Collision(uint8_t *v,const carimpact::Collision &hit)
 {
  auto c=gController;if(!Current(c)||c->id.v!=v||!game::api.timeMs)return;
@@ -141,6 +162,6 @@ bool Install()
  C(gWheel,"_ZN8CVehicle12ProcessWheelER7CVectorS1_S1_S1_ifffaPfP11tWheelStatet",Wheel);
 #undef C
  gReady=gControl&&gFix&&gDelete&&gRestart&&gCalculate&&gWheel;
- if(gReady)Log("car mechanics: localized engine, cooling and individual wheel failures enabled");return gReady;
+ if(gReady)Log("car mechanics: localized engine, cooling, wheels, brakes, steering, drivetrain, fuel and electrical failures enabled");return gReady;
 }
 }

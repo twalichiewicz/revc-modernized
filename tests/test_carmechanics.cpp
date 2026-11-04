@@ -24,7 +24,7 @@ uint8_t flags[2]={1,1};void *poolPointer=pool;std::array<uint8_t *,6500> models{
 struct Frame{float m[16]{};};Frame frames[4];int modelClump;
 int fails=0,bursts=0,nativeFixes=0;bool nested=false,repairInside=false,recycleInside=false,throwInside=false,foreignCalc=false,deleteInside=false;
 std::array<std::vector<carimpact::Collision>,2> hits;
-float torque[2]{},foreignTorque=0;const uint8_t *retained=nullptr;
+float steerAngle=0;float torque[2]{},foreignTorque=0;const uint8_t *retained=nullptr;
 struct WCall {float thrust,brake,grip,toe;};WCall wheels[2][4];
 float &F(uint8_t *p,size_t at){return *reinterpret_cast<float *>(p+at);}
 void Check(bool b,const char *s){if(!b){printf("FAIL: %s\n",s);++fails;}}
@@ -47,9 +47,9 @@ void ControlNative(uint8_t *v){const int i=v==cars[0]?0:1;
  auto t=*reinterpret_cast<uint8_t **>(v+0x160)+0x34;float velocity=.2f;
  torque[i]=calc(t,F(v,0x28c),v[0x2a4],F(v,0x2a8),velocity,false);
  if(foreignCalc){float gas=1,timer=0;uint8_t gear=1;foreignTorque=calc(t,gas,gear,timer,velocity,false);}
- for(int w=0;w<4;w++){CVector f{0,1,0},r{1,0,0},speed{0,.2f,0},point{w<2?-1.f:1.f,w%2?-1.4f:1.4f,-.35f};int32_t state=0;
+ for(int w=0;w<4;w++){const float angle=w==0||w==2?steerAngle:0;CVector f{std::sin(angle),std::cos(angle),0},r{std::cos(angle),-std::sin(angle),0},speed{0,.2f,0},point{w<2?-1.f:1.f,w%2?-1.4f:1.4f,-.35f};int32_t state=0;
   wheel(v,f,r,speed,point,4,.02f,.01f,.05f,int8_t(w),&F(v,0x5ec+4*w),&state,0);
-  Check(f.x==0&&f.y==1&&r.x==1&&r.y==0&&F(v,0x5ec+4*w)==12.5f&&state==7,"wheel directions remain caller-owned and native output pointers survive");
+  Check(f.x==std::sin(angle)&&f.y==std::cos(angle)&&r.x==std::cos(angle)&&r.y==-std::sin(angle)&&F(v,0x5ec+4*w)==12.5f&&state==7,"wheel directions remain caller-owned and native output pointers survive");
  }
  Check(*reinterpret_cast<uint8_t **>(v+0x160)==handling,"controller keeps original shared handling allocation");
 }
@@ -57,7 +57,7 @@ void FixNative(uint8_t *v){++nativeFixes;memset(v+0x34c,0,24);F(v,0x2a0)=1000;}
 void RemoveNative(uint8_t *){}void RestartNative(){}
 void Reset(int model=150){
  for(auto &v:cars)fix(v);memset(cars,0,sizeof cars);memset(handling,0,sizeof handling);memset(infos,0,sizeof infos);memset(cols,0,sizeof cols);
- nested=repairInside=recycleInside=throwInside=foreignCalc=deleteInside=false;hits={};bursts=0;now+=1000;models.fill(nullptr);
+ nested=repairInside=recycleInside=throwInside=foreignCalc=deleteInside=false;steerAngle=0;hits={};bursts=0;now+=1000;models.fill(nullptr);
  for(int i=0;i<2;i++){
   flags[i]=uint8_t((flags[i]+1)&0x7f);auto v=cars[i];*reinterpret_cast<uint32_t *>(v+0x60)=2|0x20;v[0x297]=0x40;v[0x295]=0x10;
   *reinterpret_cast<void **>(v)=reinterpret_cast<void *>(uintptr_t(0x1000+i));*reinterpret_cast<void **>(v+0x58)=reinterpret_cast<void *>(uintptr_t(0x2000+i));
@@ -110,9 +110,33 @@ int main(){using namespace fixture;
  Reset();hits[0]={Nose()};gConfig.carMechanics=false;Run();Check(torque[0]==.04f,"runtime off is native pass-through");gConfig.carMechanics=true;
  Reset();hits[0]={{{0,2.5f,.1f},{0,-1,0},8,3}};for(int i=0;i<7;i++)Run(350);hits={};for(int i=0;i<1800;i++)Run(100);Check(torque[0]<.02f,"cooling-only damage eventually reduces performance while running");
  fix(cars[0]);Run();Check(torque[0]==.04f,"repair refills coolant and clears heat penalty");
- Reset();hits[0]={{{0,2.5f,.1f},{0,-1,0},8,3}};for(int i=0;i<7;i++)Run(350);hits={};for(int i=0;i<900;i++)Run(100);
+ Reset();hits[0]={{{0,2.5f,.1f},{0,-1,0},8,3}};for(int i=0;i<7;i++)Run(350);hits={};for(int i=0;i<800;i++)Run(100);
  const float warm=torque[0];Check(warm>0&&warm<.04f,"warming cooling failure has observable partial power penalty");
  Run(5000);Check(torque[0]==warm,"large control discontinuity cannot inject thermal damage");now-=10000;Run(0);Check(torque[0]==warm,"clock rewind preserves damage without extra heat or healing");Run(100);Check(torque[0]<warm,"ordinary control resumes thermal progression after discontinuity");
  Reset();throwInside=true;try{Run();}catch(const std::runtime_error &){}carmechanics::Collision(cars[0],Nose());Run();Check(torque[0]==.04f,"exception unwinds mechanics ownership");
+ // Isolate dedicated modules from the damage to nearby metal/hubs.
+ Reset();{carmechanics::Controller scope(cars[0]);scope.history->state.damage[mechanicalmodel::kBrakeLF]=1;}Run();
+ Check(wheels[0][0].brake==0&&wheels[0][0].grip==.05f&&wheels[0][0].thrust==.02f&&wheels[0][2].brake==.01f,"destroyed LF brake removes only its native service brake input");
+ Reset();steerAngle=.4f;Run();const float healthySteer=wheels[0][0].toe;
+ {carmechanics::Controller scope(cars[0]);scope.history->state.damage[mechanicalmodel::kSteering]=1;scope.history->state.steeringBias=.02f;}Run();
+ Check(wheels[0][0].toe>0&&wheels[0][0].toe<healthySteer*.4f&&wheels[0][2].toe==wheels[0][0].toe&&wheels[0][1].toe==0,"rack failure reduces both front wheel steering in the native solver");
+ steerAngle=-.4f;Run();Check(wheels[0][0].toe<0&&wheels[0][0].toe>-.15f,"rack authority preserves opposite steering sign");
+ fix(cars[0]);Run();Check(std::fabs(wheels[0][0].toe-std::sin(steerAngle))<1e-6f,"repair restores full native steering direction");
+ Reset();{carmechanics::Controller scope(cars[0]);scope.history->state.damage[mechanicalmodel::kFuel]=1;}Run();
+ Check(torque[0]==.04f,"breached tank initially retains native torque");cars[0][0x295]&=~0x10;
+ for(int i=0;i<300;i++)Run(300);cars[0][0x295]|=0x10;Run();Check(torque[0]==0,"parked fuel leak depletes through slow controller updates");
+ fix(cars[0]);Run();Check(torque[0]==.04f,"native repair refills fuel reservoir");
+ Reset();{carmechanics::Controller scope(cars[0]);scope.history->state.damage[mechanicalmodel::kDrivetrain]=1;}nested=true;Run();
+ Check(torque[0]==0&&torque[1]==.04f,"disconnected drivetrain leaves nested shared-handling actor powered");
+ Reset();{carmechanics::Controller scope(cars[0]);scope.history->state.damage[mechanicalmodel::kElectrical]=.5f;}Run();
+ Check(carmechanics::LightingPower(cars[0])==.6f&&carmechanics::LightingPower(cars[1])==1,"render query reads only injured actor supply outside control scope");
+ removeRw(cars[0]);*reinterpret_cast<void **>(cars[0]+0x58)=reinterpret_cast<void *>(0x9000);
+ Check(carmechanics::LightingPower(cars[0])==.6f,"render replacement retains electrical failure");
+ gConfig.carMechanics=false;Check(carmechanics::LightingPower(cars[0])==1,"runtime off restores native lighting");gConfig.carMechanics=true;
+ cars[0][0x63]|=8;Check(carmechanics::LightingPower(cars[0])==1,"native protected actor retains native lighting");cars[0][0x63]&=~8;
+ ++flags[0];Check(carmechanics::LightingPower(cars[0])==1,"recycled actor cannot inherit electrical dimming");
+ Run();{carmechanics::Controller scope(cars[0]);scope.history->state.damage[mechanicalmodel::kElectrical]=1;}
+ Check(carmechanics::LightingPower(cars[0])==0,"failed supply remains visible outside native control");
+ fix(cars[0]);Check(carmechanics::LightingPower(cars[0])==1,"repair immediately restores lamp supply");
  printf("carmechanics: %s\n",fails?"FAILED":"all passed");return fails?1:0;
 }

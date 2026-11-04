@@ -378,9 +378,15 @@ know you by your description, and getting away leaves you under an APB until you
   a wall counts as one impact for each part. The game's own loose-part physics and repairs handle it.
 - Body metal dents near the collision (`CarDeformation`), with repeated hits deepening it up to a cap.
   Dents stay on that car, preserve broken glass and restore on repair. Glass and wheels remain rigid.
-- Localized crash damage affects the engine, cooling and each wheel assembly (`CarMechanics`). Engine
-  damage reduces power; coolant leaks lead to overheating; bent wheels pull and lose grip/braking.
-  Severe wheel damage can puncture its tyre. Repairs restore these systems.
+- Localized crash damage affects fourteen mechanical modules (`CarMechanics`): engine, cooling,
+  four wheel assemblies, four brakes, steering, drivetrain, fuel tank and electrical supply.
+  Bent wheels pull and lose grip; damaged brakes lose stopping power; steering damage reduces
+  response and can pull off center. Engine, gearbox and ignition damage reduce drive power.
+  Coolant leaks lead to overheating; a breached tank gradually loses fuel, even with the engine off,
+  and an empty tank removes drive. Electrical damage also dims or disables the car's lights.
+  Severe wheel damage can puncture its tyre. Repairs restore all systems and refill reservoirs.
+  These are approximate collision-driven internal volumes; detailed per-model internals, projectile
+  penetration and saved mechanical damage remain future work.
 - Car radios can be heard from the street, muffled through the bodywork and coming from where the car is.
   Your own car keeps playing after you get out, and so do stopped cars nearby. Getting into a car, you
   hear only that car's radio, and a police car plays the police scanner, not the station you just heard.
@@ -554,7 +560,7 @@ updated after that. To pick up settings added by a newer version, delete it and 
 | `CarGlass` | Side and rear windows shatter from bullets and severe component damage |
 | `CarParts` | Damaged and swinging stages before native parts detach on stronger later hits |
 | `CarDeformation` | Localized persistent body dents from collisions, restored on repair |
-| `CarMechanics` | Localized engine/cooling and wheel failures affect power, steering, grip and braking |
+| `CarMechanics` | Localized engine, cooling, wheels, brakes, steering, drivetrain, fuel and electrical failures |
 | `CarHandling` | GTA IV-style weight: mass by type, gentler acceleration, softer springs that lean, longer braking |
 | `HeadBalance` | First person in a car: the view leans with the car, his head levelling a little against it |
 
