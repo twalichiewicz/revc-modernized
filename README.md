@@ -385,6 +385,7 @@ know you by your description, and getting away leaves you under an APB until you
   Coolant leaks lead to overheating; a breached tank gradually loses fuel, even with the engine off,
   and an empty tank removes drive. Electrical damage also dims or disables the car's lights.
   Severe wheel damage can puncture its tyre. Repairs restore all systems and refill reservoirs.
+  Native ground light projections retain their original brightness in this pass.
   These are approximate collision-driven internal volumes; detailed per-model internals, projectile
   penetration and saved mechanical damage remain future work.
 - Car radios can be heard from the street, muffled through the bodywork and coming from where the car is.

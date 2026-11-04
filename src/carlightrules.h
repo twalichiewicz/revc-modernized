@@ -3,6 +3,20 @@
 #include <algorithm>
 #include <cstdint>
 namespace carlightrules {
+// Native macVC1.0.5217 automobile lamp IDs. Body sunlight reflections begin
+// at car+27 (CVehicle::DoSunGlare) and have no electrical dependency.
+inline bool ElectricalCorona(uint32_t idOffset)
+{
+	return idOffset <= 1 || idOffset == 6 || idOffset == 7 || idOffset == 14 || idOffset == 15 ||
+	       (idOffset >= 21 && idOffset <= 24);
+}
+// PreRender's five native point-light returns: taxi/special lamp, siren,
+// headlights, tail lights, brake lights. Other nested producers stay native.
+inline bool ElectricalPoint(uint32_t returnOffset)
+{
+	return returnOffset == 0x252fb4 || returnOffset == 0x253668 || returnOffset == 0x256e1c ||
+	       returnOffset == 0x256e9c || returnOffset == 0x257178;
+}
 // Return addresses verified in native arm64 macVC1.0.5217 CAutomobile::PreRender.
 // These are the unshadowed, omnidirectional red tail/brake point lights.
 inline bool SuppressCabinLight(bool seated, bool ownCar, uint32_t returnOffset)

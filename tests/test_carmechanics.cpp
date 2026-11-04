@@ -25,7 +25,7 @@ struct Frame{float m[16]{};};Frame frames[4];int modelClump;
 int fails=0,bursts=0,nativeFixes=0;bool nested=false,repairInside=false,recycleInside=false,throwInside=false,foreignCalc=false,deleteInside=false;
 std::array<std::vector<carimpact::Collision>,2> hits;
 float steerAngle=0;float torque[2]{},foreignTorque=0;const uint8_t *retained=nullptr;
-struct WCall {float thrust,brake,grip,toe;};WCall wheels[2][4];
+struct WCall {float thrust,brake,grip,toe;CVector direction;};WCall wheels[2][4];
 float &F(uint8_t *p,size_t at){return *reinterpret_cast<float *>(p+at);}
 void Check(bool b,const char *s){if(!b){printf("FAIL: %s\n",s);++fails;}}
 uint8_t *Car(int ref){int i=ref>>8;return i>=0&&i<2&&!(flags[i]&0x80)&&ref==((i<<8)|flags[i])?cars[i]:nullptr;}
@@ -35,7 +35,7 @@ int Status(void *p,int i){return static_cast<uint8_t *>(p)[5+i];}
 void Burst(uint8_t *v,uint8_t w,bool random){Check(w<4&&!random,"native puncture gets exact wheel without random extra forces");++bursts;if(!(v[0x299]&2))v[0x34c+5+w]=1;}
 float CalcNative(uint8_t *t,const float &,uint8_t &,float &timer,const float &,bool){retained=t;F(t,0x5c)=3.25f;timer+=.01f;return .04f;}
 void WheelNative(uint8_t *v,CVector &f,CVector &,CVector &,CVector &,int n,float drive,float brake,float grip,int8_t w,float *spin,int32_t *state,uint16_t status){
- const int i=v==cars[0]?0:1;Check(n==4&&status==0,"native wheel count/status preserved");wheels[i][w]={drive,brake,grip,f.x};*spin=12.5f;*state=7;
+ const int i=v==cars[0]?0:1;Check(n==4&&status==0,"native wheel count/status preserved");wheels[i][w]={drive,brake,grip,f.x,f};*spin=12.5f;*state=7;
 }
 void ControlNative(uint8_t *v){const int i=v==cars[0]?0:1;
  if(throwInside){throwInside=false;throw std::runtime_error("native interrupted");}
@@ -128,6 +128,18 @@ int main(){using namespace fixture;
  fix(cars[0]);Run();Check(torque[0]==.04f,"native repair refills fuel reservoir");
  Reset();{carmechanics::Controller scope(cars[0]);scope.history->state.damage[mechanicalmodel::kDrivetrain]=1;}nested=true;Run();
  Check(torque[0]==0&&torque[1]==.04f,"disconnected drivetrain leaves nested shared-handling actor powered");
+ // Native producer projects forward onto contact plane before steering.
+ for(bool rotated:{false,true})for(float angle:{0.0f,.4f,-.4f}){
+  Reset();if(rotated){F(cars[0],8)=0;F(cars[0],0xc)=-1;F(cars[0],0x18)=1;F(cars[0],0x1c)=0;}
+  carmechanics::Controller scope(cars[0]);scope.history->state.damage[mechanicalmodel::kSteering]=1;
+  CVector base{-.288675135f,.866025404f,-.408248290f},right{.816496581f,0,-.577350269f};
+  if(rotated){base={base.y,-base.x,base.z};right={right.y,-right.x,right.z};}
+  const float cs=std::cos(angle),sn=std::sin(angle);
+  CVector f{base.x*cs+right.x*sn,base.y*cs+right.y*sn,base.z*cs+right.z*sn},r{right.x*cs-base.x*sn,right.y*cs-base.y*sn,right.z*cs-base.z*sn},speed{},point{};int32_t status=0;
+  wheel(cars[0],f,r,speed,point,4,0,0,.1f,0,&F(cars[0],0x5ec),&status,0);
+  const auto observed=wheels[0][0].direction;const float along=observed.x*base.x+observed.y*base.y+observed.z*base.z,across=observed.x*right.x+observed.y*right.y+observed.z*right.z;
+  Check(std::fabs(std::atan2(across,along)-angle*.2f)<1e-5f,"rack authority acts only on native steering, not contact-plane tilt or actor heading");
+ }
  Reset();{carmechanics::Controller scope(cars[0]);scope.history->state.damage[mechanicalmodel::kElectrical]=.5f;}Run();
  Check(carmechanics::LightingPower(cars[0])==.6f&&carmechanics::LightingPower(cars[1])==1,"render query reads only injured actor supply outside control scope");
  removeRw(cars[0]);*reinterpret_cast<void **>(cars[0]+0x58)=reinterpret_cast<void *>(0x9000);

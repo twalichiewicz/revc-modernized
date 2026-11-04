@@ -110,12 +110,13 @@ void Wheel(uint8_t *v,CVector &f,CVector &r,CVector &speed,CVector &point,int co
  if(effect.grip==1&&effect.drive==1&&effect.brake==1&&effect.toe==0&&effect.steering==1){gWheel(v,f,r,speed,point,count,thrust,brake,grip,wheel,spin,state,status);return;}
  float turn=effect.toe;
  if(effect.steering!=1){
-  const auto &right=*reinterpret_cast<const CVector *>(v+0x8),&forward=game::EntityForward(v);
-  const float across=f.x*right.x+f.y*right.y+f.z*right.z,along=f.x*forward.x+f.y*forward.y+f.z*forward.z;
-  // The native solver receives already-steered wheel axes. Reduce their
-  // angle relative to the actor, preserving the original pedal/steer inputs.
+  const auto &forward=game::EntityForward(v);
+  const float across=-(r.x*forward.x+r.y*forward.y+r.z*forward.z),along=f.x*forward.x+f.y*forward.y+f.z*forward.z;
+  // Native control projects actor forward onto the contact plane before
+  // steering (0x24b1a4..0x24b278). Measure within that plane: its tilt must
+  // not become steering input. Skip a degenerate forward projection.
   const float angle=std::atan2(across,along);
-  if(std::isfinite(angle)&&std::isfinite(across)&&std::isfinite(along)&&std::fabs(angle)<1.57f)turn+=(effect.steering-1)*angle;
+  if(std::isfinite(angle)&&std::isfinite(across)&&std::isfinite(along)&&std::hypot(across,along)>1e-6f&&std::fabs(angle)<1.57f)turn+=(effect.steering-1)*angle;
  }
  const float cs=std::cos(turn),sn=std::sin(turn);
  CVector forward{f.x*cs+r.x*sn,f.y*cs+r.y*sn,f.z*cs+r.z*sn},right{r.x*cs-f.x*sn,r.y*cs-f.y*sn,r.z*cs-f.z*sn};

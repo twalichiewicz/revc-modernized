@@ -36,7 +36,7 @@ Native handling, actor refs, native protections, output pointers and visual tuni
 **Interfaces:** carmechanics::LightingPower returns1 for unknown/protected/disabled actors, otherwise current supply. carlights reads it for all custom and native car light paths.
 - [x] Add production-hook lighting tests for partial/failed supply, unrelated cars/world emissions and configuration/lifecycle; run RED.
 - [x] Apply supply with nested/exception-safe emitting-car scope; run GREEN.
-- [ ] Full make all test test-game-assets, focused sanitizers, independent final review and one fix pass if needed.
+- [x] Full make all test test-game-assets, focused sanitizers, independent final review and one fix pass if needed.
 - [ ] Install game closed; compare bytes, verify strict signatures; record results and commit.
 
 ## Execution record
@@ -50,3 +50,8 @@ Native handling, actor refs, native protections, output pointers and visual tuni
 - Lamp hook tests failed on custom/native supply, nested car scope and exception cleanup before implementation, then passed. Supply owner tests cover out-of-control reads, render replacement, disabled/protected/recycled actors and repair.
 
 - Full verification `build/car-systems/verification.log`: exit0, no compiler warnings/errors. ASan/UBSan model, owner, real native and production lamp-hook fixtures exit0 (`build/car-systems/*-sanitized.log`). Independent final review/install pending.
+
+- Independent final review found two Important issues: unprojected actor basis interpreted terrain tilt as steering (zero-input tilted-plane reproduction injected0.2574 rad), and broad render scope dimmed DoSunGlare/nonlamp/foreign emissions. Both reproduced RED, then fixed GREEN in one pass. Steering measures angle in the native wheel plane; electrical dimming uses native lamp IDs{0,1,6,7,14,15,21..24} and point-light return offsets{252fb4,253668,256e1c,256e9c,257178}. New regressions cover two actor headings, zero/signed steering, sun glare, foreign emissions, cabin containment, all native producers and custom-glow disabled.
+- Review rulings: native projected ground light patches retain original brightness (cost: visible ground patches after lamp supply fails); detailed model internals/projectiles/persistence/engine audio remain future scope (cost: coarse internals and native audio after drive failure); live balance/appearance remains the user's acceptance (cost: offline tests do not establish feel).
+
+- Final fix-pass verification: `make -j4 all test test-game-assets` exit0, zero warnings/errors/failing assertions (`build/car-systems/verification-final.log`); updated owner/native/lamp ASan/UBSan runs exit0. No review Minor findings. Native disassembly retained under `build/car-systems/native-*-review.disasm`.

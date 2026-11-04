@@ -561,7 +561,7 @@ void Hook_RegisterCorona(uint32_t id, uint8_t r, uint8_t g, uint8_t b, uint8_t a
 	if (car && id - uint32_t(uintptr_t(car)) - kTailCorona < 2 && gShader && Close(car) &&
 	    gModelsWithTail.count(*reinterpret_cast<const int16_t *>(car + kModelIndex)))
 		return; // its tail lights glow on the model instead
-	if (car) {
+	if (car && carlightrules::ElectricalCorona(id - uint32_t(uintptr_t(car)))) {
 		const float supply = carmechanics::LightingPower(car);
 		if (supply <= 0) return;
 		a = uint8_t(a * supply);
@@ -613,7 +613,7 @@ __attribute__((noinline)) void Hook_AddLight(uint8_t type, CVector pos, CVector 
 	if (carlightrules::SuppressCabinLight(camera::InSeat(), gPreRendering && gPreRendering == camera::SeatVehicle(),
 	                                      site))
 		return;
-	const float supply = gPreRendering ? carmechanics::LightingPower(gPreRendering) : 1;
+	const float supply = gPreRendering && carlightrules::ElectricalPoint(site) ? carmechanics::LightingPower(gPreRendering) : 1;
 	if (supply <= 0) return;
 	orig_AddLight(type, pos, direction, radius, red * supply, green * supply, blue * supply, fog, extra);
 }
