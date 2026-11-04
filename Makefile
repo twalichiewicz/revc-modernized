@@ -127,6 +127,13 @@ $(BUILD)/test_glassmodel: tests/test_glassmodel.cpp src/glassmodel.cpp src/glass
 $(BUILD)/test_carglass: tests/test_carglass.cpp src/carglass.cpp src/carglass.h src/glassmodel.cpp $(wildcard src/*.h) | $(BUILD)
 	$(CXX) $(CXXFLAGS) -Isrc -o $@ tests/test_carglass.cpp src/glassmodel.cpp
 
+# Optional real mesh-builder regression, using an explicitly supplied NULL librw build.
+.PHONY: test-carglass-rw
+test-carglass-rw: | $(BUILD)
+	@test -n "$(LIBRW_ROOT)" -a -n "$(LIBRW_STATIC)" || { echo 'Set LIBRW_ROOT and LIBRW_STATIC to a NULL-backend librw source/build'; exit 2; }
+	$(CXX) $(CXXFLAGS) -DRW_NULL -isystem "$(LIBRW_ROOT)" -Isrc -o $(BUILD)/test_carglass_rw tests/test_carglass_rw.cpp src/glassmodel.cpp "$(LIBRW_STATIC)"
+	$(BUILD)/test_carglass_rw
+
 $(BUILD)/test_glass_assets: tests/test_glass_assets.cpp src/glassmodel.cpp tools/bake/visualmodel.cpp tools/bake/gamefiles.cpp src/mapdata.cpp $(wildcard src/*.h tools/bake/*.h) | $(BUILD)
 	$(CXX) $(CXXFLAGS) -Isrc -o $@ tests/test_glass_assets.cpp src/glassmodel.cpp tools/bake/visualmodel.cpp tools/bake/gamefiles.cpp src/mapdata.cpp -lz
 

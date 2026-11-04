@@ -36,7 +36,7 @@ struct Clump {Frame root;std::vector<Atomic *> atomics;};
 alignas(16) std::array<uint8_t,0x6f0*2> cars{};
 uint8_t pool[24]{},carFlags[2]={1,2};void *poolPointer=pool;
 Clump clumps[2];Frame frames[2][3];Atomic atoms[2][3];Mat glass,metal;
-std::map<std::string,void *> entries;int failed=0,shards=0,sounds=0,created=0,destroyed=0,holders=0,nativeFix=0,nativeDelete=0;
+std::map<std::string,void *> entries;int failed=0,shards=0,sounds=0,created=0,destroyed=0,holders=0,nativeFix=0,nativeDelete=0,stripRebuilds=0;
 int failCreate=-1;bool protectDoor=false;Geo *base=nullptr;
 void Check(bool ok,const char *s){if(!ok){printf("FAIL: %s\n",s);++failed;}}
 void Identity(float *m){std::fill(m,m+16,0);m[0]=m[5]=m[10]=m[15]=1;}
@@ -71,7 +71,7 @@ const char *TextureName(void *t){return static_cast<const char *>(t);}
 void *TriMaterial(void *g,T *t,void *m){auto geo=static_cast<Geo *>(g);int i=m==&metal?1:0;geo->mats[i]=static_cast<Mat *>(m);t->material=uint16_t(i);return g;}
 void *Sphere(void *m){return static_cast<Geo *>(m)->sphere.data();}
 void *SetSphere(void *m,const void *s){memcpy(static_cast<Geo *>(m)->sphere.data(),s,16);return m;}
-void *Unlock(void *g){return g;}
+void *Unlock(void *g){if(static_cast<Geo *>(g)->flags&1)++stripRebuilds;return g;}
 void Generate(unsigned,V,V,V,V,V,float,bool,bool,int,bool){++shards;}
 void Sound(uint8_t,const V &){++sounds;}
 int DoorStatus(void *d,int door){return static_cast<uint8_t *>(d)[6+door];}
@@ -86,8 +86,8 @@ void Reset()
  for(auto &row:atoms)for(auto &a:row){if(a.geo)DestroyGeo(a.geo);a={};}
  if(base){DestroyGeo(base);base=nullptr;}
  cars={};carFlags[0]=1;carFlags[1]=2;failCreate=-1;protectDoor=false;
- shards=sounds=0;metal.colour[3]=255;
- base=static_cast<Geo *>(CreateGeo(8,4,0x3e));base->mats={&glass,&metal};
+ shards=sounds=stripRebuilds=0;metal.colour[3]=255;
+ base=static_cast<Geo *>(CreateGeo(8,4,0x3f));base->mats={&glass,&metal};
  base->vertices={{-.8f,0,.2f},{-.8f,1,.2f},{-.8f,1,1},{-.8f,0,1},{-.8f,0,-.3f},{-.8f,1,-.3f},{-.8f,1,.2f},{-.8f,0,.2f}};
  base->triangles={{{0,1,2},0},{{0,2,3},0},{{4,5,6},1},{{4,6,7},1}};
  for(int i=0;i<8;++i){base->normals[i]={1,0,0};base->colours[i]=0x12345678;base->uv[i]={float(i),.2f};}
@@ -137,6 +137,7 @@ int main()
  game::api.PoolsGetVehicle=Car;gConfig.carGlass=false;Check(carglass::Install()&&!carglass::gReady,"disabled startup installs no glass hooks");gConfig.carGlass=true;
  Check(carglass::Install(),"installed native bindings");Reset();
  Bullet();
+ Check(!(atoms[0][0].geo->flags&1)&&stripRebuilds==0&&base->flags==0x3f,"broken copies use triangle lists and retain the original strip geometry");
  Check(atoms[0][0].geo!=base&&Collapsed(atoms[0][0].geo,0)&&Collapsed(atoms[0][0].geo,1),"hit side window disappears");
  Check(!Collapsed(atoms[0][0].geo,2)&&!Collapsed(atoms[0][0].geo,3),"opaque door triangles preserved");
  Check(Collapsed(atoms[0][1].geo,0)&&atoms[0][1].flags==0,"hidden damaged door also loses its glass without reappearing");

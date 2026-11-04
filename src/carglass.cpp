@@ -133,7 +133,12 @@ void *Copy(const Mesh &m,uint8_t mask,size_t &bytes,size_t available)
  if(uvs<0||uvs>8)return nullptr;
  bytes=size_t(m.nv)*(12+((flags&16)?12:0)+((flags&8)?4:0)+uvs*8)+size_t(m.nt)*8+4096;
  if(bytes>available)return nullptr;
- void *g=rw.createGeometry(m.nv,m.nt,(flags&0xffffu)|(unsigned(uvs)<<16));if(!g)return nullptr;
+ // Broken panes retain zero-area triangles to preserve contact ordinals.
+ // librw's strip verifier skips those triangles, then exits because they
+ // were not seen. Build private copies as triangle lists; the shared source
+ // keeps its original topology and every other geometry flag is preserved.
+ constexpr unsigned kTriStrip=0x01;
+ void *g=rw.createGeometry(m.nv,m.nt,(flags&0xffffu&~kTriStrip)|(unsigned(uvs)<<16));if(!g)return nullptr;
  void *morph=rw.morph(g,0),*sourceMorph=rw.morph(m.geometry,0);
  auto copy=[&](void *to,const void *from,size_t n){if(!to||!from)return false;std::memcpy(to,from,n);return true;};
  bool ok=morph&&copy(rw.vertices(morph),m.v,size_t(m.nv)*12);
