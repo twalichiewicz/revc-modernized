@@ -64,7 +64,7 @@ int Ref(const uint8_t *entity,void **pool,size_t stride,uint8_t *(*get)(int))
  const int ref=int(index*256)|flags[index];return get(ref)==entity?ref:-1;
 }
 struct GlassFace {const void *atomic=nullptr;int triangle=-1;};
-struct Certified {uint8_t *car=nullptr;int ref=-1;Point point{};GlassFace face{};};
+struct Certified {uint8_t *car=nullptr;int ref=-1;Point point{};GlassFace face{};CVector from{},to{};};
 struct GlassContact {uint8_t *car=nullptr,*ped=nullptr;int carRef=-1,pedRef=-1;Point glass{},body{};GlassFace face{};};
 struct Snapshot {
  uint8_t *car=nullptr;int ref=-1,model=-1;void *clump=nullptr,*vtable=nullptr;std::array<float,16> matrix{};
@@ -258,7 +258,7 @@ bool Hook_World(const CVector &a,const CVector &b,Point &point,uint8_t *&entity,
    if(q.glass&&!readOnly)gShot->glass={q.car,q.ped,q.carRef,q.pedRef,q.glassPoint,point,q.face};
    entity=q.ped;
   }
-  else if(!q.ped&&!readOnly){gShot->last={q.car,q.carRef,point,q.face};if(q.pending.actor.Current()){
+  else if(!q.ped&&!readOnly){gShot->last={q.car,q.carRef,point,q.face,a,b};if(q.pending.actor.Current()){
    q.pending.buildings=buildings;q.pending.peds=peds;q.pending.objects=objects;q.pending.dummies=dummies;q.pending.see=see;q.pending.some=some;q.pending.shoot=shoot;gShot->pending=q.pending;
   }}
  }
@@ -268,10 +268,14 @@ struct ImpactScope;thread_local ImpactScope *gImpactScope;
 struct ImpactScope {
  ImpactScope *previous=gImpactScope;Shot *owner=gShot;Pending pending;uint8_t *car=nullptr;
  ImpactScope(uint8_t *weapon,uint8_t *by,uint8_t *vehicle,CVector *from,CVector *to,Point *point){
+  const bool material=owner&&from&&to&&point&&owner->pending.actor.car==vehicle&&owner->pending.actor.Current()&&!std::memcmp(point,&owner->pending.point,sizeof *point)&&
+   !std::memcmp(from,&owner->pending.from,sizeof *from)&&!std::memcmp(to,&owner->pending.to,sizeof *to);
+  const bool surface=owner&&from&&to&&point&&owner->last.car==vehicle&&Ref(vehicle,gVehiclePool,0x6f0,game::api.PoolsGetVehicle)==owner->last.ref&&!std::memcmp(point,&owner->last.point,sizeof *point)&&
+   !std::memcmp(from,&owner->last.from,sizeof *from)&&!std::memcmp(to,&owner->last.to,sizeof *to);
   if(gReady&&owner&&owner->active&&!owner->readOnly&&weapon&&game::WeaponType(weapon)==owner->type&&(by==owner->shooter||by==owner->damageCreator)&&from&&to&&point&&
-     owner->pending.actor.car==vehicle&&owner->pending.actor.Current()&&!std::memcmp(point,&owner->pending.point,sizeof *point)&&
-     !std::memcmp(from,&owner->pending.from,sizeof *from)&&!std::memcmp(to,&owner->pending.to,sizeof *to)){
-   pending=owner->pending;car=vehicle;owner->pending={};
+     (material||surface)){
+   if(owner->pending.actor.car==vehicle&&owner->pending.actor.Current())pending=owner->pending;
+   car=vehicle;owner->pending={};
   }
   gImpactScope=this;
  }
@@ -367,7 +371,7 @@ void Hook_VehicleDamage(uint8_t *car,uint8_t *by,int weapon,float damage,CVector
  const Certified hit=gShot?gShot->last:Certified{};
  // These two exact native fire scopes pass a zero damage position despite
  // retaining the real CColPoint from the immediately preceding world query.
- const bool nativeZero=gShot&&gShot->zeroDamagePoint&&at.x==0&&at.y==0&&at.z==0;
+ const bool nativeZero=zero&&ZeroPosition(car,weapon,by)&&DamageMetadata(weapon,by);
  if(gReady&&gShot&&gShot->active&&!gShot->readOnly&&hit.car==car&&hit.face.atomic&&hit.point.surfaceB==7&&
     Ref(car,gVehiclePool,0x6f0,game::api.PoolsGetVehicle)==hit.ref&&(nativeZero||!std::memcmp(&at,&hit.point.p,sizeof at))){
   gShot->last={};const Point &p=hit.point;

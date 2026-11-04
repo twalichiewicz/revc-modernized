@@ -304,6 +304,7 @@ struct Api {
 	const char *(*glfwGetJoystickName)(int jid);
 	int (*glfwUpdateGamepadMappings)(const char *mappings);
 	bool (*VehicleBurning)(const uint8_t *vehicle); // installed fire owner, or native-health fallback
+	bool (*VehicleFireService)(const uint8_t *vehicle); // active native cannon crew owns its behavior
 };
 
 extern Api api;

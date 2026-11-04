@@ -57,7 +57,7 @@ Clump clump;Model carModel,pedModel,passengerModel,standerModel,wheelModel;std::
 bool tyres=true;int fail,narrowCalls,worldCalls,fireCalls,occupantCalls,updates;bool wall=false,nested=false,throwFire=false,throwWorld=false,stale=false,stander=false,noPeds=false,staleLTM=false,windowMode=false,ignoreSee=false;int windowStatus=0,windowSounds=0,afterTrace=0,clumpType=2;int fireType=1,rounds=0,roundDamage=0;float nestedX=0;float wallT=.1f;uint8_t *ignore=nullptr;
 alignas(8) std::array<uint8_t,nativebullet::kCount*nativebullet::kStride> deferredBullets{};
 std::array<uint8_t,100> weaponInfo{};
-bool nestCover=false,nestedCoverPreserved=false,repairBeforeImpact=false;bool doDamage=false,acceptDamage=true,doubleDamage=false,coverWall=false,throwCover=false;int damageMutation=0;
+bool nestCover=false,nestedCoverPreserved=false,repairBeforeImpact=false,nativeGlassGate=false;bool doDamage=false,acceptDamage=true,doubleDamage=false,coverWall=false,throwCover=false;int damageMutation=0;
 Point result{};uint8_t *victim;CVector from{-3,0,.5f},to{3,0,.5f};int weaponType=17;
 void Check(bool yes,const char *msg){if(!yes){printf("FAIL: %s\n",msg);++fail;}}
 void Identity(float *m){std::fill(m,m+16,0);m[0]=m[5]=m[10]=m[15]=1;}
@@ -120,7 +120,7 @@ bool NativeFire(uint8_t *weapon,uint8_t *by,CVector *)
  ++fireCalls;if(throwFire)throw 7;
  if(nested){nested=false;uint8_t nonbullet[32]{};int type=30;std::memcpy(nonbullet,&type,4);reinterpret_cast<Fire>(entry["_ZN7CWeapon4FireEP7CEntityP7CVector"])(nonbullet,peds.data()+0x8d0,&from);nestedX=result.p.x;}
  WorldEntry()(from,to,result,victim,true,true,!noPeds,true,true,ignoreSee,false,true);
- if(victim)OccupantEntry()(&victim,&result,weaponType,from,to);
+ if(victim&&(!nativeGlassGate||result.pieceB==17))OccupantEntry()(&victim,&result,weaponType,from,to);
  if(repairBeforeImpact)++carmechanics::revision;
  if(doDamage&&victim==cars.data()){
   using Impact=void (*)(uint8_t *,uint8_t *,uint8_t *,CVector *,CVector *,Point *,Vec2);
@@ -172,7 +172,7 @@ void *Lookup(void *,const char *s){
  return nullptr;
 }
 void Setup(){
- nestCover=nestedCoverPreserved=repairBeforeImpact=false;carmechanics::enabled=false;carmechanics::deliveries=0;++carmechanics::revision;deferredBullets={};doDamage=false;acceptDamage=true;doubleDamage=coverWall=throwCover=false;damageMutation=0;ignore=nullptr;
+ nestCover=nestedCoverPreserved=repairBeforeImpact=nativeGlassGate=false;carmechanics::enabled=false;carmechanics::deliveries=0;++carmechanics::revision;deferredBullets={};doDamage=false;acceptDamage=true;doubleDamage=coverWall=throwCover=false;damageMutation=0;ignore=nullptr;
  carglass::calls=0;carglass::part=nullptr;carglass::face=-1;
  cars={};peds={};carFlags[0]=1;carFlags[1]=2;clumpType=2;clump.atomics.clear();Identity(clump.root.matrix.data());Identity(clump.root.world.data());staleLTM=windowMode=ignoreSee=false;windowStatus=windowSounds=afterTrace=0;carModel.spheres={{{0,0,.5f},1,0}};pedModel.spheres={{{0,0,.5f},.25f,3}};modelPtrs[7]=modelInfo.data();tyres=true;wall=false;stale=false;throwFire=throwWorld=nested=stander=noPeds=false;fireType=1;modelPtrs[8]=modelInfoB.data();passengerModel.spheres={{{-.5f,0,.5f},.2f,2}};standerModel.spheres={{{1,0,.5f},.25f,3}};
  for(int i=0;i<2;i++){auto c=cars.data()+i*0x6f0;*reinterpret_cast<float *>(c+0x2a0)=1000;Identity(reinterpret_cast<float *>(c+8));*reinterpret_cast<unsigned *>(c+0x60)=2|0x100;*reinterpret_cast<int16_t *>(c+0x6a)=7;*reinterpret_cast<void **>(c+0x58)=&clump;}
@@ -387,5 +387,6 @@ int main(int argc,char **argv){const bool assets=argc>1&&!std::strcmp(argv[1],"-
   printf("projectile asset %s: %zu material crossings\n",model,accepted?carmechanics::lastRay.count:0);
  }
  carmechanics::enabled=false;
+ Setup();Panel(-.8f,89,"door_lf_hi_ok");*reinterpret_cast<void **>(cars.data()+0x218)=nullptr;nativeGlassGate=doDamage=true;FireShot();Check(carglass::calls==1,"normal accepted zero-position impact breaks side glass without native windscreen-only occupant prepass");
  printf("shotcollision: %d failures\n",fail);return fail?1:0;
 }

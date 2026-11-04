@@ -173,6 +173,7 @@ void Frame()
 	for (int i = 0; i < count; i++) {
 		if (flags[i] & 0x80) continue;
 		uint8_t *car = entries + size_t(i) * 0x6f0;
+		if (api.VehicleFireService && api.VehicleFireService(car)) continue;
 		if (IsAircraft(car) || Wrecked(car) || (PedInVehicle(player) && PedVehicle(player) == car) || car[0x294] != 1) continue;
 		uint8_t *ped = *reinterpret_cast<uint8_t **>(car + 0x218);
 		if (!Available(ped, player) || !PedInVehicle(ped) || PedVehicle(ped) != car || PedState(ped) != kPedDriving ||

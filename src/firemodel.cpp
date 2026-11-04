@@ -12,7 +12,7 @@ void Tick(State &s,const Input &i,float dt)
  if(s.lit){s.age+=dt;if(s.age>=60-1e-4){s.age=60;s.spent=true;s.lit=false;}return;}
  if(s.spent||s.suppressed)return;
  const bool system=i.running&&i.fuel>.01f&&((i.heat>=1.1f&&i.breach>=.15f)||(i.electrical>=.8f&&i.breach>=.3f));
- s.exposure=i.health<250||system?s.exposure+dt:0;
- if(s.exposure>=2.5-1e-4)Ignite(s);
+ s.exposure=system?s.exposure+dt:0;
+ if(s.exposure>=8-1e-4)Ignite(s);
 }
 }

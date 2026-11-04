@@ -264,6 +264,9 @@ DEFAULT_HOOKS = [
     "_ZN8CCarCtrl28GenerateEmergencyServicesCarEv",
     "_ZNK12CFireManager19GetTotalActiveFiresEv",
     "_ZN12CFireManager15FindNearestFireE7CVectorPf",
+    "_ZN6CCarAI23TellOccupantsToLeaveCarEP8CVehicle",
+    "_ZN11CAutomobile16FireTruckControlEv",
+    "_ZN12CFireManager33FindFurthestFire_NeverMindFireMenE7CVectorff",
 ]
 
 # Flag-controlled skips inside CHud::Draw: (name, instruction address, expected
