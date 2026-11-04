@@ -40,7 +40,7 @@ CarMechanics controls this phase; native ammo/health/occupant/explosion semantic
 ### Task 3: Completion
 
 **Files:** README, verification evidence and necessary reviewed fixes.
-- [ ] Full all/test/test-game-assets and focused sanitizers; one independent whole-branch review and one fix pass if needed.
+- [x] Full all/test/test-game-assets and focused sanitizers; one independent whole-branch review and one fix pass if needed.
 - [ ] Install game closed, verify bytes/signatures, record remaining live/fidelity limits and commit.
 
 ## Execution record
@@ -50,4 +50,11 @@ CarMechanics controls this phase; native ammo/health/occupant/explosion semantic
 - Pure model and receiver RED→GREEN: locality, glass/body/obliquity, absorption/conservation, front/rear engine, wheel/caliper overlap; independent rounds, repair/restart/recycling/render deletion and pose/config/proof gates. Projectile integrity does not introduce collision toe or rack-bending impulses.
 - Native shot RED→GREEN: accepted damage, duplicate receipt, read-only nested cover, actual drive-by/deferred/mounted producer contracts, unrelated damage/burst rejection, repair between mesh sampling and impact. Native/asset consumers pass, including Police/Sentinel/Deluxo material paths and actual transmission reduction after a penetrating hit.
 - Native contracts from pristine 1.0.5217: DoBulletImpact at0x10028ea70 passes zero position into CVehicle::InflictDamage at0x10028f754; drive-by at0x10028d000 uses type42 and FindPlayerPed; mounted round at0x100291464 uses type23/null creator; deferred Update uses unique unchanged0x38-byte record and velocity*timeStep*0.5; BurstTyre at0x10025b1dc is void and accepts native pieces13..16. Raw retained disassembly is in build/car-projectiles/*-native.disasm.
-- Initial complete all/test/test-game-assets run passed. Focused model, receiver and shot fixtures passed ASan+UBSan (shot also stock assets). Final lease timing edit is under verification. Scratch patch and capacity regression pass with155 hooks+6 skips; existing DoBulletImpact table entry is reused.
+- Complete all/test/test-game-assets runs passed before review, including the final lease timing edit. Focused model, receiver and shot fixtures passed ASan+UBSan (shot also stock assets). Scratch patch and capacity regression pass with155 hooks+6 skips; existing DoBulletImpact table entry is reused.
+- Independent whole-branch review (gpt-6-astra/high, fresh context, basee0ea95f..60f184b): two Important findings, no Critical or Minor. Both accepted by practical effect and fixed in one pass after reproducing three failing assertions: only a matching ImpactScope transfers/retires the pending ray; explicit read-only narrow tests of the struck car's seated occupants compete with external cover. Native world LOS skips their normal collision at0x10012d950–0x10012d970. Occupied opaque-panel and mismatched-before-real-impact regressions now pass, including stock-asset fixtures. Post-fix make -j4 all test test-game-assets and affected shot ASan+UBSan --assets exit0, no warnings/assertions/sanitizer errors (build/car-projectiles/verification-reviewed.log and shot-sanitizers-reviewed.log). Installation remains to close.
+
+### Rulings and remaining limits
+
+- Follow the user's explicit vehicle-system selection; #39 remains outside this branch. Existing utility terrain factors remain provisional, with their interaction-based replacement recorded separately.
+- Use calibrated native damage budgets and current surface labels. These do not establish physical joules, sheet thickness or detailed internal component geometry; fidelity and balance require future authoring/tuning.
+- The reviewer declined live balance, physical thickness/joules, authored internals, complete world continuation, fire and persistence. Keep those explicit deferrals: this delivers component interaction with existing systems, with those fidelity and behavior limits still open. Final install/byte/signature checks are performed after review.

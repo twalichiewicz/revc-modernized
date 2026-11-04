@@ -335,6 +335,16 @@ int main(int argc,char **argv){const bool assets=argc>1&&!std::strcmp(argv[1],"-
  auto begin=std::chrono::steady_clock::now();for(int n=0;n<1000;n++)FireShot();auto elapsed=std::chrono::duration<double,std::milli>(std::chrono::steady_clock::now()-begin).count();printf("actual stock police: %.4f ms per native-layout shot query (1000 samples)\n",elapsed/1000);}
  Setup();Panel(-.8f);noPeds=true;*reinterpret_cast<void **>(cars.data()+0x218)=nullptr;carmechanics::enabled=doDamage=nestCover=true;FireShot();
  Check(nestedCoverPreserved&&carmechanics::deliveries==1,"nested read-only cover query preserves its parent impact certificate");
+ Setup();Panel(-.8f);carmechanics::enabled=doDamage=true;FireShot();
+ Check(carmechanics::deliveries==1&&std::fabs(carmechanics::lastRay.limit-2.75f/6)<.0001f&&*reinterpret_cast<float *>(peds.data()+0x44c)==100&&carglass::calls==0,"seated occupant behind opaque panel clips internal damage without occupant/glass side effects");
+ Setup();Panel(-.8f);noPeds=true;carmechanics::enabled=doDamage=true;FireShot();Check(carmechanics::deliveries==1&&carmechanics::lastRay.limit==1,"native peds=false excludes seated cover as well");
+ Setup();Panel(-.8f);noPeds=true;*reinterpret_cast<void **>(cars.data()+0x218)=nullptr;carmechanics::enabled=true;
+ {Shot shot(w,peds.data()+0x8d0*2);WorldEntry()(from,to,result,victim,true,true,true,true,true,false,false,true);Point unrelated=result;unrelated.p.x+=.1f;
+  {ImpactScope other(w,peds.data()+0x8d0*2,victim,&from,&to,&unrelated);}
+  Check(shot.pending.actor.car==cars.data(),"mismatched impact scope preserves the pending certified ray");
+  Hook_Impact(w,peds.data()+0x8d0*2,victim,&from,&to,&result,{});
+ }
+ Check(carmechanics::deliveries==1,"real native impact still delivers after an unrelated impact scope");
  // Native vehicle damage is position-zero in DoBulletImpact; only its certified impact scope authorizes it.
  Setup();Panel(-.8f);noPeds=true;*reinterpret_cast<void **>(cars.data()+0x218)=nullptr;carmechanics::enabled=doDamage=true;FireShot();
  Check(carmechanics::deliveries==1&&carmechanics::lastRay.count==1&&carmechanics::lastRay.layers[0].material==projectilemodel::Material::Body,"accepted native body impact delivers one material path with coincident triangles merged");

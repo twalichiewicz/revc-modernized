@@ -271,11 +271,11 @@ struct ImpactScope {
   if(gReady&&owner&&owner->active&&!owner->readOnly&&weapon&&game::WeaponType(weapon)==owner->type&&(by==owner->shooter||by==owner->damageCreator)&&from&&to&&point&&
      owner->pending.actor.car==vehicle&&owner->pending.actor.Current()&&!std::memcmp(point,&owner->pending.point,sizeof *point)&&
      !std::memcmp(from,&owner->pending.from,sizeof *from)&&!std::memcmp(to,&owner->pending.to,sizeof *to)){
-   pending=owner->pending;car=vehicle;
+   pending=owner->pending;car=vehicle;owner->pending={};
   }
-  if(owner)owner->pending={};gImpactScope=this;
+  gImpactScope=this;
  }
- ~ImpactScope(){if(owner&&gShot==owner)owner->pending={};gImpactScope=previous;}
+ ~ImpactScope(){if(car&&owner&&gShot==owner)owner->pending={};gImpactScope=previous;}
 };
 Pending *PendingHit(){if(!gShot)return nullptr;return gImpactScope&&gImpactScope->owner==gShot?&gImpactScope->pending:&gShot->pending;}
 bool DeferredCurrent(){return gShot&&gShot->deferredIndex<nativebullet::kCount&&gBullets&&
@@ -292,6 +292,25 @@ bool ZeroPosition(uint8_t *car,int weapon,uint8_t *by)
   (DeferredCurrent()&&weapon==gShot->deferredType&&by==gShot->deferredCreator));
 }
 struct Delivery {Pending hit;carmechanics::BulletToken token;projectilemodel::Ray ray;bool ready=false;};
+bool OccupantCover(const Snapshot &actor,const Line &line,uint8_t *ignored,Point &point,float &closest)
+{
+ bool hit=false;
+ // Native world LOS skips seated automobile occupants without normal
+ // collision enabled. Ignoring the struck car also skips Hook_Narrow's
+ // precision occupant pass, so intersect its occupants explicitly here.
+ for(size_t offset=0x218;offset<0x260&&actor.Current();offset+=8){
+  auto *ped=*reinterpret_cast<uint8_t **>(actor.car+offset);const int ref=Ref(ped,gPedPool,0x8d0,game::api.PoolsGetPed);
+  if(ref<0||ped==ignored||(gShot&&ped==gShot->shooter)||(game::EntityFlags(ped)&7)!=3||!(ped[0x193]&4)||ped[0x4c0]!=1||
+     *reinterpret_cast<uint8_t **>(ped+0x4b8)!=actor.car||!std::isfinite(*reinterpret_cast<float *>(ped+0x44c))||*reinterpret_cast<float *>(ped+0x44c)<=0)continue;
+  const int model=game::EntityModel(ped);auto *clump=game::EntityClump(ped);if(!clump||model<0||model>=6500||!gModels[model])continue;
+  const auto info=gModels[model];std::array<float,16> matrix;std::memcpy(matrix.data(),ped+8,sizeof matrix);
+  void *col=gAnimate(info,clump);Point candidate{};float fraction=closest;
+  if(col&&gNarrow(line,ped+8,col,candidate,fraction,false,false)&&std::isfinite(fraction)&&fraction>=0&&fraction<closest&&Finite(candidate.p)&&Finite(candidate.n)&&
+     Ref(ped,gPedPool,0x8d0,game::api.PoolsGetPed)==ref&&game::EntityModel(ped)==model&&game::EntityClump(ped)==clump&&gModels[model]==info&&
+     !std::memcmp(matrix.data(),ped+8,sizeof matrix)&&*reinterpret_cast<uint8_t **>(ped+0x4b8)==actor.car){closest=fraction;point=candidate;hit=true;}
+ }
+ return hit;
+}
 void Prepare(const Pending &hit,float budget,Delivery &delivery)
 {
  if(!carmechanics::Enabled()||!std::isfinite(budget)||budget<=0||!hit.actor.Current()||!hit.count||!game::api.ignoreEntity)return;
@@ -311,6 +330,11 @@ void Prepare(const Pending &hit,float budget,Delivery &delivery)
   struct ReadOnly {Shot *owner=gShot;unsigned previous=owner?owner->readOnly:0;ReadOnly(){if(owner)++owner->readOnly;}~ReadOnly(){if(gShot==owner&&owner)owner->readOnly=previous;}} readOnly;
   *ignore.slot=ignore.car;Query query(hit.peds);
   blocked=gWorld(start,end,cover,entity,hit.buildings,true,hit.peds,hit.objects,hit.dummies,hit.see,hit.some,hit.shoot);
+  if(hit.peds){
+   const CVector coverRay=Sub(end,start);float closest=1;
+   if(blocked){if(!Finite(cover.p))return;closest=std::clamp(Dot(Sub(cover.p,start),coverRay)/Dot(coverRay,coverRay),0.f,1.f);}
+   if(OccupantCover(hit.actor,{start,0,end,0},ignore.previous,cover,closest))blocked=true;
+  }
  }
  if(!hit.actor.Current())return;
  float limit=1;if(blocked){if(!Finite(cover.p))return;limit=std::clamp(Dot(Sub(cover.p,hit.from),d)/(length*length),entry,1.f);}
