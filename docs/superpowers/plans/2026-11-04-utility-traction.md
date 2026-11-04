@@ -35,8 +35,8 @@ Shared model lookup works independently of CarHandling; all aliases verified aga
 
 **Files:** README, tracked evidence, final regression fixes if required.
 - [x] Full make all test test-game-assets; focused ASan/UBSan.
-- [ ] One independent whole-branch review; one TDD fix pass for Important/Critical findings.
-- [ ] Install game closed, compare installed plugin bytes, verify strict signatures, commit and retain branch.
+- [x] One independent whole-branch review; one TDD fix pass for Important/Critical findings.
+- [x] Install game closed, compare installed plugin bytes, verify strict signatures, commit and retain branch.
 
 ## Execution record
 
@@ -49,3 +49,10 @@ Shared model lookup works independently of CarHandling; all aliases verified aga
 - Focused tests GREEN: semi launch2.72→3.68m/s², wet grass0→16.01m/s after10s prescribed contacts; native low-grip case still bogs, broken upstream torque produces no motion. Prescribed5% hill, reverse, mixed contacts,25/50/100Hz agree. These numbers omit complete controller/map/air drag and are not claimed as live road speeds. All77 model/handling associations (71 primaries+6 aliases) and existing top-speed/ride-height tests pass.
 
 - Full `make -j4 all test test-game-assets` exits0 with zero diagnostics (`build/utility/verification.log`). ASan/UBSan native replay and production rain hook fixtures exit0. Independent review/install pending.
+
+- Independent review of4845914..de18e0e: no Critical/Important findings, ready for installation. Reviewer checked all utility/van rows using native wheel order; all traverse soaked grass. Native loader flags, wheel parity, tyre surface, axle bias and grip formula agree with the supported producer.
+- Deferred Minor: isolated replay calls wheels0,1,2,3 instead of native0,2,1,3. A temporary native-order replay passes every assertion; semi speed16.014→16.016m/s. Production uses native order unchanged. Deferred under the one-review policy; future fixture fidelity work.
+- Ruling: exact Dolphin Expy geometry, complete controller/air drag and subjective balance require the user's next drive — isolated consumers establish the regression and force margins — cost: live thresholds may need further tuning.
+
+- `./install.sh` exits0 with game closed;154 hooks+6 skips. Installed plugin matches build bytes; strict plugin and executable (`--ignore-resources`) signatures pass. No config values overwritten. Work remains on local handling-utility branch.
+- Live acceptance: repeat Linerunner on rainy grass near Dolphin Expy, compare Landstalker/Rancher/Patriot on grass/beach to a sports car, and check dry-road pull/speed. Old road top-speed and physical-weight/suspension targets remain; native damage can still reduce drive. Existing30s drive logs provide the next tuning evidence.
