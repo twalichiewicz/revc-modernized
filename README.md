@@ -394,6 +394,12 @@ know you by your description, and getting away leaves you under an APB until you
   Ordinary gunfire, drive-bys, mounted rounds and deferred bullets share the same system damage.
   The internals and material resistance are approximations; detailed per-model authoring, complete
   bullet continuation through the world, fire propagation and saved mechanical damage remain open.
+- In free roam, damaged cars develop a fire over time (`CarFire`), and hot or shorting systems can
+  ignite a fuel leak. Fires grow, can be put out with the native water cannon, and eventually leave
+  a disabled wreck without an automatic explosion. A single nearby registered fire can trigger the
+  game's firetruck dispatch, with its road routing, streaming and response limits retained.
+  Rollover by itself no longer drains car health. Mission cars, active missions/cutscenes, aircraft,
+  protected vehicles and explicit explosive or scripted destruction retain native behavior.
 - Car radios can be heard from the street, muffled through the bodywork and coming from where the car is.
   Your own car keeps playing after you get out, and so do stopped cars nearby. Getting into a car, you
   hear only that car's radio, and a police car plays the police scanner, not the station you just heard.
@@ -568,6 +574,7 @@ updated after that. To pick up settings added by a newer version, delete it and 
 | `CarParts` | Damaged and swinging stages before native parts detach on stronger later hits |
 | `CarDeformation` | Localized persistent body dents from collisions, restored on repair |
 | `CarMechanics` | Localized engine, cooling, wheels, brakes, steering, drivetrain, fuel and electrical failures |
+| `CarFire` | Progressive free-roam fires, water suppression and native firetruck response |
 | `CarHandling` | GTA IV-style weight: mass by type, gentler acceleration, softer springs that lean, longer braking |
 | `HeadBalance` | First person in a car: the view leans with the car, his head levelling a little against it |
 

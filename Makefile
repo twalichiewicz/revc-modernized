@@ -35,7 +35,7 @@ PLUGIN += src/glassmodel.cpp src/carglass.cpp
 PLUGIN += src/partsmodel.cpp src/carparts.cpp
 PLUGIN += src/dentmodel.cpp src/carimpact.cpp
 PLUGIN += src/mechanicalmodel.cpp src/carmechanics.cpp src/projectilemodel.cpp
-PLUGIN += src/firemodel.cpp
+PLUGIN += src/firemodel.cpp src/carfire.cpp
 GUNS      ?= $(wildcard assets/guns/*.vmg)  # every gun built (GUNS="..." to build in only some)
 CXXFLAGS  += -I$(BUILD)
 BLENDER   ?= blender
@@ -344,6 +344,7 @@ test-game-assets: $(BUILD)/test_glass_assets $(BUILD)/test_estateassets $(BUILD)
 	MACVC_NATIVE="$(MACVC_NATIVE)" $(BUILD)/test_cardeform --native
 	GAMEDATA="$(GAMEDATA)" $(BUILD)/test_mechanical_assets
 	MACVC_NATIVE="$(MACVC_NATIVE)" $(BUILD)/test_mechanical_native
+	MACVC_NATIVE="$(MACVC_NATIVE)" $(BUILD)/test_carfire_native
 	GAMEDATA="$(GAMEDATA)" $(BUILD)/test_estateassets
 	GAMEDATA="$(GAMEDATA)" $(BUILD)/test_handling_assets
 	GAMEDATA="$(GAMEDATA)" MACVC_NATIVE="$(MACVC_NATIVE)" $(BUILD)/test_utility_native
@@ -441,6 +442,8 @@ FEEDBACK_TESTS += test_handlingmodel test_handlinghook test_drivelog test_headba
 FEEDBACK_TESTS += test_glassmodel test_carglass
 FEEDBACK_TESTS += test_partsmodel test_carparts test_dentmodel test_cardeform test_mechanicalmodel test_projectilemodel test_carmechanics test_carsystem_lights
 FEEDBACK_TESTS += test_firemodel
+FEEDBACK_TESTS += test_carfire
+FEEDBACK_TESTS += test_carfire_awareness
 
 test-feedback: $(addprefix $(BUILD)/,$(FEEDBACK_TESTS))
 	@set -e; for test in $(FEEDBACK_TESTS); do $(BUILD)/$$test; done
@@ -775,3 +778,14 @@ $(BUILD)/test_projectilemodel: tests/test_projectilemodel.cpp src/projectilemode
 
 $(BUILD)/test_firemodel: tests/test_firemodel.cpp src/firemodel.cpp src/firemodel.h | $(BUILD)
 	$(CXX) $(CXXFLAGS) -Isrc -o $@ tests/test_firemodel.cpp src/firemodel.cpp
+
+$(BUILD)/test_carfire: tests/test_carfire.cpp src/carfire.cpp src/firemodel.cpp $(wildcard src/*.h) | $(BUILD)
+	$(CXX) $(CXXFLAGS) -Isrc -o $@ tests/test_carfire.cpp src/firemodel.cpp
+
+$(BUILD)/test_carfire_awareness: tests/test_carfire_awareness.cpp tests/test_carfire.cpp src/carfire.cpp src/firemodel.cpp src/combat.cpp $(wildcard src/*.h) | $(BUILD)
+	$(CXX) $(CXXFLAGS) -Isrc -Wl,-dead_strip -o $@ tests/test_carfire_awareness.cpp src/firemodel.cpp
+
+$(BUILD)/test_carfire_native: tests/test_carfire_native.cpp tests/test_carfire.cpp tests/nativejetshadowarm.h tests/nativeweavearm.h src/carfire.cpp src/firemodel.cpp $(wildcard src/*.h) | $(BUILD)
+	$(CXX) $(CXXFLAGS) -Isrc -o $@ tests/test_carfire_native.cpp src/firemodel.cpp
+
+test-game-assets: $(BUILD)/test_carfire_native

@@ -303,6 +303,7 @@ struct Api {
 	int (*glfwGetGamepadState)(int jid, void *state); // GLFWgamepadstate: uint8 buttons[15], float axes[6]
 	const char *(*glfwGetJoystickName)(int jid);
 	int (*glfwUpdateGamepadMappings)(const char *mappings);
+	bool (*VehicleBurning)(const uint8_t *vehicle); // installed fire owner, or native-health fallback
 };
 
 extern Api api;
@@ -496,7 +497,7 @@ inline bool IsAircraft(const uint8_t *vehicle)
 constexpr float kVehicleOnFire = 250.0f, kVehicleSmoking = 390.0f;
 inline float VehicleHealth(const uint8_t *vehicle) { return *reinterpret_cast<const float *>(vehicle + 0x2a0); }
 inline bool Wrecked(const uint8_t *vehicle) { return (vehicle[0x60] >> 3) == 5; }
-inline bool OnFire(const uint8_t *vehicle) { return !Wrecked(vehicle) && VehicleHealth(vehicle) < kVehicleOnFire; }
+inline bool OnFire(const uint8_t *vehicle) { return api.VehicleBurning?api.VehicleBurning(vehicle):!Wrecked(vehicle)&&VehicleHealth(vehicle)<kVehicleOnFire; }
 
 // CPlayerPed weapons (see CPlayerPed::ProcessWeaponSwitch): 10 CWeapon slots of
 // 0x18 bytes at +0x550 (type, state, ammo in clip at +8, total ammo at +0xc),

@@ -16,12 +16,14 @@ outside the dispatch decision, spawn trucks beside the player, heal damage,
 overwrite shared handling, or suppress scripts/bombs/explosive weapons.
 
 Use a separate CarFire switch, default true. Normal automobile models excluding
-aircraft, Rhino and RC, with valid pool identity, render object, native damage
+aircraft, Rhino and RC, with valid pool identity, native damage
 permission, finite health, no fire/explosion proof, and not mission-created or
 in a mission/cutscene are eligible. Noneligible calls remain native. Keep state
 bounded to256 pool slots, keyed by pool/flags/ref/model/vtable; repair/restart
 clear it, streaming does not heal, nested controllers and exceptions restore
 all temporary native gates. Callback repair/recycling retires ownership.
+Fire ownership follows the native actor/model binding through render streaming;
+it does not require a currently instantiated RW clump or inspect render meshes.
 
 Pure fire progression: low native health below250 or damaged-system ignition
 requires2.5 seconds of continuous exposure before ignition. Thermal ignition

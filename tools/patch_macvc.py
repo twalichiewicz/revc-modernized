@@ -258,6 +258,12 @@ DEFAULT_HOOKS = [
     "_ZN14cSampleManager19SetChannelFrequencyEjj",
     # the sniper scope: first person's eye, sway, the zoom stops (sniper.cpp)
     "_ZN4CCam14Process_SniperERK7CVectorfff",
+    # progressive native car fires, water suppression and emergency response
+    "_ZN5CFire11ProcessFireEv",
+    "_ZN5CFire10ExtinguishEv",
+    "_ZN8CCarCtrl28GenerateEmergencyServicesCarEv",
+    "_ZNK12CFireManager19GetTotalActiveFiresEv",
+    "_ZN12CFireManager15FindNearestFireE7CVectorPf",
 ]
 
 # Flag-controlled skips inside CHud::Draw: (name, instruction address, expected
@@ -265,6 +271,10 @@ DEFAULT_HOOKS = [
 # the single entry of a block, and the target is where the game itself jumps
 # when it hides that block (health/armour flashing).
 DEFAULT_SKIPS = [
+    # carfire owns these only inside a validated current automobile call.
+    ("skip:car_fire_countdown", 0x10024D25C, 0x12003C08, 0x10024CFD0),
+    ("skip:car_rollover_drain", 0x10024EB7C, 0xBD42A260, 0x10024EBA0),
+    ("skip:car_ordinary_lethal", 0x10027DAA8, 0xF9400288, 0x10027DBE4),
     ("skip:hud_health", 0x1001F8DEC, 0xF94033E8, 0x1001F8FB4),  # ldr x8, [sp, #0x60]
     ("skip:hud_armour", 0x1001F8FDC, 0xBD400108, 0x1001F91F8),  # ldr s8, [x8]
     # In CPlayerPed::ProcessPlayerWeapon: the M4, Ruger and M60 aim in first person

@@ -53,6 +53,7 @@ const char kDefaultIni[] = "; VC Modern HUD for macVC. Delete this file to resto
                            "CarParts=1           ; native parts loosen and swing before detaching on stronger later hits\n"
                            "CarDeformation=1     ; body metal crumples near collisions; repairs restore it\n"
                            "CarMechanics=1       ; engine, cooling and wheel damage affect how the car drives\n"
+                           "CarFire=1            ; progressive fires and native firetruck response\n"
                            "RainVehicles=1       ; soaked grass, dirt and sand bog cars down; aircraft are thrown about in the rain\n"
                            "RadioLogo=1          ; station logo at the bottom centre when it changes, instead of the big name\n"
                            "Places=1             ; map icons: hospitals, police stations, businesses before they're for sale\n"
@@ -218,6 +219,8 @@ void Apply(const char *key, const char *value, const char *section)
 		gConfig.carDeformation = b;
 	else if (!strcasecmp(key, "CarMechanics"))
 		gConfig.carMechanics = b;
+	else if (!strcasecmp(key, "CarFire"))
+		gConfig.carFire = b;
 	else if (!strcasecmp(key, "RainVehicles"))
 		gConfig.rainVehicles = b;
 	else if (!strcasecmp(key, "RTShadowDump"))

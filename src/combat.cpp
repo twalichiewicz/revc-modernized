@@ -362,9 +362,10 @@ void Dangers(uint32_t now)
 		if (flags[i] & 0x80)
 			continue;
 		uint8_t *car = entries + size_t(i) * kVehicleSize;
-		if (Wrecked(car) || IsAircraft(car) || VehicleHealth(car) >= kVehicleSmoking)
+		const bool burning = OnFire(car);
+		if (Wrecked(car) || IsAircraft(car) || (VehicleHealth(car) >= kVehicleSmoking && !burning))
 			continue;
-		gDangers[size_t(gNumDangers++)] = {EntityPos(car), VehicleHealth(car) < kVehicleOnFire};
+		gDangers[size_t(gNumDangers++)] = {EntityPos(car), burning};
 	}
 }
 

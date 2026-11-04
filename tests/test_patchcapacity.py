@@ -28,7 +28,7 @@ class Capacity(unittest.TestCase):
    self.assertEqual((stub&~0xfff)+imm*4096+((ldr>>10)&0xfff)*8,slot)
   self.assertEqual(len(set(slots)),count)
  def test_existing_fitting_table_keeps_original_layout(self):
-  before=p.MachO(self.raw);after=p.MachO(p.patch(self.raw,p.DEFAULT_HOOKS[:116],'@executable_path/../Frameworks/libVCModernHUD.dylib',p.DEFAULT_SKIPS))
+  before=p.MachO(self.raw);after=p.MachO(p.patch(self.raw,p.DEFAULT_HOOKS[:122-len(p.DEFAULT_SKIPS)],'@executable_path/../Frameworks/libVCModernHUD.dylib',p.DEFAULT_SKIPS))
   self.assertEqual(before.segments,after.segments);self.assertEqual(before.sections,after.sections)
  def test_ragdoll_world_phase_can_be_installed(self):
   before=p.MachO(self.raw);after=p.MachO(p.patch(self.raw,p.DEFAULT_HOOKS,'@executable_path/../Frameworks/libVCModernHUD.dylib',p.DEFAULT_SKIPS))
@@ -55,11 +55,19 @@ class Capacity(unittest.TestCase):
   with self.assertRaises(p.PatchError):p.reserve_slots(p.MachO(self.raw),3000)
  def test_exact_capacity_boundary(self):
   before=p.MachO(self.raw)
-  for hooks,growth in [(117,0),(118,0x4000)]:
+  for hooks,growth in [(123-len(p.DEFAULT_SKIPS),0),(124-len(p.DEFAULT_SKIPS),0x4000)]:
    with self.subTest(slots=hooks+len(p.DEFAULT_SKIPS)):
     after=p.MachO(p.patch(self.raw,p.DEFAULT_HOOKS[:hooks],'@executable_path/../Frameworks/libVCModernHUD.dylib',p.DEFAULT_SKIPS))
     self.assertEqual(after.segments['__DATA'][1]-before.segments['__DATA'][1],growth)
     self.assertEqual(after.segments['__LINKEDIT'][0]-before.segments['__LINKEDIT'][0],growth)
+ def test_progressive_fire_hooks_and_scoped_native_gates(self):
+  after=p.MachO(p.patch(self.raw,p.DEFAULT_HOOKS,'@executable_path/../Frameworks/libVCModernHUD.dylib',p.DEFAULT_SKIPS))
+  at=after.find_table();_,_,count,_=struct.unpack_from(p.HEADER_FMT,after.data,at)
+  entries={row[0]:row for row in (struct.unpack_from(p.ENTRY_FMT,after.data,at+p.HEADER_SIZE+i*p.ENTRY_SIZE) for i in range(count))}
+  for name in ['_ZN5CFire11ProcessFireEv','_ZN5CFire10ExtinguishEv','_ZN8CCarCtrl28GenerateEmergencyServicesCarEv','_ZNK12CFireManager19GetTotalActiveFiresEv','_ZN12CFireManager15FindNearestFireE7CVectorPf']:
+   self.assertIn(p.name_hash(name),entries,'native fire lifetime/dispatch hook missing')
+  for name,address in [('skip:car_fire_countdown',0x10024d25c),('skip:car_rollover_drain',0x10024eb7c),('skip:car_ordinary_lethal',0x10027daa8)]:
+   self.assertEqual(entries[p.name_hash(name)][1]+after.base,address);self.assertEqual(entries[p.name_hash(name)][4],1)
  def test_already_patched_image_is_rejected(self):
   output=p.patch(self.raw,p.DEFAULT_HOOKS,'@executable_path/../Frameworks/libVCModernHUD.dylib',p.DEFAULT_SKIPS)
   with self.assertRaises(p.PatchError):p.patch(output,p.DEFAULT_HOOKS,'@executable_path/../Frameworks/libVCModernHUD.dylib',p.DEFAULT_SKIPS)
