@@ -32,8 +32,8 @@ Native fire pool40 x0x38, 256 bounded actor slots; original geometry and unrelat
 ### Task 2: Armor and ballistic part loss
 
 **Files:** projectile/shot/parts owners, new material policy as needed, real stock/native fixtures.
-- [ ] RED Enforcer/Securicar body/glazing protection versus exposed wheels/penetration/blast; repeated localized bullet part detachment.
-- [ ] Implement layer budget and native component progression without invincibility/shared writes; GREEN and commit.
+- [x] RED Enforcer/Securicar body/glazing protection versus exposed wheels/penetration/blast; repeated localized bullet part detachment.
+- [x] Implement layer budget and native component progression without invincibility/shared writes; GREEN and commit.
 
 ### Task 3: Aircraft component and skin model
 

@@ -25,7 +25,7 @@ Result Doses(const mechanicalmodel::Layout &layout,const Ray &ray)
  const Vec3 d{ray.to.x-ray.from.x,ray.to.y-ray.from.y,ray.to.z-ray.from.z};const float length=std::sqrt(d.x*d.x+d.y*d.y+d.z*d.z);
  if(!std::isfinite(length)||length<1e-6f)return out;
  std::array<Layer,kLayers> layers;size_t n=0;
- for(size_t i=0;i<ray.count;i++){const auto l=ray.layers[i];if(!std::isfinite(l.fraction)||l.fraction<0||l.fraction>1||!std::isfinite(l.incidence)||l.incidence<0||l.incidence>1||int(l.material)<0||int(l.material)>2)return out;layers[n++]=l;}
+ for(size_t i=0;i<ray.count;i++){const auto l=ray.layers[i];if(!std::isfinite(l.fraction)||l.fraction<0||l.fraction>1||!std::isfinite(l.incidence)||l.incidence<0||l.incidence>1||int(l.material)<0||int(l.material)>5)return out;layers[n++]=l;}
  std::sort(layers.begin(),layers.begin()+n,[](const Layer&a,const Layer&b){return a.fraction<b.fraction;});
  // Shared edges/double-sided faces can return the same sheet more than once.
  size_t unique=0;for(size_t i=0;i<n;i++){
@@ -45,8 +45,8 @@ Result Doses(const mechanicalmodel::Layout &layout,const Ray &ray)
  for(size_t i=0;i<n;i++)if(layers[i].fraction>=ray.entry-1e-6f&&layers[i].fraction<=far)cuts[count++]=std::max(ray.entry,layers[i].fraction);
  std::sort(cuts.begin(),cuts.begin()+count);size_t layer=0;while(layer<n&&layers[layer].fraction<ray.entry-1e-6f)++layer;
  for(size_t k=0;k+1<count&&out.remaining>0;k++){
-  const float t=cuts[k];while(layer<n&&layers[layer].fraction<=t+1e-6f){const auto &l=layers[layer++];const float costs[]={12,4,6};
-   const float loss=std::min(out.remaining,costs[int(l.material)]/std::max(.05f,l.incidence));out.surfaceLoss+=loss;out.remaining-=loss;}
+  const float t=cuts[k];while(layer<n&&layers[layer].fraction<=t+1e-6f){const auto &l=layers[layer++];
+   const float loss=std::min(out.remaining,Cost(l.material,l.incidence));out.surfaceLoss+=loss;out.remaining-=loss;}
   const float next=cuts[k+1],middle=(t+next)*.5f;float rate=0;
   for(int i=0;i<mechanicalmodel::kModules;i++)if(enter[i]<exit[i]&&middle>=enter[i]&&middle<exit[i])rate+=resistance[i];
   if(rate<=0||next<=t||out.remaining<=0)continue;

@@ -78,6 +78,8 @@ void NativeControl(uint8_t *v)
  damage(v,scripted?200.0f:0.0f,0);
  Check(*reinterpret_cast<void **>(v+0x160)==handling[i],"damage callbacks retain real handling allocation");
 }
+void NativeDoor(uint8_t *v,int node,int index,bool noFlying){Check(!noFlying,"ballistic parts retain native flying objects");const int nodes[]={17,18,15,11,16,12};Check(node==nodes[index],"ballistic door uses verified native frame node");++bodyCallbacks;if(Door(v+0x34c,index)==3)++spawns;}
+void NativeBumper(uint8_t *v,int node,int index,bool noFlying){Check(node==index+2&&!noFlying,"ballistic bumper retains native node and flying objects");++bodyCallbacks;if(Panel(v+0x34c,index)==3)++spawns;}
 void NativeFix(uint8_t *v){++nativeFixes;memset(v+0x34c,0,24);}
 void Reset()
 {
@@ -93,6 +95,12 @@ void Reset()
 void Run(uint32_t gap=0){now+=gap;control(vehicles[0]);}
 void Cases()
 {
+ for(int component:{5,6,7,8,9,10,16,17}){
+  Reset();const auto token=carparts::BeginBullet(vehicles[0]);const float health=F(vehicles[0],0x2a0);
+  for(int i=0;i<30;i++)carparts::Projectile(vehicles[0],token,component,20);
+  Check(State(vehicles[0],component)==3&&spawns==1,"repeated localized rounds detach exactly the struck native part");Check(F(vehicles[0],0x2a0)==health,"part damage does not invent whole-health damage");
+ }
+ Reset();auto bullet=carparts::BeginBullet(vehicles[0]);for(int i=0;i<5;i++)carparts::Projectile(vehicles[0],bullet,7,20);Check(State(vehicles[0],7)==0,"individual light rounds accumulate before breaking hinges");fix(vehicles[0]);for(int i=0;i<50;i++)carparts::Projectile(vehicles[0],bullet,7,200);Check(State(vehicles[0],7)==0,"repair retires in-flight part leases");
  Reset();hits={{7,60},{7,60},{7,60}};Run();Check(State(vehicles[0],7)==1&&bodyCallbacks==1,"one native collision callback burst advances only one state");
  for(int i=0;i<100;i++)Run(20);Check(State(vehicles[0],7)==1,"sustained scrape across frames keeps damaged stage");
  hits={{7,60}};Run(350);Check(State(vehicles[0],7)==2,"separate moderate hit frees hinge into native swinging stage");
@@ -134,6 +142,8 @@ void *Chain(const char *s,void *replacement){using namespace fixture;
 }
 }
 static void *Lookup(void *,const char *s){using namespace fixture;
+ if(strstr(s,"SetDoorDamage"))return reinterpret_cast<void *>(NativeDoor);
+ if(strstr(s,"SetBumperDamage"))return reinterpret_cast<void *>(NativeBumper);
  if(!strcmp(s,"_ZN6CPools15ms_pVehiclePoolE"))return &poolPointer;
  if(!strcmp(s,"_ZN14CDamageManager13GetDoorStatusEi"))return reinterpret_cast<void *>(Door);
  if(!strcmp(s,"_ZN14CDamageManager14GetPanelStatusEi"))return reinterpret_cast<void *>(Panel);

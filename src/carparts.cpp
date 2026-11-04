@@ -15,7 +15,8 @@ void **gPool;
 int (*gDoorStatus)(void *,int),(*gPanelStatus)(void *,int);
 void (*gControl)(uint8_t *),(*gVehicleDamage)(uint8_t *,float,uint16_t),(*gFix)(uint8_t *);
 bool (*gApply)(uint8_t *,int,float,float);
-bool gReady;
+bool gReady;uint64_t gSerial;
+void (*gSetDoor)(uint8_t *,int,int,bool),(*gSetBumper)(uint8_t *,int,int,bool);
 struct Identity {
  uint8_t *vehicle=nullptr;const uint8_t *entries=nullptr,*flags=nullptr;
  int ref=-1,model=-1;void *clump=nullptr;
@@ -43,11 +44,11 @@ bool Eligible(const Identity &id)
         *reinterpret_cast<const int *>(v+0x348)==0&&!game::IsAircraft(v)&&!game::Wrecked(v)&&
         (v[0x297]&0x40)&&!(game::EntityFlags(v)&(1u<<27));
 }
-struct History {Identity id;std::array<partsmodel::Episode,partsmodel::kParts> parts{};};
+struct History {Identity id;std::array<partsmodel::Episode,partsmodel::kParts> parts{};std::array<float,partsmodel::kParts> strain{};uint64_t revision=0;};
 std::array<History,kSlots> gHistory;
 History &Record(const Identity &id)
 {
- auto &h=gHistory[size_t(id.ref>>8)];if(!Same(h.id,id)){h={};h.id=id;}return h;
+ auto &h=gHistory[size_t(id.ref>>8)];if(!Same(h.id,id)){h={};h.id=id;if(++gSerial==0)++gSerial;h.revision=gSerial;}return h;
 }
 int State(uint8_t *v,int slot)
 {
@@ -142,10 +143,26 @@ void Fix(uint8_t *v)
  gFix(v);
 }
 } // namespace
+BulletToken BeginBullet(uint8_t *v){Identity id;if(!gReady||!gConfig.carParts||!Identify(v,id)||!Eligible(id))return {};return {Record(id).revision};}
+void Projectile(uint8_t *v,const BulletToken &token,int component,float budget)
+{
+ Identity id;const int slot=partsmodel::Slot(component);
+ if(!token.revision||!gReady||!gConfig.carParts||slot<0||!std::isfinite(budget)||budget<=0||!Identify(v,id)||!Eligible(id)||!(v[0x297]&0x40)||(game::EntityFlags(v)&((1u<<25)|(1u<<17))))return;
+ auto &h=Record(id);if(h.revision!=token.revision)return;const int before=State(v,slot);if(before<0||before>=3)return;
+ // Repeated rounds load the struck fastenings. Each accepted shot can advance
+ // one native stage; the next stage needs a new independent localized round.
+ auto &strain=h.strain[slot];strain+=std::min(budget,1000.f);if(strain<180)return;strain=0;
+ if(!gApply(v+kDamage,component,200,1)||!Current(id)||Record(id).revision!=token.revision)return;
+ const auto &p=partsmodel::Describe(slot);const int nodes[]={17,18,15,11,16,12,7,8};
+ if(p.panel)gSetBumper(v,nodes[slot],p.index,false);else gSetDoor(v,nodes[slot],p.index,false);
+ if(Current(id)&&Record(id).revision==token.revision&&State(v,slot)>before)Log("car parts: ref %d model %d %s ballistic %s -> %s",id.ref,id.model,p.name,StateName(before,p.panel),StateName(State(v,slot),p.panel));
+}
+bool Enabled(){return gReady&&gConfig.carParts;}
 bool Install()
 {
  if(gReady||!gConfig.carParts)return true;
 #define BIND(v,s) v=reinterpret_cast<decltype(v)>(dlsym(RTLD_MAIN_ONLY,s));if(!v)return false
+ BIND(gSetDoor,"_ZN11CAutomobile13SetDoorDamageEi6eDoorsb");BIND(gSetBumper,"_ZN11CAutomobile15SetBumperDamageEi7ePanelsb");
  BIND(gPool,"_ZN6CPools15ms_pVehiclePoolE");
  BIND(gDoorStatus,"_ZN14CDamageManager13GetDoorStatusEi");BIND(gPanelStatus,"_ZN14CDamageManager14GetPanelStatusEi");
 #undef BIND

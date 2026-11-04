@@ -1,5 +1,6 @@
 #include "game.h"
 #include "carmechanics.h"
+#include "carparts.h"
 #include "nativebullet.h"
 #include "hooks.h"
 #include "../tools/bake/visualmodel.h"
@@ -30,6 +31,7 @@ bool Enabled(){return enabled;}
 BulletToken BeginBullet(uint8_t *){BulletToken t;if(enabled)t.revision=revision;return t;}
 void Projectile(uint8_t *,const BulletToken &t,const projectilemodel::Ray &r){if(!enabled||t.revision!=revision)return;++deliveries;lastRay=r;std::copy(r.layers,r.layers+r.count,lastLayers.begin());lastRay.layers=lastLayers.data();}
 }
+namespace carparts {bool enabled=false;int hits=0,component=0;bool Enabled(){return enabled;}BulletToken BeginBullet(uint8_t *){return {enabled?1u:0u};}void Projectile(uint8_t *,const BulletToken &t,int c,float){if(t.revision){++hits;component=c;}}}
 namespace fixture { void *Lookup(void *,const char *); void *Native(const char *); std::map<std::string,void *> entry; }
 namespace hooks {void *Chain(const char *s,void *p){fixture::entry[s]=p;return fixture::Native(s);}}
 #define dlsym fixture::Lookup
@@ -56,7 +58,7 @@ uint8_t carFlags[2]{1,2},pedFlags[3]{3,4,5};Pool carPool{cars.data(),carFlags,2}
 Clump clump;Model carModel,pedModel,passengerModel,standerModel,wheelModel;std::array<uint8_t,0x80> modelInfo{},modelInfoB{};void *modelPtrs[6500]{};
 bool tyres=true;int fail,narrowCalls,worldCalls,fireCalls,occupantCalls,updates;bool wall=false,nested=false,throwFire=false,throwWorld=false,stale=false,stander=false,noPeds=false,staleLTM=false,windowMode=false,ignoreSee=false;int windowStatus=0,windowSounds=0,afterTrace=0,clumpType=2;int fireType=1,rounds=0,roundDamage=0;float nestedX=0;float wallT=.1f;uint8_t *ignore=nullptr;
 alignas(8) std::array<uint8_t,nativebullet::kCount*nativebullet::kStride> deferredBullets{};
-std::array<uint8_t,100> weaponInfo{};
+std::array<uint8_t,100> weaponInfo{};uint32_t roundBudget=20;
 bool nestCover=false,nestedCoverPreserved=false,repairBeforeImpact=false,nativeGlassGate=false;bool doDamage=false,acceptDamage=true,doubleDamage=false,coverWall=false,throwCover=false;int damageMutation=0;
 Point result{};uint8_t *victim;CVector from{-3,0,.5f},to{3,0,.5f};int weaponType=17;
 void Check(bool yes,const char *msg){if(!yes){printf("FAIL: %s\n",msg);++fail;}}
@@ -81,7 +83,7 @@ const void *Verts(const void *g){return static_cast<const Geometry *>(g)->verts.
 void *Mat(const void *g,int i){return const_cast<Material *>(&static_cast<const Geometry *>(g)->mats.at(i));}
 const uint8_t *Colour(const void *m){return static_cast<const Material *>(m)->colour.data();}
 void *Animate(void *self,void *){return self==modelInfoB.data()?&passengerModel:&pedModel;}
-uint8_t *Info(int){std::memcpy(weaponInfo.data(),&fireType,4);uint32_t damage=20;std::memcpy(weaponInfo.data()+0x14,&damage,4);return weaponInfo.data(); }
+uint8_t *Info(int){std::memcpy(weaponInfo.data(),&fireType,4);uint32_t damage=roundBudget;std::memcpy(weaponInfo.data()+0x14,&damage,4);return weaponInfo.data(); }
 V Sub(V a,V b){return {a.x-b.x,a.y-b.y,a.z-b.z};}float Dot(V a,V b){return a.x*b.x+a.y*b.y+a.z*b.z;}
 bool NativeNarrow(const Line &l,const void *,void *m,Point &p,float &closest,bool,bool)
 {
@@ -128,6 +130,7 @@ bool NativeFire(uint8_t *weapon,uint8_t *by,CVector *)
   if(found!=entry.end())reinterpret_cast<Impact>(found->second)(weapon,by,victim,&from,&to,&result,{});
   else NativeImpact(weapon,by,victim,&from,&to,&result,{});
  }
+ if(doDamage&&victim==peds.data())reinterpret_cast<bool (*)(uint8_t *,uint8_t *,int,float,int,uint8_t)>(entry["_ZN4CPed13InflictDamageEP7CEntity11eWeaponTypef14ePedPieceTypesh"])(victim,by,weaponType,20,result.pieceB,0);
  return true;
 }
 void NativeVehicleDamage(uint8_t *v,uint8_t *,int,float damage,CVector){
@@ -138,9 +141,9 @@ void NativeVehicleDamage(uint8_t *v,uint8_t *,int,float damage,CVector){
 void NativeImpact(uint8_t *,uint8_t *by,uint8_t *v,CVector *,CVector *,Point *point,Vec2){
  if(point->pieceB>=13&&point->pieceB<=16){reinterpret_cast<void (*)(uint8_t *,uint8_t,bool)>(entry["_ZN11CAutomobile9BurstTyreEhb"])(v,point->pieceB,true);return;}
  auto inflict=reinterpret_cast<void (*)(uint8_t *,uint8_t *,int,float,CVector)>(entry["_ZN8CVehicle13InflictDamageEP7CEntity11eWeaponTypef7CVector"]);
- inflict(v,by,weaponType,20,{});if(doubleDamage)inflict(v,by,weaponType,20,{});
+ inflict(v,by,weaponType,float(roundBudget),{});if(doubleDamage)inflict(v,by,weaponType,float(roundBudget),{});
 }
-bool NativePedDamage(uint8_t *,uint8_t *,int,float,int,uint8_t){return false;}
+float lastPedDamage=0;bool NativePedDamage(uint8_t *,uint8_t *,int,float damage,int,uint8_t){lastPedDamage=damage;return false;}
 void DirectDamage(){
  if(victim==cars.data()&&entry["_ZN8CVehicle13InflictDamageEP7CEntity11eWeaponTypef7CVector"])reinterpret_cast<void (*)(uint8_t *,uint8_t *,int,float,CVector)>(entry["_ZN8CVehicle13InflictDamageEP7CEntity11eWeaponTypef7CVector"])(victim,peds.data()+0x8d0*2,weaponType,20,CVector{0,0,0});
  if(victim==peds.data()&&entry["_ZN4CPed13InflictDamageEP7CEntity11eWeaponTypef14ePedPieceTypesh"])reinterpret_cast<bool (*)(uint8_t *,uint8_t *,int,float,int,uint8_t)>(entry["_ZN4CPed13InflictDamageEP7CEntity11eWeaponTypef14ePedPieceTypesh"])(victim,peds.data()+0x8d0*2,weaponType,20,result.pieceB,0);
@@ -172,7 +175,7 @@ void *Lookup(void *,const char *s){
  return nullptr;
 }
 void Setup(){
- nestCover=nestedCoverPreserved=repairBeforeImpact=nativeGlassGate=false;carmechanics::enabled=false;carmechanics::deliveries=0;++carmechanics::revision;deferredBullets={};doDamage=false;acceptDamage=true;doubleDamage=coverWall=throwCover=false;damageMutation=0;ignore=nullptr;
+ carparts::enabled=false;carparts::hits=0;roundBudget=20;nestCover=nestedCoverPreserved=repairBeforeImpact=nativeGlassGate=false;carmechanics::enabled=false;carmechanics::deliveries=0;++carmechanics::revision;deferredBullets={};doDamage=false;acceptDamage=true;doubleDamage=coverWall=throwCover=false;damageMutation=0;ignore=nullptr;
  carglass::calls=0;carglass::part=nullptr;carglass::face=-1;
  cars={};peds={};carFlags[0]=1;carFlags[1]=2;clumpType=2;clump.atomics.clear();Identity(clump.root.matrix.data());Identity(clump.root.world.data());staleLTM=windowMode=ignoreSee=false;windowStatus=windowSounds=afterTrace=0;carModel.spheres={{{0,0,.5f},1,0}};pedModel.spheres={{{0,0,.5f},.25f,3}};modelPtrs[7]=modelInfo.data();tyres=true;wall=false;stale=false;throwFire=throwWorld=nested=stander=noPeds=false;fireType=1;modelPtrs[8]=modelInfoB.data();passengerModel.spheres={{{-.5f,0,.5f},.2f,2}};standerModel.spheres={{{1,0,.5f},.25f,3}};
  for(int i=0;i<2;i++){auto c=cars.data()+i*0x6f0;*reinterpret_cast<float *>(c+0x2a0)=1000;Identity(reinterpret_cast<float *>(c+8));*reinterpret_cast<unsigned *>(c+0x60)=2|0x100;*reinterpret_cast<int16_t *>(c+0x6a)=7;*reinterpret_cast<void **>(c+0x58)=&clump;}
@@ -261,6 +264,14 @@ void TraceChecks(){using namespace fixture;using shotcollision::MeshHit;using sh
 int main(int argc,char **argv){const bool assets=argc>1&&!std::strcmp(argv[1],"--assets");using namespace fixture;Setup();Check(shotcollision::Install(),"native ABI hooks install");TraceChecks();Setup();
  Panel(-.8f);FireShot();Check(victim==cars.data() && std::fabs(result.p.x+.8f)<1e-5f,"real metal blocks native head-only retarget and uses visible surface");
  Setup();Panel(-.8f,128,"windscreen_hi_ok");*reinterpret_cast<void **>(cars.data()+0x218)=nullptr;FireShot();Check(victim==cars.data() && result.surfaceB==7,"glass retains native car impact when no seated body is behind it");
+ Setup();Panel(-.8f,255,"door_lr_hi_ok");*reinterpret_cast<void **>(cars.data()+0x218)=nullptr;nativeGlassGate=doDamage=carparts::enabled=true;FireShot();Check(carparts::hits==1&&carparts::component==9,"actual accepted opaque part impact reaches ballistic native part owner with mechanics disabled");
+ Setup();Panel(-.8f,89,"door_lr_hi_ok");*reinterpret_cast<void **>(cars.data()+0x218)=nullptr;nativeGlassGate=doDamage=carparts::enabled=true;FireShot();Check(carparts::hits==0,"a glazing hit cannot shoot the entire door off");
+ for(int model:{157,158}){
+  Setup();Panel(-.8f,89,"door_lf_hi_ok");*reinterpret_cast<int16_t *>(cars.data()+0x6a)=model;roundBudget=100;doDamage=true;FireShot();Check(lastPedDamage>0&&lastPedDamage<20,"penetrated armor glazing scales occupant damage by residual budget");
+  Setup();Panel(-.8f,255,"door_lf_hi_ok");*reinterpret_cast<int16_t *>(cars.data()+0x6a)=model;*reinterpret_cast<void **>(cars.data()+0x218)=nullptr;nativeGlassGate=doDamage=true;FireShot();Check(*reinterpret_cast<float *>(cars.data()+0x2a0)==1000,"armored body stops ordinary rounds without whole-vehicle health loss");
+  Setup();Panel(-.8f,89,"door_lf_hi_ok");*reinterpret_cast<int16_t *>(cars.data()+0x6a)=model;nativeGlassGate=doDamage=true;FireShot();Check(victim==cars.data()&&carglass::calls==0,"armored glazing stops occupant retarget and pane destruction");
+  Setup();Panel(-.8f,255,"door_lf_hi_ok");*reinterpret_cast<int16_t *>(cars.data()+0x6a)=model;*reinterpret_cast<void **>(cars.data()+0x218)=nullptr;nativeGlassGate=doDamage=true;roundBudget=150;FireShot();Check(*reinterpret_cast<float *>(cars.data()+0x2a0)<1000&&*reinterpret_cast<float *>(cars.data()+0x2a0)>850,"powerful armor penetration preserves only residual hull damage");
+ }
  Setup();Panel(-.8f,89,"door_lf_hi_ok");*reinterpret_cast<void **>(cars.data()+0x218)=nullptr;FireShot();Check(carglass::calls==1&&carglass::car==cars.data()&&carglass::part==&clump.atomics[0]&&carglass::face>=0&&std::fabs(carglass::point.x+.8f)<1e-5f,"actual glass impact certifies exact car atomic triangle and point");
  Setup();Panel(-.8f,89,"door_lf_hi_ok");Panel(2);FireShot();Check(carglass::calls==1&&carglass::part==&clump.atomics[0]&&victim==peds.data()&&result.pieceB==3,"glass before occupant breaks without retargeting body hit");
  Setup();Panel(-.8f,89,"door_lf_hi_ok");wall=true;FireShot();Check(carglass::calls==0,"world obstruction prevents side-window effects");
