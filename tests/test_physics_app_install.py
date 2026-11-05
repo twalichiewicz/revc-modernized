@@ -1,5 +1,6 @@
 """Exercise real directory swaps and rollback without touching Applications."""
 import importlib.util
+import json
 from pathlib import Path
 import plistlib
 import shutil
@@ -7,6 +8,7 @@ import subprocess
 import sys
 import tempfile
 import unittest
+from unittest.mock import patch
 
 SPEC = importlib.util.spec_from_file_location("physics_app", Path(__file__).resolve().parents[1] / "tools/host/app_package.py")
 app_package = importlib.util.module_from_spec(SPEC)
@@ -71,6 +73,45 @@ class InstallTests(unittest.TestCase):
         app_package.restore(self.app,self.backup,archive,app_package.fingerprint(self.app),self.expected)
         self.assertEqual(app_package.fingerprint(self.app),self.expected)
         self.assertTrue((archive/"Contents/MacOS/vcLauncher").exists())
+
+    def test_recovery_record_exists_before_swap_and_validation(self):
+        record = self.root / "package.json"
+        manifest = {"original": self.expected}
+        def verify(path):
+            saved = json.loads(record.read_text())
+            self.assertEqual(saved["backup"], str(self.backup))
+            self.assertEqual(saved["installed_fingerprint"], app_package.fingerprint(path))
+        app_package.install_recorded(self.stage, self.app, self.backup, record, manifest, verify)
+        saved = json.loads(record.read_text())
+        app_package.restore(self.app, Path(saved["backup"]), self.root/"Archive.app", saved["installed_fingerprint"], saved["original"])
+        self.assertEqual(app_package.fingerprint(self.app), self.expected)
+
+    def test_failed_journal_commit_prevents_swap_and_preserves_record(self):
+        record = self.root / "package.json"
+        record.write_text('{"previous":"record"}')
+        with patch.object(app_package.os, "replace", side_effect=OSError("disk write failed")):
+            with self.assertRaisesRegex(OSError, "disk write failed"):
+                app_package.install_recorded(self.stage, self.app, self.backup, record, {"original":self.expected}, lambda p:None)
+        self.assertEqual(record.read_text(), '{"previous":"record"}')
+        self.assertFalse(self.backup.exists())
+        self.assertEqual(app_package.fingerprint(self.app), self.expected)
+
+    def test_recovery_metadata_survives_post_swap_write_failure(self):
+        record = self.root / "package.json"
+        manifest = {"original":self.expected}
+        def fail_later(path):
+            with patch.object(app_package.os, "replace", side_effect=OSError("disk full after swap")):
+                with self.assertRaisesRegex(OSError,"disk full after swap"):
+                    app_package.atomic_record(record,{"invalid":"incomplete replacement"})
+        app_package.install_recorded(self.stage,self.app,self.backup,record,manifest,fail_later)
+        saved = json.loads(record.read_text())
+        app_package.restore(self.app,Path(saved["backup"]),self.root/"Archive.app",saved["installed_fingerprint"],saved["original"])
+        self.assertEqual(app_package.fingerprint(self.app), self.expected)
+
+    def test_interrupted_swap_can_restore_recorded_backup_when_app_missing(self):
+        self.app.rename(self.backup)
+        app_package.restore(self.app,self.backup,self.root/"Archive.app",self.expected,self.expected)
+        self.assertEqual(app_package.fingerprint(self.app),self.expected)
 
 
 @unittest.skipUnless(sys.platform == "darwin" and shutil.which("xcrun"), "native Cocoa launcher requires macOS CLT")

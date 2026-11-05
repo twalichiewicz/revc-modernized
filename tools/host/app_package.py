@@ -4,10 +4,12 @@ import argparse
 from datetime import datetime
 import hashlib
 import json
+import os
 from pathlib import Path
 import plistlib
 import re
 import subprocess
+import tempfile
 
 ROOT=Path(__file__).resolve().parents[2]
 PROTECTED=("Contents/MacOS/macVC","Contents/Frameworks/libVCModernHUD.dylib")
@@ -18,6 +20,29 @@ def digest(path): return hashlib.sha256(path.read_bytes()).hexdigest()
 
 def fingerprint(app):
     return {name:digest(app/name) for name in (*PROTECTED,"Contents/Info.plist")}
+
+
+def atomic_record(path,manifest):
+    """Preserve the previous recovery journal if writing a replacement fails."""
+    output=tempfile.NamedTemporaryFile(mode="w",dir=path.parent,prefix=".package-manifest-",delete=False)
+    temporary=Path(output.name)
+    try:
+        with output:
+            json.dump(manifest,output,indent=2);output.write("\n");output.flush();os.fsync(output.fileno())
+        os.replace(temporary,path)
+    finally:
+        temporary.unlink(missing_ok=True)
+
+
+def install_recorded(staged,app,backup,record,manifest,validate):
+    if backup.exists():raise FileExistsError(backup)
+    if fingerprint(app)!=manifest["original"]:raise RuntimeError("Installed app changed since staging")
+    intent={**manifest,"installed":str(app),"backup":str(backup),"installed_fingerprint":fingerprint(staged)}
+    # Everything rollback needs is durable before the first directory rename.
+    # No journal update is required after the swap, even if storage fills up.
+    atomic_record(record,intent)
+    install(staged,app,backup,manifest["original"],validate,payload=manifest.get("payload"))
+    return intent
 
 
 def install(staged,app,backup,expected,validate,payload=None):
@@ -36,7 +61,12 @@ def install(staged,app,backup,expected,validate,payload=None):
 
 
 def restore(app,backup,archive,installed,original):
-    if fingerprint(app)!=installed or fingerprint(backup)!=original: raise RuntimeError("App or backup changed; refusing to overwrite it")
+    if fingerprint(backup)!=original:raise RuntimeError("Backup changed; refusing to overwrite it")
+    if not app.exists():
+        # Recovery after interruption between the two installation renames.
+        backup.rename(app)
+        return
+    if fingerprint(app)!=installed: raise RuntimeError("App changed; refusing to overwrite it")
     if archive.exists(): raise FileExistsError(archive)
     app.rename(archive)
     try: backup.rename(app)
@@ -74,7 +104,7 @@ def main():
     if args.rollback:
         if running():raise RuntimeError("Quit the game/test before rollback")
         manifest=json.loads(record.read_text());backup=Path(manifest["backup"]);archive=backup.with_name("Vice City physics-test-"+datetime.now().strftime("%Y%m%d-%H%M%S")+".app")
-        restore(app,backup,archive,manifest["installed_fingerprint"],manifest["original"]);manifest["rolled_back"]=True;record.write_text(json.dumps(manifest,indent=2)+"\n");print("Restored:",app);return
+        restore(app,backup,archive,manifest["installed_fingerprint"],manifest["original"]);manifest["rolled_back"]=True;atomic_record(record,manifest);print("Restored:",app);return
     if not record.exists():
         if stage.exists():raise RuntimeError("Unrecorded staging app already exists")
         build=json.loads((work/"build-manifest.json").read_text())
@@ -105,14 +135,14 @@ def main():
         run(["codesign","--force","--sign","-",host]);run(["codesign","--force","--sign","-",stage])
         validate(stage,work/"staged-smoke.ppm")
         files=[host,launcher,info,resource/"aircraft.txt",*list((stage/"Contents/Frameworks").rglob("*.dylib"))]
-        record.write_text(json.dumps({"original":expected,"stage":str(stage),"payload":{str(f.relative_to(stage)):digest(f) for f in files},"build_manifest_sha256":digest(work/"build-manifest.json"),"launcher_source_sha256":digest(ROOT/"tools/host/launcher.mm")},indent=2)+"\n")
+        atomic_record(record,{"original":expected,"stage":str(stage),"payload":{str(f.relative_to(stage)):digest(f) for f in files},"build_manifest_sha256":digest(work/"build-manifest.json"),"launcher_source_sha256":digest(ROOT/"tools/host/launcher.mm")})
     manifest=json.loads(record.read_text())
     if args.install:
         if running():raise RuntimeError("Quit the game/test before installation")
         if manifest["build_manifest_sha256"]!=digest(work/"build-manifest.json") or manifest["launcher_source_sha256"]!=digest(ROOT/"tools/host/launcher.mm"):raise RuntimeError("Build changed after staging; prepare a fresh package")
         backup=app.with_name("Grand Theft Auto Vice City.before-physics-"+datetime.now().strftime("%Y%m%d-%H%M%S")+".app")
-        install(stage,app,backup,manifest["original"],lambda installed:validate(installed,work/"installed-smoke.ppm"),payload=manifest["payload"])
-        manifest.update({"installed":str(app),"backup":str(backup),"installed_fingerprint":fingerprint(app)});record.write_text(json.dumps(manifest,indent=2)+"\n");print("Installed:",app,"\nRollback app:",backup)
+        install_recorded(stage,app,backup,record,manifest,lambda installed:validate(installed,work/"installed-smoke.ppm"))
+        print("Installed:",app,"\nRollback app:",backup)
     else:print("Validated staging app:",stage)
 
 

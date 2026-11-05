@@ -42,6 +42,8 @@ python3 tools/host/app_package.py --install
 
 The original complete app is renamed beside the installed app to `Grand Theft Auto Vice City.before-physics-<timestamp>.app`. A failed installed validation restores it. `package-manifest.json` records the exact backup path, original/installed fingerprints and staged payload hashes. The current implementation uses local directory renames on the same filesystem; installation across filesystems is not supported.
 
+Recovery metadata is flushed to a temporary file and atomically replaces the journal before either app directory is renamed. No post-swap journal write is required for rollback. If interrupted between the two renames, `--rollback` can restore the recorded original even while the installed app path is absent.
+
 To restore the original after quitting either mode:
 
 ```sh

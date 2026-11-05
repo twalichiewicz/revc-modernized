@@ -40,7 +40,7 @@
 
 - [x] Test normal-game routing, test-mode routing, missing experimental resources and a failed staged install/rollback before implementing installation.
 - [x] Build/sign a launcher, bundle source host plus private audio libraries/assets, patch its library paths, and prepare a complete staging app. Keep normal game binary/plugin bytes identical.
-- [ ] Fresh review and one tested material fix pass. Run existing project/native/physics checks appropriate to this isolated addition.
+- [x] Fresh review and one tested material fix pass. Run existing project/native/physics checks appropriate to this isolated addition.
 
 ### Task 3: Authorized install and installed verification
 
