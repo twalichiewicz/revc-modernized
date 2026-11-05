@@ -139,6 +139,41 @@ void FastPoint(bool miss) {
     auto result=stepper.Advance(.01,Eigen::MatrixXd::Zero(4,3));
     Check(miss?"fast_point_preserves_clear_miss":"fast_point_cannot_tunnel_through_intact_face",miss?std::abs(point.nodes[0].x.z()+1)<1e-8:point.nodes[0].x.z()>.002-1e-7&&result.peakContacts>0);
 }
+void ArithmeticRollback() {
+    for(int scenario=0;scenario<5;++scenario) {
+        World w(Options());structure::Force f;structure::Asset a(w,f);a.Node({0,0,0},1,{1,0,0});
+        if(scenario==3)a.nodes[0].v.setZero();a.Build();
+        std::vector<persistent::Pin> pins;if(scenario==3)pins.push_back({&a,0});
+        persistent::Stepper stepper(w,{&a},pins);Eigen::MatrixXd loads=Eigen::MatrixXd::Zero(1,3);loads(0,1)=1;
+        double dt=scenario==0?1e200:scenario==1?1e-200:scenario==2?10:scenario==3?2:1;
+        if(scenario==2||scenario==3)loads(0,1)=1e308;
+        if(scenario==4)stepper.time=1e20;
+        auto before=a.nodes[0];int revision=a.revision;double clock=stepper.time;bool rejected=false;
+        try{stepper.Advance(dt,loads);}catch(const std::exception&){rejected=true;}
+        const char *names[]={"overflowing_dt_cannot_fake_convergence","underflowing_dt_cannot_publish","overflowing_prediction_cannot_publish","overflowing_support_receipt_cannot_publish","unrepresentable_clock_advance_cannot_publish"};
+        Check(names[scenario],rejected&&stepper.time==clock&&a.revision==revision&&(a.nodes[0].x-before.x).length()==0&&(a.nodes[0].v-before.v).length()==0&&a.Synchronized());
+    }
+}
+void ForeignCollisionObjects() {
+    for(bool addedLate:{false,true}) {
+        World w(Options());structure::Force f;structure::Asset a(w,f);a.Node({-1,0,0},1,{2,0,0});a.Build();
+        btBoxShape shape({.1,1,1});btRigidBody::btRigidBodyConstructionInfo info(0,nullptr,&shape);btRigidBody rigid(info);
+        if(!addedLate)w.world->addRigidBody(&rigid);
+        bool rejected=false;int revision=a.revision;double time=0;
+        try{persistent::Stepper stepper(w,{&a});if(addedLate)w.world->addRigidBody(&rigid);stepper.Advance(1,Eigen::MatrixXd::Zero(1,3));time=stepper.time;}
+        catch(const std::invalid_argument&){rejected=true;}
+        Check(addedLate?"direct_rigid_registration_after_construction_rejected":"direct_rigid_registration_before_construction_rejected",rejected&&time==0&&a.revision==revision&&a.nodes[0].x.x()==-1&&a.nodes[0].v.x()==2);
+        w.world->removeRigidBody(&rigid);
+    }
+}
+void TorqueReceiptOverflow() {
+    World w(Options());structure::Force f;structure::Asset a(w,f);
+    a.Node({1e150,2e150,0},1e27);a.Node({1e150+1e140,2e150,0},1e27);
+    a.Member(0,1,1,{1e159,1e160,0,1,1e160,.5},"spar");a.members[0].bar.length/=1.1;a.Build();
+    persistent::Stepper stepper(w,{&a});int revision=a.revision;bool rejected=false;
+    try{stepper.Advance(1e-140,Eigen::MatrixXd::Zero(2,3));}catch(const std::exception&){rejected=true;}
+    Check("overflowing_internal_torque_cannot_fake_balance",rejected&&stepper.time==0&&a.revision==revision&&a.Synchronized());
+}
 void Benchmark(int pairs) {
     World w(Options());structure::Force f;std::vector<std::unique_ptr<structure::Asset>> storage;std::vector<structure::Asset*> assets;std::vector<persistent::Pin> pins;
     for(int pair=0;pair<pairs;++pair)for(int sheet=0;sheet<2;++sheet) {
@@ -158,6 +193,8 @@ int main(int argc,char **argv){std::setvbuf(stdout,nullptr,_IONBF,0);
     AnalyticBar();ExternalForce();LoadedPanels(false);LoadedPanels(true);SeveredMount();RejectWithoutPublication();
     TornSurface();FragmentRecontact();ChangedIsland();
     FastPoint(false);FastPoint(true);
+    ArithmeticRollback();ForeignCollisionObjects();
+    TorqueReceiptOverflow();
     double coarse=AngularError(.02),fine=AngularError(.01),finer=AngularError(.005);
     Check("angular_integration_error_converges_without_correction",fine<.7*coarse&&finer<.7*fine&&finer>0);
     std::printf("persistent matrix: %d/%d passed\n",checked-failed,checked);return failed?1:0;}

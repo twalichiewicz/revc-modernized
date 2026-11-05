@@ -1,11 +1,11 @@
-Force-driven persistent contact, release + ASAN; research only.
+Force-driven persistent contact, final release + ASAN; research only.
 
 === persistent-final ===
 
 geometry.txt
 continuous geometry matrix: 61/61 passed
 exit=0
-elapsed_s=0.003275
+elapsed_s=0.003166
 
 grazes.txt
 near-graze radius=2.031 hit=0 gap=0.600201539729 refinement=36
@@ -16,12 +16,12 @@ near-graze radius=2.02999 hit=1 gap=0.0300000999243 refinement=284
 ccd near_graze_resolves_actual_contact_or_miss PASS
 near-graze matrix: 3/3 passed
 exit=0
-elapsed_s=0.002288
+elapsed_s=0.002668
 
 events.txt
 contact event matrix: 167/167 passed
 exit=0
-elapsed_s=0.132950
+elapsed_s=0.007597
 
 incremental-material.txt
 incremental-material elastic_potential_force_tangent PASS
@@ -38,7 +38,7 @@ incremental-material broken_member_cannot_repeat_work PASS
 incremental-material invalid_trial_cannot_mutate_state PASS
 incremental material matrix: 12/12 passed
 exit=0
-elapsed_s=0.002253
+elapsed_s=0.002311
 
 persistent.txt
 persistent implicit_bar_matches_hand_solution PASS
@@ -47,7 +47,7 @@ persistent bar_numerical_loss_is_measured PASS
 persistent free_mass_has_force_driven_motion PASS
 persistent external_work_and_numerical_loss PASS
 persistent nonfinite_load_cannot_publish_partial_state PASS
-loaded panels supported=0 gap_min=0.0126684849 gap_loaded=0.0198496085 gap_final=0.0182205074 contacts=15 newton=829 retries=0 momentum_error=3.48590583e-13
+loaded panels supported=0 gap_min=0.0126684849 gap_loaded=0.0198496085 gap_final=0.0182205074 contacts=15 newton=829 retries=0 momentum_error=2.09556e-13
 persistent free_panels_resist_and_release PASS
 persistent free_panel_recontact PASS
 persistent unequal_mass_contact_preserves_momentum PASS
@@ -63,25 +63,33 @@ persistent exhausted_solve_does_not_publish_trial_state PASS
 persistent nonfinite_contact_settings_rejected PASS
 persistent force_driven_tear_removes_actual_query_face PASS
 persistent tear_does_not_duplicate_mass_or_fracture_work PASS
-fragment recontact gap_min=0.0155547436 released=0.0767481289 contacts=17 fragments=2
+fragment recontact gap_min=0.0155547436 released=0.0748809687 contacts=17 fragments=2
 persistent severed_fragments_recontact_in_same_island PASS
 persistent fragment_faces_and_registered_mass_stay_current PASS
 persistent changed_mass_rejected_before_motion PASS
 persistent fast_point_cannot_tunnel_through_intact_face PASS
 persistent fast_point_preserves_clear_miss PASS
+persistent overflowing_dt_cannot_fake_convergence PASS
+persistent underflowing_dt_cannot_publish PASS
+persistent overflowing_prediction_cannot_publish PASS
+persistent overflowing_support_receipt_cannot_publish PASS
+persistent unrepresentable_clock_advance_cannot_publish PASS
+persistent direct_rigid_registration_before_construction_rejected PASS
+persistent direct_rigid_registration_after_construction_rejected PASS
+persistent overflowing_internal_torque_cannot_fake_balance PASS
 rotating bar dt=0.02 angular_error=0.00187898918 numerical_loss=0.00196989128
 rotating bar dt=0.01 angular_error=0.000953003755 numerical_loss=0.00105770902
 rotating bar dt=0.005 angular_error=0.000477953139 numerical_loss=0.000575498021
 persistent angular_integration_error_converges_without_correction PASS
-persistent matrix: 26/26 passed
+persistent matrix: 34/34 passed
 exit=0
-elapsed_s=0.147805
+elapsed_s=0.272618
 
 persistent-benchmark.txt
-persistent benchmark pairs=1 nodes=6 members=6 triangles=2 fixed_nodes=3 steps=120 simulated_s=.6 wall_s=0.034377 us_per_step=286.477775 seconds_per_simulated_second=0.057296 nonlinear_iterations=433 accepted_substeps=120 retries=0 peak_contact_stencils=15 process_peak_rss_bytes=13828096
-persistent benchmark pairs=4 nodes=24 members=24 triangles=8 fixed_nodes=12 steps=120 simulated_s=.6 wall_s=0.117653 us_per_step=980.440625 seconds_per_simulated_second=0.196088 nonlinear_iterations=433 accepted_substeps=120 retries=0 peak_contact_stencils=60 process_peak_rss_bytes=15794176
+persistent benchmark pairs=1 nodes=6 members=6 triangles=2 fixed_nodes=3 steps=120 simulated_s=.6 wall_s=0.025107 us_per_step=209.225342 seconds_per_simulated_second=0.041845 nonlinear_iterations=433 accepted_substeps=120 retries=0 peak_contact_stencils=15 process_peak_rss_bytes=13795328
+persistent benchmark pairs=4 nodes=24 members=24 triangles=8 fixed_nodes=12 steps=120 simulated_s=.6 wall_s=0.100701 us_per_step=839.178125 seconds_per_simulated_second=0.167836 nonlinear_iterations=433 accepted_substeps=120 retries=0 peak_contact_stencils=60 process_peak_rss_bytes=15384576
 exit=0
-elapsed_s=0.157085
+elapsed_s=0.131143
 
 provenance source pins
 {
@@ -104,7 +112,7 @@ provenance source pins
 geometry.txt
 continuous geometry matrix: 61/61 passed
 exit=0
-elapsed_s=0.375174
+elapsed_s=0.097391
 
 grazes.txt
 near-graze radius=2.031 hit=0 gap=0.600201539729 refinement=36
@@ -115,12 +123,12 @@ near-graze radius=2.02999 hit=1 gap=0.0300000999243 refinement=284
 ccd near_graze_resolves_actual_contact_or_miss PASS
 near-graze matrix: 3/3 passed
 exit=0
-elapsed_s=0.013101
+elapsed_s=0.011438
 
 events.txt
 contact event matrix: 167/167 passed
 exit=0
-elapsed_s=0.212438
+elapsed_s=0.037211
 
 incremental-material.txt
 incremental-material elastic_potential_force_tangent PASS
@@ -137,7 +145,7 @@ incremental-material broken_member_cannot_repeat_work PASS
 incremental-material invalid_trial_cannot_mutate_state PASS
 incremental material matrix: 12/12 passed
 exit=0
-elapsed_s=0.107211
+elapsed_s=0.010826
 
 persistent.txt
 persistent implicit_bar_matches_hand_solution PASS
@@ -146,7 +154,7 @@ persistent bar_numerical_loss_is_measured PASS
 persistent free_mass_has_force_driven_motion PASS
 persistent external_work_and_numerical_loss PASS
 persistent nonfinite_load_cannot_publish_partial_state PASS
-loaded panels supported=0 gap_min=0.0126684849 gap_loaded=0.0198496085 gap_final=0.0182205074 contacts=15 newton=829 retries=0 momentum_error=1.57323734e-13
+loaded panels supported=0 gap_min=0.0126684849 gap_loaded=0.0198496085 gap_final=0.0182205073 contacts=15 newton=829 retries=0 momentum_error=7.56116525e-13
 persistent free_panels_resist_and_release PASS
 persistent free_panel_recontact PASS
 persistent unequal_mass_contact_preserves_momentum PASS
@@ -162,25 +170,33 @@ persistent exhausted_solve_does_not_publish_trial_state PASS
 persistent nonfinite_contact_settings_rejected PASS
 persistent force_driven_tear_removes_actual_query_face PASS
 persistent tear_does_not_duplicate_mass_or_fracture_work PASS
-fragment recontact gap_min=0.0155547436 released=0.0748809687 contacts=17 fragments=2
+fragment recontact gap_min=0.0155547436 released=0.0767481289 contacts=17 fragments=2
 persistent severed_fragments_recontact_in_same_island PASS
 persistent fragment_faces_and_registered_mass_stay_current PASS
 persistent changed_mass_rejected_before_motion PASS
 persistent fast_point_cannot_tunnel_through_intact_face PASS
 persistent fast_point_preserves_clear_miss PASS
+persistent overflowing_dt_cannot_fake_convergence PASS
+persistent underflowing_dt_cannot_publish PASS
+persistent overflowing_prediction_cannot_publish PASS
+persistent overflowing_support_receipt_cannot_publish PASS
+persistent unrepresentable_clock_advance_cannot_publish PASS
+persistent direct_rigid_registration_before_construction_rejected PASS
+persistent direct_rigid_registration_after_construction_rejected PASS
+persistent overflowing_internal_torque_cannot_fake_balance PASS
 rotating bar dt=0.02 angular_error=0.00187898918 numerical_loss=0.00196989128
 rotating bar dt=0.01 angular_error=0.000953003755 numerical_loss=0.00105770902
 rotating bar dt=0.005 angular_error=0.000477953139 numerical_loss=0.000575498021
 persistent angular_integration_error_converges_without_correction PASS
-persistent matrix: 26/26 passed
+persistent matrix: 34/34 passed
 exit=0
-elapsed_s=0.857321
+elapsed_s=0.694882
 
 persistent-benchmark.txt
-persistent benchmark pairs=1 nodes=6 members=6 triangles=2 fixed_nodes=3 steps=120 simulated_s=.6 wall_s=0.134782 us_per_step=1123.180550 seconds_per_simulated_second=0.224636 nonlinear_iterations=433 accepted_substeps=120 retries=0 peak_contact_stencils=15 process_peak_rss_bytes=142786560
-persistent benchmark pairs=4 nodes=24 members=24 triangles=8 fixed_nodes=12 steps=120 simulated_s=.6 wall_s=0.292428 us_per_step=2436.897567 seconds_per_simulated_second=0.487380 nonlinear_iterations=433 accepted_substeps=120 retries=0 peak_contact_stencils=60 process_peak_rss_bytes=465256448
+persistent benchmark pairs=1 nodes=6 members=6 triangles=2 fixed_nodes=3 steps=120 simulated_s=.6 wall_s=0.080873 us_per_step=673.941317 seconds_per_simulated_second=0.134788 nonlinear_iterations=433 accepted_substeps=120 retries=0 peak_contact_stencils=15 process_peak_rss_bytes=141230080
+persistent benchmark pairs=4 nodes=24 members=24 triangles=8 fixed_nodes=12 steps=120 simulated_s=.6 wall_s=0.251788 us_per_step=2098.236117 seconds_per_simulated_second=0.419647 nonlinear_iterations=433 accepted_substeps=120 retries=0 peak_contact_stencils=60 process_peak_rss_bytes=461357056
 exit=0
-elapsed_s=0.454228
+elapsed_s=0.354252
 
 provenance source pins
 {
@@ -197,5 +213,15 @@ provenance source pins
     "patch": "bullet.patch"
   }
 }
+
+Rebuilt original Bullet controls (separate integration path)
+initial: exit=0; Scope: CPU rigid breakage + elastic contact coupling only. Plasticity/fracture, angular CCD, real assets, city performance and game ownership are NOT validated.
+conservation: exit=0; contact matrix: 44/44 passed
+step: exit=0; world-step matrix: 70/70 passed
+material: exit=0; material matrix: 15/15 passed
+face-tree: exit=0; disconnected-face-tree faces=16 actual_face_hits=16 phantom_gap_hits=0 PASS
+geometry: exit=1; geometric contact gate: 42/50 passed
+benchmark: exit=0; structure benchmark_exercises_contact_and_fracture PASS
+structure: exit=0; structural matrix: 71/71 passed
 
 Repository make test exit0; Python provenance11/11 and child-process exits5/5 pass.

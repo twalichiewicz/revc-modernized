@@ -84,6 +84,7 @@ class Stepper {
             r.gradient+=barrier.gradient(collisions,*g.mesh,q);
             r.hessian.resize(q.size(),q.size());r.hessian.setFromTriplets(hessian.begin(),hessian.end());
             r.hessian+=barrier.hessian(collisions,*g.mesh,q,ipc::PSDProjectionMethod::CLAMP);
+            for(int i=0;i<r.hessian.nonZeros();++i)if(!std::isfinite(r.hessian.valuePtr()[i]))throw std::invalid_argument("Nonfinite search metric");
         }
         if(!std::isfinite(r.value)||!r.gradient.allFinite())throw std::runtime_error("Nonfinite potential");
         return r;
@@ -143,6 +144,14 @@ class Stepper {
         auto &registered=world.world->getSoftBodyArray();
         if(registered.size()!=int(bodies.size()))throw std::invalid_argument("Island registration changed");
         for(int i=0;i<registered.size();++i)if(!bodies.count(registered[i]))throw std::invalid_argument("Unowned registered participant");
+        // The wrapper's rigid vector is not the complete Bullet registry:
+        // callers can register any collision object directly with the SDK.
+        auto &objects=world.world->getCollisionObjectArray();
+        if(objects.size()!=int(bodies.size()))throw std::invalid_argument("Unsupported registered collision object");
+        for(int i=0;i<objects.size();++i) {
+            auto *soft=btSoftBody::upcast(objects[i]);
+            if(!soft||!bodies.count(soft))throw std::invalid_argument("Unowned registered collision object");
+        }
     }
     State Snapshot()const {
         State s;s.q.resize(nodes.size(),3);s.v.resize(nodes.size(),3);s.contactRelease=released;
@@ -158,12 +167,19 @@ class Stepper {
             else predicted.row(i)+=dt*dt*forces.row(i)/mass[i];
             for(int j=0;j<3;++j){diagonal[3*i+j]=mass[i]/(dt*dt);if(!fixed[i])free.push_back(3*i+j);}
         }
+        if(!predicted.allFinite()||!diagonal.allFinite()||(diagonal.array()<=0).any())throw std::invalid_argument("Unrepresentable inertial prediction");
         std::vector<int> reduced(q.size(),-1);for(int i=0;i<int(free.size());++i)reduced[free[i]]=i;
         Evaluation last;bool converged=false;
         for(int iteration=0;iteration<options.maxNewton;++iteration) {
             auto eval=Potential(old,q,geometry,true);++stats.newton;stats.peakContacts=std::max(stats.peakContacts,eval.contacts);
             Vector delta=Pack(q-predicted),gradient=eval.gradient+diagonal.cwiseProduct(delta);
-            double residual=0;for(int d:free)residual=std::max(residual,std::abs(dt*gradient[d]/mass[d/3]));
+            double objective=eval.value+.5*delta.dot(diagonal.cwiseProduct(delta));
+            if(!delta.allFinite()||!gradient.allFinite()||!std::isfinite(objective))throw std::invalid_argument("Nonfinite incremental objective/gradient");
+            double residual=0;for(int d:free) {
+                double component=std::abs(dt*gradient[d]/mass[d/3]);
+                if(!std::isfinite(component))throw std::invalid_argument("Nonfinite convergence residual");
+                residual=std::max(residual,component);
+            }
             if(residual<=options.velocityTolerance){last=std::move(eval);converged=true;break;}
             std::vector<Triplet> entries;
             for(int k=0;k<eval.hessian.outerSize();++k)for(Sparse::InnerIterator it(eval.hessian,k);it;++it)
@@ -173,13 +189,15 @@ class Stepper {
             Eigen::SimplicialLDLT<Sparse> solver;solver.compute(system);if(solver.info()!=Eigen::Success)throw std::runtime_error("Contact factorization failed");
             Vector reducedDirection=solver.solve(rhs);if(!reducedDirection.allFinite()||solver.info()!=Eigen::Success)throw std::runtime_error("Contact direction failed");
             Vector direction=Vector::Zero(q.size());for(int j=0;j<int(free.size());++j)direction[free[j]]=reducedDirection[j];
-            double descent=gradient.dot(direction);if(descent>=0)throw std::runtime_error("Non-descent contact direction");
+            double descent=gradient.dot(direction);if(!std::isfinite(descent))throw std::invalid_argument("Unrepresentable descent");
+            if(descent>=0)throw std::runtime_error("Non-descent contact direction");
             Matrix step=Unpack(direction);double alpha=SafeFraction(q,q+step,geometry);if(alpha<1)alpha*=.9;
-            double objective=eval.value+.5*delta.dot(diagonal.cwiseProduct(delta));bool accepted=false;
+            bool accepted=false;
             for(int line=0;line<options.maxBacktracks;++line) {
                 Matrix candidate=q+alpha*step;
                 auto next=Potential(old,candidate,geometry,false);Vector difference=Pack(candidate-predicted);
                 double value=next.value+.5*difference.dot(diagonal.cwiseProduct(difference));
+                if(!std::isfinite(value))throw std::invalid_argument("Nonfinite trial objective");
                 if(value<=objective+1e-4*alpha*descent){q=std::move(candidate);accepted=true;break;}
                 alpha*=.5;
             }
@@ -190,6 +208,7 @@ class Stepper {
         // physical interval's interpolation. Validate old->accepted explicitly.
         if(SafeFraction(old.q,q,geometry)<1)throw std::runtime_error("Physical motion path was not clear");
         State next=old;next.q=q;next.v=(q-old.q)/dt;
+        if(!next.q.allFinite()||!next.v.allFinite())throw std::invalid_argument("Nonfinite accepted state");
         for(int i=0;i<int(members.size());++i) {
             auto &m=members[i];bool was=next.bars[i].broken;Commit(next.bars[i],(q.row(m.b)-q.row(m.a)).norm());
             stats.topologyChanges+=was!=next.bars[i].broken;
@@ -199,6 +218,7 @@ class Stepper {
         next.contactRelease+=std::max(0.,last.contact-after);
         double work=0;for(int i=0;i<q.rows();++i)work+=forces.row(i).dot(q.row(i)-old.q.row(i));
         double loss=Energy(old,geometry)+work-Energy(next,newGeometry);
+        if(!std::isfinite(work)||!std::isfinite(loss))throw std::invalid_argument("Unrepresentable work/loss receipt");
         if(loss< -1e-8*(1+std::abs(Energy(old,geometry))+std::abs(work)))throw std::runtime_error("Contact interval gained energy");
         stats.externalWork+=work;stats.numericalLoss+=loss;stats.contactEnergy=after;stats.contactRelease=next.contactRelease;
         Eigen::Vector3d sum=Eigen::Vector3d::Zero(),torque=sum;
@@ -208,12 +228,19 @@ class Stepper {
             stats.externalImpulse+=dt*applied;Eigen::Vector3d middle=.5*(q.row(i)+old.q.row(i));stats.externalAngular+=dt*middle.cross(applied);
             if(fixed[i]){stats.supportLinear+=dt*(applied-force);stats.supportAngular+=dt*at.cross(applied-force);}
         }
+        if(!sum.allFinite()||!torque.allFinite())throw std::invalid_argument("Nonfinite internal balance receipt");
         stats.forceBalance=std::max(stats.forceBalance,sum.norm());stats.torqueBalance=std::max(stats.torqueBalance,torque.norm());++stats.substeps;
         return next;
     }
+    static void ValidateStats(const Stats &s) {
+        for(double value:{s.forceBalance,s.torqueBalance,s.numericalLoss,s.externalWork,s.contactEnergy,s.contactRelease})
+            if(!std::isfinite(value))throw std::invalid_argument("Nonfinite physical receipt");
+        if(!s.supportLinear.allFinite()||!s.supportAngular.allFinite()||!s.externalImpulse.allFinite()||!s.externalAngular.allFinite())
+            throw std::invalid_argument("Nonfinite impulse receipt");
+    }
     State Interval(const State &old,double dt,const Matrix &forces,Stats &stats,int depth)const {
         Stats attempt;
-        try{auto result=Solve(old,dt,forces,attempt);Merge(stats,attempt);return result;}
+        try{auto result=Solve(old,dt,forces,attempt);ValidateStats(attempt);Merge(stats,attempt);ValidateStats(stats);return result;}
         catch(const std::runtime_error&){
             // Count failed nonlinear work too, without committing its physical
             // work/impulses or trial material history.
@@ -257,9 +284,14 @@ class Stepper {
     }
     Stats Advance(double dt,const Eigen::MatrixXd &loads) {
         if(!std::isfinite(dt)||dt<=0||loads.rows()!=int(nodes.size())||loads.cols()!=3||!loads.allFinite())throw std::invalid_argument("Invalid physical interval/load");
+        double squared=dt*dt,nextTime=time+dt;
+        if(!std::isfinite(squared)||squared<=0||!std::isfinite(time)||time<0||!std::isfinite(nextTime)||nextTime<=time)
+            throw std::invalid_argument("Unrepresentable physical interval/clock");
         ValidateIsland();
         State before=Snapshot();if(!before.q.allFinite()||!before.v.allFinite())throw std::invalid_argument("Invalid structural snapshot");
         Stats stats;State after=Interval(before,dt,loads,stats,0);
+        if(!after.q.allFinite()||!after.v.allFinite())throw std::invalid_argument("Nonfinite publication state");
+        ValidateStats(stats);
         for(int i=0;i<int(nodes.size());++i) {
             auto [asset,id]=nodes[i];auto *n=asset->binding[id];n->m_x=btVector3(after.q(i,0),after.q(i,1),after.q(i,2));n->m_q=n->m_x;n->m_v=btVector3(after.v(i,0),after.v(i,1),after.v(i,2));
         }
@@ -274,7 +306,7 @@ class Stepper {
             for(auto &fragment:a->fragments){auto &b=*fragment.body;b.updateNormals();b.updateBounds();b.updateFaceTree(false,false);b.updateNodeTree(false,false);b.activate(true);world.world->updateSingleAabb(&b);}
         }
         for(size_t j=0;j<assets.size();++j)revisions[j]=assets[j]->revision;
-        released=after.contactRelease;time+=dt;return stats;
+        released=after.contactRelease;time=nextTime;return stats;
     }
 };
 }
