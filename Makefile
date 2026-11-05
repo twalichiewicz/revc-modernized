@@ -22,7 +22,7 @@ PLUGIN += src/estatelighting.cpp
 PLUGIN += src/ballistics.cpp
 PLUGIN += src/shotcollision.cpp
 PLUGIN += src/planeflight.cpp src/flightmodel.cpp
-PLUGIN += src/airportjets.cpp src/aircraftdamage.cpp
+PLUGIN += src/airportjets.cpp src/aircraftdamage.cpp src/airportheli.cpp src/aircraftcontrols.cpp
 PLUGIN += src/airportjetmodel.cpp src/jetwheels.cpp src/jetaudio.cpp src/jetlights.cpp
 PLUGIN += src/airworld.cpp
 PLUGIN += src/jetwash.cpp
@@ -351,6 +351,9 @@ test-game-assets: $(BUILD)/test_glass_assets $(BUILD)/test_estateassets $(BUILD)
 	GAMEDATA="$(GAMEDATA)" $(BUILD)/test_mapassets
 	MACVC_NATIVE="$(MACVC_NATIVE)" $(BUILD)/test_shotreceipt_native
 	MACVC_NATIVE="$(MACVC_NATIVE)" $(BUILD)/test_carfire_audio_native
+	$(BUILD)/test_airportheli
+	GAMEDATA="$(GAMEDATA)" $(BUILD)/test_airportheli_assets
+	GAMEDATA="$(GAMEDATA)" $(BUILD)/test_aircraftcontrols_assets
 	GAMEDATA="$(GAMEDATA)" $(BUILD)/test_shotcollision --assets
 	GAMEDATA="$(GAMEDATA)" $(BUILD)/test_rotorassets
 	GAMEDATA="$(GAMEDATA)" $(BUILD)/test_planeflight_assets
@@ -817,3 +820,18 @@ $(BUILD)/test_carfire_audio_native: tests/test_carfire_audio_native.cpp tests/te
 	$(CXX) $(CXXFLAGS) -Isrc -o $@ tests/test_carfire_audio_native.cpp src/firemodel.cpp
 
 test-game-assets: $(BUILD)/test_shotreceipt_native $(BUILD)/test_carfire_audio_native
+
+$(BUILD)/test_airportheli: tests/test_airportheli.cpp tests/test_airportjets.cpp tests/test_planeflight.cpp src/airportheli.cpp $(wildcard src/*.h) | $(BUILD)
+	$(CXX) $(CXXFLAGS) -Isrc -o $@ tests/test_airportheli.cpp
+
+test-game-assets: $(BUILD)/test_airportheli
+
+$(BUILD)/test_aircraftcontrols_assets: tests/test_aircraftcontrols_assets.cpp tests/test_shotcollision.cpp src/aircraftcontrols.cpp src/wheelgrip.cpp src/vmpose.cpp tools/bake/visualmodel.cpp tools/bake/gamefiles.cpp src/mapdata.cpp $(wildcard src/*.h) | $(BUILD)
+	$(CXX) $(CXXFLAGS) -Isrc -o $@ tests/test_aircraftcontrols_assets.cpp src/wheelgrip.cpp src/vmpose.cpp tools/bake/visualmodel.cpp tools/bake/gamefiles.cpp src/mapdata.cpp -lz
+
+test-game-assets: $(BUILD)/test_aircraftcontrols_assets
+
+$(BUILD)/test_airportheli_assets: tests/test_airportheli_assets.cpp tools/bake/visualmodel.cpp tools/bake/gamefiles.cpp src/mapdata.cpp $(wildcard tools/bake/*.h) | $(BUILD)
+	$(CXX) $(CXXFLAGS) -Isrc -o $@ tests/test_airportheli_assets.cpp tools/bake/visualmodel.cpp tools/bake/gamefiles.cpp src/mapdata.cpp -lz
+
+test-game-assets: $(BUILD)/test_airportheli_assets

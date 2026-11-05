@@ -1,3 +1,4 @@
+#include "airportheli.h"
 #include "camera.h"
 #include "aimcam.h"
 #include "climb.h"
@@ -927,6 +928,7 @@ void Hook_Process(uint8_t *cam)
 	}
 	planeflight::Frame(now);
 	airportjets::Frame(now);
+ airportheli::Frame(now);
 	jetwash::Frame(now);
 	flightmodel::Frame(now);
 	wanted::Update();

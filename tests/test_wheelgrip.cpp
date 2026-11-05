@@ -34,6 +34,10 @@ int main()
 				CHECK(Length(Sub(Apply(matrices[DigitBase(d) + 1], arm.tip[d]), targets[d])) < .012f);
 			}
 		}
+ for(bool left:{false,true}){
+  const auto g=wheelgrip::OnStick({-.42f,1.98f,.28f},{0,0,1},{0,1,0},.035f,left);Vec3 targets[kDigits],bends[kDigits];const auto &arm=left?arms.left:arms.right;wheelgrip::Contacts(arm,g,targets,bends);bool reach[kDigits]={true,true,true,true,true};Frame posed[kArmBones];Pose(arm,g.hand,targets,reach,ArmAngles{},left,posed,bends);
+  for(int d=0;d<kDigits;d++){const auto delta=Sub(targets[d],g.centre);const float axial=Dot(delta,g.axis);CHECK(std::fabs(Length(Sub(delta,Mul(g.axis,axial)))-g.tube)<1e-4f);CHECK(Length(Sub(Apply(posed[DigitBase(d)+1],arm.tip[d]),targets[d]))<.015f);}
+ }
 	if (failures)
 		return 1;
 	std::puts("all steering-wheel grip tests passed");

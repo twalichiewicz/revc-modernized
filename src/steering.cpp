@@ -1,4 +1,5 @@
 #include "steering.h"
+#include "aircraftcontrols.h"
 #include "carlights.h"
 #include "config.h"
 #include "driveby.h"
@@ -553,7 +554,7 @@ bool Bind(T &out, const char *name)
 
 void DrawCar(uint8_t *car)
 {
-	if (!gReady || !IsCar(car) || !Close(car))
+	if (!gReady || !IsCar(car) || IsAircraft(car) || !Close(car))
 		return;
 	void *atomic;
 	const Wheel *found = WheelOf(car, atomic);
@@ -584,7 +585,7 @@ void PoseDriver(uint8_t *ped)
 {
 	gGripPed = nullptr;
 	uint8_t *car = gReady && PedInVehicle(ped) ? PedVehicle(ped) : nullptr;
-	const bool driving = car && IsCar(car) && PedState(ped) == kStateDriving &&
+	const bool driving = car && (IsCar(car)||IsAircraft(car)) && PedState(ped) == kStateDriving &&
 	                     *reinterpret_cast<uint8_t *const *>(car + kDriver) == ped && !driveby::Aiming();
 	const int handle = car && gVehicleRef ? gVehicleRef(car) : -1;
 	if (car != gStalkCar || handle != gStalkHandle) { // pool generations are separate cars
@@ -596,6 +597,13 @@ void PoseDriver(uint8_t *ped)
 	}
 	if (!driving)
 		return;
+ if(IsAircraft(car)){
+  if(aircraftcontrols::Grips(car,ped,gLeftGrip,gRightGrip)){
+   gGripPed=ped;const auto &l=gLeftGrip.hand.pos,&r=gRightGrip.hand.pos;const auto up=Axis(car,0x20),side=Axis(car,0);
+   viewmodel::ReachArm(ped,true,{l.x,l.y,l.z},{-up.x-side.x*.7f,-up.y-side.y*.7f,-up.z-side.z*.7f});
+   viewmodel::ReachArm(ped,false,{r.x,r.y,r.z},{-up.x+side.x*.7f,-up.y+side.y*.7f,-up.z+side.z*.7f});
+  }return;
+ }
 	void *atomic;
 	const Wheel *w = WheelOf(car, atomic);
 	if (!w || !w->found)
@@ -669,6 +677,7 @@ bool Install()
 {
 	if (!gConfig.steeringWheel)
 		return true;
+ if(!aircraftcontrols::Install())Log("aircraft controls: tracking bindings unavailable");
 	gReady = Bind(gVehicleRef, "_ZN6CPools13GetVehicleRefEP8CVehicle") && Bind(rw.ForAllAtomics, "_Z20RpClumpForAllAtomicsPN2rw5ClumpEPFPNS_6AtomicES3_PvES4_") &&
 	         Bind(rw.AtomicFlags, "_Z16RpAtomicGetFlagsPKN2rw6AtomicE") &&
 	         Bind(rw.AtomicFrame, "_Z16RpAtomicGetFramePKN2rw6AtomicE") &&

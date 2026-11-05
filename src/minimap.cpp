@@ -1,3 +1,4 @@
+#include "airportheli.h"
 // GTA VI-style rectangular, tilted minimap with 3D buildings and GPS for macVC.
 //
 // CRadar keeps doing the bookkeeping (rotation, range, blips); we replace how
@@ -777,6 +778,7 @@ __attribute__((constructor)) void Init()
 		Log("plane flight: native bindings/hooks incomplete; supported native flight retained");
 	if (!flightmodel::Install())
 		Log("helicopter flight: native bindings/hooks incomplete; supported native flight retained");
+	if (!airportheli::Install())Log("airport helipad: native bindings incomplete");
 	if (!airportjets::Install())
 		Log("airport jets: native bindings/hooks incomplete; airport scenery retained");
 	if (!airworld::Install())
