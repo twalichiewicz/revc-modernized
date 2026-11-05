@@ -28,13 +28,19 @@ void Publish(CEntity *e,CColModel *col) {
 }
 bool Keep(const Face &f){return f.p[0].x<cut&&f.p[1].x<cut&&f.p[2].x<cut;}
 CVector Centre(const Face &f){return (f.p[0]+f.p[1]+f.p[2])/3.f;}
-CColModel *Geometry(bool damaged){
+bool InSector(CEntity *entity,int x,int y){
+ CSector *sector=CWorld::GetSector(x,y);
+ for(int list=0;list<2;++list)for(CPtrNode *n=sector->m_lists[list?ENTITYLIST_VEHICLES_OVERLAP:ENTITYLIST_VEHICLES].first;n;n=n->next)
+  if(n->item==entity)return true;
+ return false;
+}
+CColModel *Geometry(bool damaged,float offset=0){
  CColModel *col=new CColModel;unsigned n=0;for(unsigned i=0;i<faces.size();++i)if(!damaged||Keep(faces[i]))++n;
  col->numTriangles=n;col->vertices=(CompressedVector*)RwMalloc(n*3*sizeof(CompressedVector));
  col->triangles=(CColTriangle*)RwMalloc(n*sizeof(CColTriangle));
  CVector lo(1e6f,1e6f,1e6f),hi(-1e6f,-1e6f,-1e6f);unsigned j=0;
  for(unsigned i=0;i<faces.size();++i)if(!damaged||Keep(faces[i])){
-  for(int k=0;k<3;++k){CVector p=faces[i].p[k];col->vertices[j*3+k].Set(p.x,p.y,p.z);p=col->vertices[j*3+k].Get();
+  for(int k=0;k<3;++k){CVector p=faces[i].p[k];p.x+=offset;col->vertices[j*3+k].Set(p.x,p.y,p.z);p=col->vertices[j*3+k].Get();
    lo.x=Min(lo.x,p.x);lo.y=Min(lo.y,p.y);lo.z=Min(lo.z,p.z);hi.x=Max(hi.x,p.x);hi.y=Max(hi.y,p.y);hi.z=Max(hi.z,p.z);}
   col->triangles[j].Set(j*3,j*3+1,j*3+2,0);++j;
  }
@@ -90,16 +96,27 @@ int HostWingQueryTest(const char *file){
   plane->SetIsStatic(true);control->SetIsStatic(true);plane->GetMatrix().SetRotateZ(pose*.6f);control->GetMatrix().SetRotateZ(pose*.6f);
   plane->SetPosition(CVector(pose?49.f:0.f,0,10));control->SetPosition(plane->GetPosition()+CVector(30,0,0));
   info->SetColModel(shared,false);CWorld::Add(plane);CWorld::Add(control);
+  const CVector worldTip=plane->GetMatrix()*tip;const int tipX=CWorld::GetSectorIndexX(worldTip.x),tipY=CWorld::GetSectorIndexY(worldTip.y);
+  if(!pose)Check(InSector(plane,tipX,tipY),"intact wing occupies tip sector");
   Query(plane,tip,true,"intact-tip");Query(control,tip,true,"control-intact");
   CColModel *damaged=Geometry(true);Publish(plane,damaged);
   Check(plane->GetColModel()==damaged,"instance geometry pointer published");
   Check(control->GetColModel()==shared,"same-model pointer isolation");
   Query(plane,tip,false,"damaged-tip");Query(plane,root,true,"surviving-root");Query(control,tip,true,"untouched-control");
   // Repair is another complete immutable geometry revision, not a shared edit.
-  CColModel *repaired=Geometry(false);Publish(plane,repaired);Query(plane,tip,true,"repaired-tip");
+  CColModel *repaired=Geometry(false);Publish(plane,repaired);
+  Query(plane,tip,true,"repaired-tip");
+  // Prescribed geometry relocation tests publication, not material dynamics.
+  // The new surface occupies a sector absent from the original registration.
+  CColModel *grown=Geometry(false,60);const CVector newTip=plane->GetMatrix()*(tip+CVector(60,0,0));
+  const int newX=CWorld::GetSectorIndexX(newTip.x),newY=CWorld::GetSectorIndexY(newTip.y);
+  if(!pose)Check(newX!=tipX,"geometry growth reaches a different sector");
+  Publish(plane,grown);
+  if(!pose){Check(!InSector(plane,tipX,tipY),"replacement retires old sector entry");Check(InSector(plane,newX,newY),"growth registers new sector entry");}
+  Query(plane,tip+CVector(60,0,0),true,"growth-new-sector");
   CWorld::Remove(plane);CWorld::Remove(control);delete plane;delete control;
 #ifdef HOST_WING_QUERY_BASELINE
-  delete damaged;delete repaired;
+  delete damaged;delete repaired;delete grown;
 #endif
   info->SetColModel(shared,false);
  }

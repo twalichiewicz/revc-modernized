@@ -1,6 +1,6 @@
 # Reproducible source host and one damaged-wing query surface
 
-2026-11-05. **The distinct source host builds, and the bounded geometry-query proof passes.** Two independent clean build directories produced identical ARM64 executable SHA-256 `62e5b8cb3feb412411c0d3000735984abb70b11c09bd9916b8f1f9211e10a9b0`. Each executes53 successful assertions through compiled engine routines. The shared-model publication control fails10 of those assertions, as expected. This is not a macVC5217 rebuild, a rendered wing tear or an accepted solver-owned aircraft/building simulation.
+2026-11-05. **The distinct source host builds, and the bounded geometry-query proof passes.** Two independent clean build directories produced identical ARM64 executable SHA-256 `19b84dd5f25cdd7230c5e4e36c835bf41fd5b91dc2cf2116220ec93bf27df37e`. Each executes65 successful assertions through compiled engine routines. The shared-model publication control fails18 of those assertions, as expected. This is not a macVC5217 rebuild, a rendered wing tear or an accepted solver-owned aircraft/building simulation.
 
 ## Source decision and identity
 
@@ -26,21 +26,21 @@ python3 tools/host/build_host.py \
   --control
 ```
 
-Use a new/empty scratch directory. `--game-data` can point to another user-owned original installation; otherwise the installed game data is read read-only. The runner checks the existing audio versions, fetches exact revisions, applies three retained patches, builds the asset exporter and complete host, and executes the queries in `host-a` and `host-b`. `--control` additionally compiles shared-model publication, expected exit1 with10 failed assertions. Unexpected process/build exits are errors, not successful physics rejections. Missing-file invocation must exit2 normally after static destruction.
+Use a new/empty scratch directory. `--game-data` can point to another user-owned original installation; otherwise the installed game data is read read-only. The runner checks the existing audio versions, fetches exact revisions, applies three retained patches, builds the asset exporter and complete host, and executes the queries in `host-a` and `host-b`. `--control` additionally compiles shared-model publication, expected exit1 with18 failed assertions. Unexpected process/build exits are errors, not successful physics rejections. Missing-file invocation must exit2 normally after static destruction.
 
 The runner records commands, source pins/diff, patch/fixture/tool hashes, compiler/SDK/CMake/OS, audio library/header hashes, linked-library paths, actual DFF/wing hashes and executable identities in `manifest.json`. `-ffile-prefix-map` and `-fmacro-prefix-map` normalize scratch paths. Identical binary output was measured for this pair; this is not a claim of bit-identical builds on other toolchains, dependency builds or SDKs.
 
 Retained artifacts:
 
-- `build/host-source/reproduced/manifest.json` and `logs/`.
-- `build/host-source/reproduced/host-a/src/reVC.app` and `host-b/src/reVC.app`.
-- `build/host-source/reproduced/wing.txt` and its original local `wing.txt.dff` input copy, kept out of Git.
+- `build/host-source/reviewed/manifest.json` and `logs/`.
+- `build/host-source/reviewed/host-a/src/reVC.app` and `host-b/src/reVC.app`.
+- `build/host-source/reviewed/wing.txt` and its original local `wing.txt.dff` input copy, kept out of Git.
 
 The complete host executable can rerun the proof directly:
 
 ```sh
-build/host-source/reproduced/host-a/src/reVC.app/Contents/MacOS/reVC \
-  --host-wing-query "$PWD/build/host-source/reproduced/wing.txt"
+build/host-source/reviewed/host-a/src/reVC.app/Contents/MacOS/reVC \
+  --host-wing-query "$PWD/build/host-source/reviewed/wing.txt"
 ```
 
 ## Geometry and actual query paths
@@ -60,7 +60,7 @@ Original DFF SHA-256: `ab127cc1571050fb82304f1235d38bab04df246f38ed32cd3971e8492
 
 The contact probe supplies the native algorithm's sphere-on-A/triangles-on-B ordering. **Triangle-only aircraft-led collision against a triangle building is not proven by this test**; native contacts do not become arbitrary triangle/triangle continuous contact. No building mesh/wing-strike flight step or two-way impact response is simulated. This is the requested source geometry/query seam proof, not completion of the earlier controlled interaction island.
 
-Two poses cover translation, yaw and placement near a sector boundary. For each: intact tip, same-model control, published damaged tip, surviving root, untouched control and repaired tip are checked through all four consumers. Pointer isolation is checked separately. Both actors are removed/deleted; the native pool diagnostics report zero remaining actor, entry-node and COL allocations. These are bounded replacement/destruction checks; they do not establish save/load, stream recreation, mission takeover, multithreaded publication or arbitrary pool-wrap behavior.
+Two poses cover translation and yaw. For each: intact tip, same-model control, published damaged tip, surviving root, untouched control and repaired tip are checked through all four consumers. A separate prescribed60m local geometry relocation forces a newly occupied sector, while the aircraft pose stays fixed. The test asserts old-sector retirement and new-sector registration, then queries the relocated surface through all four consumers. This is a publication stress case, not physical deformation. Pointer isolation is checked separately. Both actors are removed/deleted; the native pool diagnostics report zero remaining actor, entry-node and COL allocations. These are bounded replacement/destruction checks; they do not establish save/load, stream recreation, mission takeover, multithreaded publication or arbitrary pool-wrap behavior.
 
 ## Minimal source integration
 
@@ -83,6 +83,6 @@ Exact backtraces and red/build/debug logs remain under ignored `build/host-sourc
 
 ## Remaining acceptance and verification
 
-`make test` and `make test-game-assets` pass. Existing production sources, tests, native/physics runners and numerical solver files are unchanged from `24805bc`; their prior numerical limitations and deliberately failing controls are preserved. The installed executable/plugin hashes remain unchanged. Source-host input hashes match the retained reproduction manifest; `git diff --check` passes. Fresh review is recorded with this milestone's plan/ledger when complete.
+`make test` and `make test-game-assets` pass. Existing production sources, tests, native/physics runners and numerical solver files are unchanged from `24805bc`; their prior numerical limitations and deliberately failing controls are preserved. The installed executable/plugin hashes remain unchanged. Compiler-derived local exporter dependencies, including `src/types.h`, are hashed. Source-host input hashes match the retained reproduction manifest; `git diff --check` passes. One fresh reviewer found an Important gap in sector-reinsertion coverage and a Minor missing header in provenance. Both were addressed in one tested pass. Removing sector removal/reinsertion now produces65 checks/8 failures; restoring it produces65/65 passes. Final clean control/host-a/host-b builds produce65/18,65/0,65/0 respectively, and both positive binaries are identical. Missing-input exits remain normal2. No second review round was performed. The reviewer independently reran the earlier53-check host; broader regression and final fix-pass evidence remain author verification.
 
 The earlier [in-app slice plan](../superpowers/plans/2026-11-05-aircraft-building-slice.md) remains open: actual solver-exclusive motion, coherent render/aero publication, comprehensive lifecycle handling, a wing/building strike and measured in-app frame/step performance are still required. No offline query timing is presented as in-app performance, and this source-host result does not accept the experimental solver.

@@ -12,6 +12,7 @@ import json
 import os
 from pathlib import Path
 import re
+import shlex
 import shutil
 import subprocess
 import sys
@@ -62,6 +63,16 @@ def main():
     lock = json.loads((HERE / "source-lock.json").read_text())
     inputs = list(sorted(HERE.glob("*"))) + [ROOT / "tools/bake/visualmodel.cpp", ROOT / "tools/bake/visualmodel.h",
               ROOT / "tools/bake/gamefiles.cpp", ROOT / "tools/bake/gamefiles.h", ROOT / "src/mapdata.cpp", ROOT / "src/mapdata.h"]
+    # Collect the exporter's real local include graph before compilation.
+    # This includes indirect layout headers such as src/types.h.
+    export_sources = [HERE / "export_wing.cpp", ROOT / "tools/bake/visualmodel.cpp",
+                      ROOT / "tools/bake/gamefiles.cpp", ROOT / "src/mapdata.cpp"]
+    dependency_text = capture(["xcrun", "clang++", "-std=c++17", "-I" + str(ROOT / "src"), "-MM", *export_sources])
+    for rule in dependency_text.replace("\\\n", " ").splitlines():
+        for name in shlex.split(rule.split(":", 1)[1]):
+            path = Path(name).resolve()
+            if path.is_relative_to(ROOT): inputs.append(path)
+    inputs = sorted(set(inputs))
     inputs = [p for p in inputs if p.is_file()]
     hashes = {str(p.relative_to(ROOT)): sha(p) for p in inputs}
     dependencies = {}
@@ -107,7 +118,7 @@ def main():
         run([binary, "--host-wing-query", wing], logs / (label + "-query.log"), expected, timeout=30)
         text = (logs / (label + "-query.log")).read_text()
         summary = re.findall(r"host-wing-query checks=(\d+) failures=(\d+) faces=(\d+) .*", text)
-        if len(summary) != 1 or int(summary[0][0]) < 53 or int(summary[0][2]) != 48 or (int(summary[0][1]) != (10 if expected else 0)):
+        if len(summary) != 1 or int(summary[0][0]) != 65 or int(summary[0][2]) != 48 or (int(summary[0][1]) != (18 if expected else 0)):
             raise RuntimeError(f"Missing/incorrect query assertions in {label}")
         if label != "control":
             # Early argument failure must exit2 normally, including static COL

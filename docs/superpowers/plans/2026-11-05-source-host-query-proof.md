@@ -34,7 +34,7 @@
 - [x] Build the pinned alternative host and dependency without modifying production files. Resolve only observed build blockers; retain any compatibility patch.
 - [x] Record a reproducible source/dependency/build manifest and executable/app artifact. Repeat the build in a separate build directory.
 
-Result: public same-label5217 differs by hash; matching source not found in checked surfaces. Explicit choice is a distinct pinned source host. The source host built; two clean patched builds have identical executable SHA-256 `62e5b8cb3feb412411c0d3000735984abb70b11c09bd9916b8f1f9211e10a9b0` under the recorded toolchain/dependencies. Development apps link recorded Homebrew audio libraries; they are not portable distributable bundles.
+Result: public same-label5217 differs by hash; matching source not found in checked surfaces. Explicit choice is a distinct pinned source host. The source host built; two clean patched builds have identical executable SHA-256 `19b84dd5f25cdd7230c5e4e36c835bf41fd5b91dc2cf2116220ec93bf27df37e` under the recorded toolchain/dependencies. Development apps link recorded Homebrew audio libraries; they are not portable distributable bundles.
 
 ### Task 2: One physical geometry per entity
 
@@ -46,9 +46,11 @@ Result: public same-label5217 differs by hash; matching source not found in chec
 - [x] Verify all named consumers hit intact wing, miss the removed patch, retain surviving geometry and leave the same-model control unchanged. Include replacement/destruction and translated/rotated/boundary cases justified by the seam.
 - [x] Reproduce the patched host build and query test with provenance in a second build directory; preserve existing repository/native/physics tests.
 
-Result:53 checks,10 failures with shared-model publication →53/53 with instance publication; both reproduced green builds pass.48 actual DFF wing triangles become28 after a predetermined tip removal. Contact proof is stationary sphere-on-A/wing-triangles-on-B, not triangle-only wing/building dynamics. Render/aero publication, flight ownership, full lifecycle and performance remain the earlier slice's gates. Two reported bootstrap crashes were diagnosed and fixed; normal early exit before RenderWare initialization is a retained control.
+Result: initial53 checks,10 failures with shared-model publication →53/53 with instance publication. Review added discriminating sector-membership/growth cases: final65/65 pass in both clean builds; shared-model control65/18 fails. Removing reinsertion independently produces65/8 failures. Compiler-derived exporter headers are now in provenance.48 actual DFF wing triangles become28 after a predetermined tip removal. Contact proof is stationary sphere-on-A/wing-triangles-on-B, not triangle-only wing/building dynamics. Render/aero publication, flight ownership, full lifecycle and performance remain the earlier slice's gates. Two reported bootstrap crashes were diagnosed and fixed; normal early exit before RenderWare initialization is a retained control.
 
 ### Task 3: Review and report limits
 
-- [ ] Fresh final review of the source decision/build/query proof; fix material findings once with tests.
-- [ ] Report exact source-host/app artifact and measured proof results, distinguish remaining live ownership/render/lifecycle/performance gates, and keep the controlled in-app slice plan open.
+- [x] Fresh final review of the source decision/build/query proof; fix material findings once with tests.
+- [x] Report exact source-host/app artifact and measured proof results, distinguish remaining live ownership/render/lifecycle/performance gates, and keep the controlled in-app slice plan open.
+
+Fresh review found one Important coverage gap and one Minor provenance gap; both addressed once with red/green controls and clean reproduction. No second reviewer round. This plan's source/build/query deliverable is complete; the original in-app physics slice remains open.
