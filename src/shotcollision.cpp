@@ -249,7 +249,10 @@ bool Hook_Narrow(const Line &line,const void *matrix,void *model,Point &point,fl
   float opening=std::min(q.closest,q.glassClosest);if(carglass::Opening(car,{line.a.x,line.a.y,line.a.z},{line.b.x,line.b.y,line.b.z},opening)){
    Basis basis;if(basis.Set(reinterpret_cast<const float *>(car+8))){const auto a=basis.Local(line.a),b=basis.Local(line.b);float fraction=std::min(q.closest,q.glassClosest);Vec3 normal;
     if(airframedamage::ComponentHit(car,{a.x,a.y,a.z},{b.x,b.y,b.z},opening+.00001f,fraction,normal)){
-     q.hit=true;q.closest=fraction;q.point={};q.point.p=Add(line.a,Mul(Sub(line.b,line.a),fraction));const auto n=basis.Normal({normal.x,normal.y,normal.z});const float len=std::sqrt(Dot(n,n));if(len>1e-7f){q.point.n=Mul(n,1/len);q.point.surfaceB=6;q.pending.opening=opening;}
+     q.hit=true;q.closest=fraction;
+     // Internal interception replaces the exterior contact: a farther mesh
+     // cannot lend its door or rotor identity to this component strike.
+     q.pending.component=0;q.pending.rotor=-1;q.hitAtomic=q.hitFrame=nullptr;q.point={};q.point.p=Add(line.a,Mul(Sub(line.b,line.a),fraction));const auto n=basis.Normal({normal.x,normal.y,normal.z});const float len=std::sqrt(Dot(n,n));if(len>1e-7f){q.point.n=Mul(n,1/len);q.point.surfaceB=6;q.pending.opening=opening;}
     }
    }
   }
@@ -412,7 +415,7 @@ void Hook_VehicleDamage(uint8_t *car,uint8_t *by,int weapon,float damage,CVector
   gVehicleDamage(car,by,weapon,0,at);
   std::array<float,projectilemodel::kLayers> passed{};
   if(delivery.hit.actor.Current()&&airframedamage::Projectile(car,receipt.airToken,delivery.ray,&passed,receipt.rotor)){
-   if(receipt.actor.Current()&&receipt.point.surfaceB==6)carparts::Projectile(car,receipt.partToken,receipt.component,damage);
+   if(receipt.component>0&&receipt.actor.Current()&&receipt.point.surfaceB==6)carparts::Projectile(car,receipt.partToken,receipt.component,damage);
    const auto delta=Sub(receipt.to,receipt.from);
    for(size_t i=0;i<receipt.count&&receipt.actor.Current();i++)if(passed[i]>0&&receipt.layers[i].fraction<=delivery.ray.limit){
     const auto p=Add(receipt.from,Mul(delta,receipt.layers[i].fraction)),n=receipt.normals[i];

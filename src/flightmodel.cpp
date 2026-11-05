@@ -303,7 +303,8 @@ void Hook_Impact(uint8_t *weapon,uint8_t *shooter,uint8_t *victim,CVector *from,
  Contact c;
  if(from&&to&&point&&BulletWeapon(weapon)&&FindRotor(*from,*to,shooter,c)){
   const CVector d=Sub(c.at,*from),native=Sub(*reinterpret_cast<CVector *>(point),*from);
-  if((!victim||victim==c.vehicle||Dot(native,native)>Dot(d,d))&&RotorContact(c))return;
+  const bool managed=api.AirframeEffects&&api.AirframeEffects(c.vehicle).managed;
+  if(!managed&&(!victim||victim==c.vehicle||Dot(native,native)>Dot(d,d))&&RotorContact(c))return;
  }
  gImpact(weapon,shooter,victim,from,to,point,ahead);
 }
