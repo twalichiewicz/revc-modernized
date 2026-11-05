@@ -175,7 +175,12 @@ structure surviving_fragments_have_collision PASS
 structure repeated_tear_removes_actual_faces PASS
 structure collision_render_aero_share_current_surface PASS
 structure fixture_initial_momentum_is_literal PASS
-wall clip normal rate=19200 steps=3072 nodes=20 members=94 faces=23 fragments=2 assembly_slowdown=5.24764601 chassis_slowdown=0.0163496571 mountF=2749.58439 plastic=0.0258409836 brokenMounts=16 deflection=6.54192784 reaction=1218.27183 dP=3.04694282e-11 dL=0.00398679798 energyGain=1.16415322e-09 peak_contacts=4 cpu_s=0.023400 rebuilds=21 rebuild_s=0.000744
+structure nonfinite_canonical_position_is_not_synchronized PASS
+structure nonfinite_solver_position_is_not_synchronized PASS
+structure nonfinite_canonical_velocity_is_not_synchronized PASS
+structure nonfinite_solver_velocity_is_not_synchronized PASS
+structure restored_geometry_is_synchronized PASS
+wall clip normal rate=19200 steps=3072 nodes=20 members=94 faces=23 fragments=2 assembly_slowdown=5.24764601 chassis_slowdown=0.0163496571 mountF=2749.58439 plastic=0.0258409836 brokenMounts=16 deflection=6.54192784 reaction=1218.27183 dP=3.04694282e-11 dL=0.00398679798 energyGain=1.16415322e-09 peak_contacts=4 cpu_s=0.021815 rebuilds=21 rebuild_s=0.000608
 structure wall_work_and_reactions PASS
 structure wall_load_deforms_and_severs PASS
 mount_receipts root_dP=2.385388e-12 root_dL=3.09925607e-12 impulse=38.6337546 angular_impulse=125.345039 parent_mass=200 detached_mass=28
@@ -184,7 +189,7 @@ structure split_preserves_parent_and_wing_mass PASS
 fragment_inertia parent_Izz=82.0016513 detached_Izz=19.4898016 kg_m2
 structure separated_fragments_retain_geometric_inertia PASS
 structure current_collision_surface_after_crash PASS
-wall clip oblique rate=19200 steps=3072 nodes=20 members=94 faces=23 fragments=2 assembly_slowdown=4.54087455 chassis_slowdown=-0.0473549654 mountF=2749.79251 plastic=0.0254196491 brokenMounts=16 deflection=6.32849156 reaction=1051.20486 dP=2.18560381e-11 dL=0.000965266392 energyGain=1.16415322e-09 peak_contacts=4 cpu_s=0.019927 rebuilds=22 rebuild_s=0.000635
+wall clip oblique rate=19200 steps=3072 nodes=20 members=94 faces=23 fragments=2 assembly_slowdown=4.54087455 chassis_slowdown=-0.0473549654 mountF=2749.79251 plastic=0.0254196491 brokenMounts=16 deflection=6.32849156 reaction=1051.20486 dP=2.18560381e-11 dL=0.000965266392 energyGain=1.16415322e-09 peak_contacts=4 cpu_s=0.019369 rebuilds=22 rebuild_s=0.000582
 structure wall_work_and_reactions PASS
 structure wall_load_deforms_and_severs PASS
 mount_receipts root_dP=6.75726654e-12 root_dL=8.15855632e-12 impulse=28.5219506 angular_impulse=99.1193166 parent_mass=200 detached_mass=28
@@ -193,7 +198,7 @@ structure split_preserves_parent_and_wing_mass PASS
 fragment_inertia parent_Izz=82.0032828 detached_Izz=14.766979 kg_m2
 structure separated_fragments_retain_geometric_inertia PASS
 structure current_collision_surface_after_crash PASS
-wall miss normal rate=19200 steps=3072 nodes=20 members=94 faces=36 fragments=1 assembly_slowdown=-1.42108547e-13 chassis_slowdown=1.37845291e-12 mountF=8.05133737e-08 plastic=0 brokenMounts=0 deflection=3.37507799e-13 reaction=0 dP=5.09317033e-11 dL=1.41881174e-10 energyGain=5.58793545e-09 peak_contacts=0 cpu_s=0.012294 rebuilds=1 rebuild_s=0.000044
+wall miss normal rate=19200 steps=3072 nodes=20 members=94 faces=36 fragments=1 assembly_slowdown=-1.42108547e-13 chassis_slowdown=1.37845291e-12 mountF=8.05133737e-08 plastic=0 brokenMounts=0 deflection=3.37507799e-13 reaction=0 dP=5.09317033e-11 dL=1.41881174e-10 energyGain=5.58793545e-09 peak_contacts=0 cpu_s=0.012792 rebuilds=1 rebuild_s=0.000044
 structure wall_work_and_reactions PASS
 structure clear_miss_keeps_structure PASS
 mount_receipts root_dP=3.03271397e-11 root_dL=1.32038133e-10 impulse=3.11066102e-10 angular_impulse=9.19660545e-10 parent_mass=228 detached_mass=0
@@ -202,7 +207,7 @@ structure split_preserves_parent_and_wing_mass PASS
 fragment_inertia parent_Izz=206.725614 detached_Izz=0 kg_m2
 structure separated_fragments_retain_geometric_inertia PASS
 structure current_collision_surface_after_crash PASS
-wall clip normal rate=38400 steps=6144 nodes=20 members=94 faces=22 fragments=2 assembly_slowdown=5.34425021 chassis_slowdown=0.135343793 mountF=2749.098 plastic=0.0253310111 brokenMounts=16 deflection=5.8071777 reaction=1228.94276 dP=3.66100408e-11 dL=0.000607177936 energyGain=2.09547579e-09 peak_contacts=4 cpu_s=0.041999 rebuilds=23 rebuild_s=0.000619
+wall clip normal rate=38400 steps=6144 nodes=20 members=94 faces=22 fragments=2 assembly_slowdown=5.34425021 chassis_slowdown=0.135343793 mountF=2749.098 plastic=0.0253310111 brokenMounts=16 deflection=5.8071777 reaction=1228.94276 dP=3.66100408e-11 dL=0.000607177936 energyGain=2.09547579e-09 peak_contacts=4 cpu_s=0.043284 rebuilds=23 rebuild_s=0.000597
 structure wall_work_and_reactions PASS
 structure wall_load_deforms_and_severs PASS
 mount_receipts root_dP=1.65841223e-11 root_dL=3.73297329e-11 impulse=84.5366989 angular_impulse=222.882789 parent_mass=200 detached_mass=28
@@ -211,7 +216,7 @@ structure split_preserves_parent_and_wing_mass PASS
 fragment_inertia parent_Izz=82.0011575 detached_Izz=15.0992221 kg_m2
 structure separated_fragments_retain_geometric_inertia PASS
 structure current_collision_surface_after_crash PASS
-wall clip oblique rate=38400 steps=6144 nodes=20 members=94 faces=23 fragments=2 assembly_slowdown=4.52412327 chassis_slowdown=-0.0485407986 mountF=2749.80883 plastic=0.0252966846 brokenMounts=16 deflection=6.33116112 reaction=1047.32062 dP=2.54811148e-11 dL=0.000714551853 energyGain=2.09547579e-09 peak_contacts=4 cpu_s=0.032613 rebuilds=23 rebuild_s=0.000560
+wall clip oblique rate=38400 steps=6144 nodes=20 members=94 faces=23 fragments=2 assembly_slowdown=4.52412327 chassis_slowdown=-0.0485407986 mountF=2749.80883 plastic=0.0252966846 brokenMounts=16 deflection=6.33116112 reaction=1047.32062 dP=2.54811148e-11 dL=0.000714551853 energyGain=2.09547579e-09 peak_contacts=4 cpu_s=0.033128 rebuilds=23 rebuild_s=0.000587
 structure wall_work_and_reactions PASS
 structure wall_load_deforms_and_severs PASS
 mount_receipts root_dP=2.49954059e-12 root_dL=4.87573302e-12 impulse=28.5556102 angular_impulse=97.7349024 parent_mass=200 detached_mass=28
@@ -220,7 +225,7 @@ structure split_preserves_parent_and_wing_mass PASS
 fragment_inertia parent_Izz=82.0030212 detached_Izz=14.8928027 kg_m2
 structure separated_fragments_retain_geometric_inertia PASS
 structure current_collision_surface_after_crash PASS
-wall miss normal rate=38400 steps=6144 nodes=20 members=94 faces=36 fragments=1 assembly_slowdown=-3.69482223e-13 chassis_slowdown=3.97903932e-13 mountF=4.88054042e-08 plastic=0 brokenMounts=0 deflection=2.38031816e-13 reaction=0 dP=9.09494702e-11 dL=2.57387001e-10 energyGain=1.0477379e-08 peak_contacts=0 cpu_s=0.024705 rebuilds=1 rebuild_s=0.000038
+wall miss normal rate=38400 steps=6144 nodes=20 members=94 faces=36 fragments=1 assembly_slowdown=-3.69482223e-13 chassis_slowdown=3.97903932e-13 mountF=4.88054042e-08 plastic=0 brokenMounts=0 deflection=2.38031816e-13 reaction=0 dP=9.09494702e-11 dL=2.57387001e-10 energyGain=1.0477379e-08 peak_contacts=0 cpu_s=0.025491 rebuilds=1 rebuild_s=0.000034
 structure wall_work_and_reactions PASS
 structure clear_miss_keeps_structure PASS
 mount_receipts root_dP=7.60570468e-11 root_dL=2.76118872e-10 impulse=1.61358867e-10 angular_impulse=1.05868909e-10 parent_mass=228 detached_mass=0
@@ -229,7 +234,7 @@ structure split_preserves_parent_and_wing_mass PASS
 fragment_inertia parent_Izz=206.725614 detached_Izz=0 kg_m2
 structure separated_fragments_retain_geometric_inertia PASS
 structure current_collision_surface_after_crash PASS
-wall clip normal rate=76800 steps=12288 nodes=20 members=94 faces=23 fragments=2 assembly_slowdown=5.28005004 chassis_slowdown=0.0548108158 mountF=2749.99738 plastic=0.0252066277 brokenMounts=16 deflection=6.51824449 reaction=1222.39251 dP=3.50165322e-11 dL=0.00103524672 energyGain=9.31322575e-10 peak_contacts=4 cpu_s=0.083579 rebuilds=23 rebuild_s=0.000538
+wall clip normal rate=76800 steps=12288 nodes=20 members=94 faces=23 fragments=2 assembly_slowdown=5.28005004 chassis_slowdown=0.0548108158 mountF=2749.99738 plastic=0.0252066277 brokenMounts=16 deflection=6.51824449 reaction=1222.39251 dP=3.50165322e-11 dL=0.00103524672 energyGain=9.31322575e-10 peak_contacts=4 cpu_s=0.083731 rebuilds=23 rebuild_s=0.000524
 structure wall_work_and_reactions PASS
 structure wall_load_deforms_and_severs PASS
 mount_receipts root_dP=8.72129823e-12 root_dL=1.56268098e-11 impulse=49.2532208 angular_impulse=151.355009 parent_mass=200 detached_mass=28
@@ -238,7 +243,7 @@ structure split_preserves_parent_and_wing_mass PASS
 fragment_inertia parent_Izz=82.0019075 detached_Izz=16.3647521 kg_m2
 structure separated_fragments_retain_geometric_inertia PASS
 structure current_collision_surface_after_crash PASS
-wall clip oblique rate=76800 steps=12288 nodes=20 members=94 faces=23 fragments=2 assembly_slowdown=4.49325085 chassis_slowdown=-0.047383069 mountF=2749.9568 plastic=0.0251544629 brokenMounts=16 deflection=6.33591011 reaction=1039.38566 dP=8.11792137e-11 dL=0.000440953325 energyGain=9.31322575e-10 peak_contacts=4 cpu_s=0.059055 rebuilds=25 rebuild_s=0.000571
+wall clip oblique rate=76800 steps=12288 nodes=20 members=94 faces=23 fragments=2 assembly_slowdown=4.49325085 chassis_slowdown=-0.047383069 mountF=2749.9568 plastic=0.0251544629 brokenMounts=16 deflection=6.33591011 reaction=1039.38566 dP=8.11792137e-11 dL=0.000440953325 energyGain=9.31322575e-10 peak_contacts=4 cpu_s=0.060358 rebuilds=25 rebuild_s=0.000585
 structure wall_work_and_reactions PASS
 structure wall_load_deforms_and_severs PASS
 mount_receipts root_dP=7.86624135e-11 root_dL=9.43557446e-12 impulse=29.6112049 angular_impulse=98.9567107 parent_mass=200 detached_mass=28
@@ -247,7 +252,7 @@ structure split_preserves_parent_and_wing_mass PASS
 fragment_inertia parent_Izz=82.0021513 detached_Izz=15.3881562 kg_m2
 structure separated_fragments_retain_geometric_inertia PASS
 structure current_collision_surface_after_crash PASS
-wall miss normal rate=76800 steps=12288 nodes=20 members=94 faces=36 fragments=1 assembly_slowdown=-1.00897068e-12 chassis_slowdown=-1.98951966e-12 mountF=1.4361845e-07 plastic=0 brokenMounts=0 deflection=6.11066753e-13 reaction=0 dP=2.65572453e-10 dL=2.42835093e-10 energyGain=3.16649675e-08 peak_contacts=0 cpu_s=0.048758 rebuilds=1 rebuild_s=0.000038
+wall miss normal rate=76800 steps=12288 nodes=20 members=94 faces=36 fragments=1 assembly_slowdown=-1.00897068e-12 chassis_slowdown=-1.98951966e-12 mountF=1.4361845e-07 plastic=0 brokenMounts=0 deflection=6.11066753e-13 reaction=0 dP=2.65572453e-10 dL=2.42835093e-10 energyGain=3.16649675e-08 peak_contacts=0 cpu_s=0.051210 rebuilds=1 rebuild_s=0.000036
 structure wall_work_and_reactions PASS
 structure clear_miss_keeps_structure PASS
 mount_receipts root_dP=2.40112906e-10 root_dL=9.64311809e-11 impulse=1.66651665e-10 angular_impulse=6.51222932e-10 parent_mass=228 detached_mass=0
@@ -256,7 +261,7 @@ structure split_preserves_parent_and_wing_mass PASS
 fragment_inertia parent_Izz=206.725614 detached_Izz=0 kg_m2
 structure separated_fragments_retain_geometric_inertia PASS
 structure current_collision_surface_after_crash PASS
-structural matrix: 66/66 passed
+structural matrix: 71/71 passed
 exit=0
 
 --- geometry ---
@@ -335,10 +340,10 @@ geometric contact gate: 42/50 passed
 exit=1
 
 --- benchmark ---
-benchmark structures=1 points=20 axial_members=94 initial_triangles=36 static_walls=1 native_constraints=0 rate=38400 steps=6144 simulated_s=.16 wall_s=0.019861 us_per_step=3.232585 seconds_per_simulated_second=0.124131 peak_contact_records=4 peak_fragments=2 rebuilds=23 rebuild_s=0.000659 peak_process_rss_bytes=10846208
+benchmark structures=1 points=20 axial_members=94 initial_triangles=36 static_walls=1 native_constraints=0 rate=38400 steps=6144 simulated_s=.16 wall_s=0.020877 us_per_step=3.397888 seconds_per_simulated_second=0.130479 peak_contact_records=4 peak_fragments=2 rebuilds=23 rebuild_s=0.000682 peak_process_rss_bytes=10878976
 structure benchmark_retains_finite_current_geometry PASS
 structure benchmark_exercises_contact_and_fracture PASS
-benchmark structures=32 points=640 axial_members=3008 initial_triangles=1152 static_walls=32 native_constraints=0 rate=38400 steps=6144 simulated_s=.16 wall_s=3.217940 us_per_step=523.753309 seconds_per_simulated_second=20.112127 peak_contact_records=128 peak_fragments=64 rebuilds=742 rebuild_s=0.023405 peak_process_rss_bytes=16138240
+benchmark structures=32 points=640 axial_members=3008 initial_triangles=1152 static_walls=32 native_constraints=0 rate=38400 steps=6144 simulated_s=.16 wall_s=3.296046 us_per_step=536.465847 seconds_per_simulated_second=20.600289 peak_contact_records=128 peak_fragments=64 rebuilds=742 rebuild_s=0.023355 peak_process_rss_bytes=16138240
 structure benchmark_retains_finite_current_geometry PASS
 structure benchmark_exercises_contact_and_fracture PASS
 exit=0
@@ -348,7 +353,7 @@ disconnected-face-tree faces=0 actual_face_hits=0 phantom_gap_hits=0 PASS
 TIMEOUT after 2s; disconnected face tree construction did not finish.
 
 --- AddressSanitizer ---
-mechanics: structural matrix: 66/66 passed, exit=0; no AddressSanitizer errors reported
+mechanics: structural matrix: 71/71 passed, exit=0; no AddressSanitizer errors reported
 geometry: geometric contact gate: 42/50 passed, exit=1; no AddressSanitizer errors reported
 benchmark: structure benchmark_exercises_contact_and_fracture PASS, exit=0; no AddressSanitizer errors reported
 
@@ -366,6 +371,14 @@ native world stuck=1 handoff=1 owned_clean=0 native_intact=1 native_collisions=6
 
 --- Project regression ---
 make test: exit=0
+
+--- Runner/provenance regressions ---
+..........
+----------------------------------------------------------------------
+Ran 10 tests in 31.065s
+
+OK
+exit=0
 
 --- Input record ---
 {
@@ -390,17 +403,17 @@ make test: exit=0
   ],
   "explicit_forces": true,
   "structure": true,
-  "runner_sha256": "f24690dd50cceba834dc5266494b296aa1b24fc9b2f93847433a4bc3ad6d9690",
+  "runner_sha256": "fa4603f0c38502b1573b0ee55c973da4f24926429533f73a0f93bf3b8a454e07",
   "fixtures_sha256": {
     "world-physics-contact-probe.cpp": "548313ced19a7abd5a3c4c359d415ff6dafd28dc253fc277690092dd6ac963e0",
-    "world-physics-structure.h": "e176e3e703c09533089e7b0bfe3aad4cd1fee6129a9b29aa8fc80f993090c3b0",
+    "world-physics-structure.h": "590e3923c1df45fd92578783c8170904c8f854b5c8ce87313a6a723f4b5eb949",
     "world-physics-probe.cpp": "3e66cf9fececb6aa7ddc72a3c7038a7b3bbbe5272a8f853bb0f68c924e3eeb23",
     "world-physics-conservation-probe.cpp": "97faad3c67a281c983e489a9e6f667aeb92ade78aa65589bad7d145ceb734bfc",
     "world-physics-face-tree-probe.cpp": "ae68419ec7bd2e436bda0179c2a8a78ea41ac3a847e4bcac9a62d41be9148d57",
     "world-physics-native-probe.cpp": "69764dce373db38f2e1d55529cd82a9c7058ae218e914d63f5ccc16ef125e8fa",
     "world-physics-material.h": "55548fbba4778a3def37ab17ac38b2754c1b884a7c4a9833af2609eb167538b0",
     "world-physics-explicit-policy.h": "5a881abdb90ce38947b95b9e643cd68d5aa272eabc12cd8c8c54d20dd4ce7ac3",
-    "world-physics-structure-probe.cpp": "911ce1f7b3406867d544cab8974d31944af72f297bcdb5a2735661b032b0da19",
+    "world-physics-structure-probe.cpp": "258892f4ea775518519490f9d624993254acf47532f77b58f23e5e7199d5caa9",
     "world-physics-material-probe.cpp": "662bc6c01d9668c4714206883dab4119853c7308622dc5da9ba9d3ff43dfc09a",
     "world-physics-step-probe.cpp": "84ad4e6de0ec4326392cd224a876b6b9990d744ee6dac98d394e0143a1032cab"
   },
@@ -415,5 +428,5 @@ make test: exit=0
     "geometry": 1,
     "benchmark": 0
   },
-  "elapsed_seconds": 10.26642233307939
+  "elapsed_seconds": 11.25760320900008
 }

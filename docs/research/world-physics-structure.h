@@ -108,6 +108,12 @@ struct Asset {
     int FragmentCount()const {return int(fragments.size());}
     int SurfaceCount()const {int n=0;for(auto &s:surfaces)n+=s.alive;return n;}
     bool Synchronized()const {
+        if(binding.size()!=nodes.size())return false;
+        for(size_t i=0;i<nodes.size();++i) {
+            const auto *solved=binding[i];
+            if(!solved||!std::isfinite(nodes[i].x.length2())||!std::isfinite(nodes[i].v.length2())||
+               !std::isfinite(solved->m_x.length2())||!std::isfinite(solved->m_v.length2()))return false;
+        }
         int count=0;
         for(const auto &f:fragments) {
             if(f.faces.size()!=size_t(f.body->m_faces.size()))return false;

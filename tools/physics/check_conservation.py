@@ -17,6 +17,14 @@ PIN = "d3afe76132fc76b0f9b2359cbaef47a3766e7fbb"
 ROOT = Path(__file__).resolve().parents[2]
 
 
+def result_exit_code(statuses):
+    # 1 means a completed physical assertion rejected the candidate. Signals
+    # and unexpected process exits are failed experiments/harness errors.
+    if any(code not in (0, 1) for code in statuses.values()):
+        return 2
+    return 1 if any(code == 1 for code in statuses.values()) else 0
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--source", type=Path, required=True)
@@ -89,7 +97,7 @@ def main():
     provenance["exit_codes"] = statuses
     provenance["elapsed_seconds"] = time.monotonic() - started
     (output / "provenance.json").write_text(json.dumps(provenance, indent=2) + "\n")
-    return 0 if all(code == 0 for code in statuses.values()) else 1
+    return result_exit_code(statuses)
 
 
 if __name__ == "__main__":

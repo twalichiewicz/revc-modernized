@@ -96,9 +96,9 @@ Apple M4, 16GiB, native ARM64 Release, double precision, Apple Clang 21, C++17. 
 | Workload | Initial points / members / triangles | Contact records / peak fragments | Measured cost |
 | --- | --- | --- | --- |
 | 1 structure | 20 / 94 / 36 | 4 / 2 | About 0.020s for 0.16 simulated seconds |
-| 32 structures | 640 / 3008 / 1152 | 128 / 64 | About 3.21s for 0.16 simulated seconds; about 20× real-time cost |
+| 32 structures | 640 / 3008 / 1152 | 128 / 64 | About 3.30s for 0.16 simulated seconds; about 20.6× real-time cost |
 
-The 32-structure sample had 742 rebuilds taking about 0.022s altogether, 522µs per measured step, roughly 16.3MB peak process RSS, and no native rigid constraints. Counts are exposed in the retained output. The single-wing supported-wall cases additionally have one fixed constraint. Exact timings vary with host load. **No city-scale rate or detail policy is accepted.**
+The 32-structure sample had 742 rebuilds taking about 0.023s altogether, 536µs per measured step, roughly 16.1MB peak process RSS, and no native rigid constraints. Counts are exposed in the retained output. The single-wing supported-wall cases additionally have one fixed constraint. Exact timings vary with host load. **No city-scale rate or detail policy is accepted.**
 
 ## Existing robust-contact work to evaluate
 
@@ -118,8 +118,12 @@ python3 tools/physics/check_conservation.py \
   --explicit-forces --structure
 ```
 
-Expected overall exit: **1**, because geometric contact is rejected. Other outputs are separate: original five-case fixture, 44 analytical contacts, 70 whole-step checks, 15 material checks, six BVH configurations, 66 structural checks and the benchmark. The runner rebuilds the library, records source patch/checksums/compiler/options and preserves individual exits. A build/harness failure returns 2; it is not a physical failure.
+Expected overall exit: **1**, because geometric contact is rejected. Other outputs are separate: original five-case fixture, 44 analytical contacts, 70 whole-step checks, 15 material checks, six BVH configurations, 71 structural checks and the benchmark. The runner rebuilds the library, records source patch/checksums/compiler/options and preserves individual exits. A build/harness failure returns 2; it is not a physical failure.
 
-[Retained results](2026-11-05-world-physics-structure-results.txt) include pass/fail cases and raw measurements. The original project `make test` suite passes. AddressSanitizer runs of mechanics, the 32-structure lifecycle workload and the deliberately failing geometric gate report no address errors after the lifecycle correction. This is not proof against every memory/lifecycle defect. The bounded native ownership regression still has its expected guarded passes and unguarded failures.
+[Retained results](2026-11-05-world-physics-structure-results.txt) include pass/fail cases and raw measurements. A fresh reviewer independently reproduced the 15 material checks, six BVH configurations, then-current 66 mechanical checks, 44 analytical contacts, 70 step checks, the 42/50 rejection and benchmark modes. The review identified a reporting issue: signal-terminated probes shared aggregate exit 1 with completed physical rejection. Five real-child-process tests now enforce exit 2 for signals/unexpected exits, with failure taking precedence over physical rejection.
+
+A separate final self-audit reproduced four NaN position/velocity cases falsely passing synchronization because comparisons against NaN are false. Explicit finite/binding validation now rejects them; the mechanical suite is 71/71 including restored-state acceptance. These two safeguards were fixed in one tested pass, without a second review. The current native, render/aero, calibrated-shell and production-suitability exclusions remain the acceptance decisions; their cost if assumed away is stale geometry, duplicate integration or unjustified physical behavior.
+
+The original project `make test` suite passes. AddressSanitizer runs of mechanics, the 32-structure lifecycle workload and the deliberately failing geometric gate report no address errors after the lifecycle correction. This is not proof against every memory/lifecycle defect. The bounded native ownership regression still has its expected guarded passes and unguarded failures. Ten Python runner/provenance regressions pass, separately from `make test`. The reviewer did not independently rerun these author-executed sanitizer/native/project-suite checks.
 
 Full provenance, initial red runs, the hanging-process sample and sanitizer builds remain under ignored `build/world-physics-evaluation/structure*`. No live gameplay observation is inferred from this headless fixture.

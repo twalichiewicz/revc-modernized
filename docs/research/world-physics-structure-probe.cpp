@@ -4,6 +4,7 @@
 #undef main
 #include <chrono>
 #include <sys/resource.h>
+#include <limits>
 #include "world-physics-structure.h"
 
 int failed=0, checked=0;
@@ -285,6 +286,23 @@ void EdgeCross(bool self) {
 }
 
 
+
+void InvalidGeometry() {
+    World w(Options());structure::Force force;structure::Asset a(w,force);Panel(a,0);
+    const double nan=std::numeric_limits<double>::quiet_NaN();
+    auto saved=a.nodes[0];
+    a.nodes[0].x.setX(nan);
+    Expect("nonfinite_canonical_position_is_not_synchronized",!a.Synchronized());
+    a.nodes[0]=saved;a.binding[0]->m_x.setX(nan);
+    Expect("nonfinite_solver_position_is_not_synchronized",!a.Synchronized());
+    a.binding[0]->m_x=saved.x;a.nodes[0].v.setY(nan);
+    Expect("nonfinite_canonical_velocity_is_not_synchronized",!a.Synchronized());
+    a.nodes[0]=saved;a.binding[0]->m_v.setZ(nan);
+    Expect("nonfinite_solver_velocity_is_not_synchronized",!a.Synchronized());
+    a.binding[0]->m_v=saved.v;
+    Expect("restored_geometry_is_synchronized",a.Synchronized());
+}
+
 void Benchmark(int number,double rate) {
     World w(Options(1/rate));structure::Force force;std::vector<std::unique_ptr<structure::Asset>> assets;
     for(int i=0;i<number;++i) {
@@ -318,7 +336,7 @@ int main(int argc,char **argv) {
         AngularSweep(1);AngularSweep(20);AngularSweep(100);EdgeCross(false);EdgeCross(true);Recontact();
         std::printf("geometric contact gate: %d/%d passed\n",checked-failed,checked);return failed?1:0;
     }
-    Heterogeneous(); Topology();
+    Heterogeneous(); Topology();InvalidGeometry();
     for(double rate:{19200.,38400.,76800.}) { WallClip(true,false,rate);WallClip(true,true,rate);WallClip(false,false,rate); }
     std::printf("structural matrix: %d/%d passed\n", checked-failed,checked);
     return failed ? 1 : 0;
