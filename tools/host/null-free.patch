@@ -1,0 +1,13 @@
+diff --git a/src/fakerw/fake.cpp b/src/fakerw/fake.cpp
+index 208c934..51c840b 100644
+--- a/src/fakerw/fake.cpp
++++ b/src/fakerw/fake.cpp
+@@ -21,7 +21,7 @@ void *RwCalloc(size_t numObj, size_t sizeObj) {
+ 		memset(mem, 0, numObj*sizeObj);
+ 	return mem;
+ }
+-void  RwFree(void *mem) { engine->memfuncs.rwfree(mem); }
++void  RwFree(void *mem) { if(mem) engine->memfuncs.rwfree(mem); }
+ 
+ 
+ //RwReal RwV3dNormalize(RwV3d * out, const RwV3d * in);

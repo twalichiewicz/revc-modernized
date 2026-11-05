@@ -50,6 +50,8 @@ Result: twelve fact assertions pass; three native per-instance authority asserti
 
 Decision: require matching engine source or a source-implemented host bridge. Task3 is pending that dependency, not complete. No claim that all possible future binary patches are impossible.
 
+User continuation authorized a source-availability/build decision. The [source-host follow-up](2026-11-05-source-host-query-proof.md) chooses a distinct pinned reVC source host after matching macVC source was not found, reproduces its build, and demonstrates coherent instance-local contact/LOS/vertical wing queries. This is not matching5217 compatibility or acceptance of all four in-app contracts. Continue the controlled slice on explicit source-host semantics; keep native ownership, render/aero/lifecycle and actual interaction/performance gates open.
+
 ### Task 3: Experimental app and measurement (conditional on all four gates)
 
 This task stays pending if Task 2 rejects the host boundary; a research executable is not an experimental game build.

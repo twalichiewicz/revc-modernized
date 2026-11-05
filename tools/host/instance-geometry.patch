@@ -1,0 +1,244 @@
+diff --git a/src/core/World.cpp b/src/core/World.cpp
+index 549c2cc..9bb4572 100644
+--- a/src/core/World.cpp
++++ b/src/core/World.cpp
+@@ -65,6 +65,7 @@ CWorld::Initialise()
+ void
+ CWorld::Add(CEntity *ent)
+ {
++	ent->m_inCollisionWorld = true;
+ 	if(ent->IsVehicle() || ent->IsPed()) DMAudio.SetEntityStatus(((CPhysical *)ent)->m_audioEntityId, TRUE);
+ 
+ 	if(ent->bIsBIGBuilding)
+@@ -80,6 +81,7 @@ CWorld::Add(CEntity *ent)
+ void
+ CWorld::Remove(CEntity *ent)
+ {
++	ent->m_inCollisionWorld = false;
+ 	if(ent->IsVehicle() || ent->IsPed()) DMAudio.SetEntityStatus(((CPhysical *)ent)->m_audioEntityId, FALSE);
+ 
+ 	if(ent->bIsBIGBuilding)
+@@ -365,7 +367,7 @@ CWorld::ProcessLineOfSightSectorList(CPtrList &list, const CColLine &line, CColP
+ 					colmodel = nil;
+ 
+ 			} else if(e->bUsesCollision)
+-				colmodel = CModelInfo::GetColModel(e->GetModelIndex());
++				colmodel = e->GetColModel();
+ 
+ 			if(colmodel && CCollision::ProcessLineOfSight(line, e->GetMatrix(), *colmodel, point, mindist,
+ 			                                              ignoreSeeThrough, ignoreShootThrough))
+@@ -465,7 +467,7 @@ CWorld::ProcessVerticalLineSectorList(CPtrList &list, const CColLine &line, CCol
+ 		if(e->m_scanCode != GetCurrentScanCode() && e->bUsesCollision) {
+ 			e->m_scanCode = GetCurrentScanCode();
+ 
+-			colmodel = CModelInfo::GetColModel(e->GetModelIndex());
++			colmodel = e->GetColModel();
+ 			if(CCollision::ProcessVerticalLine(line, e->GetMatrix(), *colmodel, point, mindist,
+ 			                                   ignoreSeeThrough, false, poly))
+ 				entity = e;
+@@ -666,7 +668,7 @@ CWorld::GetIsLineOfSightSectorListClear(CPtrList &list, const CColLine &line, bo
+ 
+ 			if(e != pIgnoreEntity && !(ignoreSomeObjects && CameraToIgnoreThisObject(e))) {
+ 
+-				colmodel = CModelInfo::GetColModel(e->GetModelIndex());
++				colmodel = e->GetColModel();
+ 
+ 				if(CCollision::TestLineOfSight(line, e->GetMatrix(), *colmodel, ignoreSeeThrough, false))
+ 					return false;
+@@ -971,7 +973,7 @@ CWorld::TestSphereAgainstSectorList(CPtrList &list, CVector spherePos, float rad
+ 				float distance = diff.Magnitude();
+ 
+ 				if(e->GetBoundRadius() + radius > distance) {
+-					CColModel *eCol = CModelInfo::GetColModel(e->GetModelIndex());
++					CColModel *eCol = e->GetColModel();
+ 					int collidedSpheres =
+ 					    CCollision::ProcessColModels(sphereMat, OurColModel, e->GetMatrix(), *eCol,
+ 					                                 gaTempSphereColPoints, nil, nil);
+diff --git a/src/entities/Entity.cpp b/src/entities/Entity.cpp
+index 428f19a..e0d1741 100644
+--- a/src/entities/Entity.cpp
++++ b/src/entities/Entity.cpp
+@@ -1,4 +1,5 @@
+ #include "common.h"
++#include <cmath>
+ 
+ #include "VuVector.h"
+ #include "General.h"
+@@ -88,14 +89,42 @@ CEntity::CEntity(void)
+ 	m_area = AREA_MAIN_MAP;
+ 	m_randomSeed = CGeneral::GetRandomNumber();
+ 	m_pFirstReference = nil;
++	m_instanceColModel = nil;
++	m_instanceColRevision = 0;
++	m_inCollisionWorld = false;
+ }
+ 
+ CEntity::~CEntity(void)
+ {
++	assert(!m_instanceColModel || !m_inCollisionWorld);
++	delete m_instanceColModel;
++	m_instanceColModel = nil;
+ 	DeleteRwObject();
+ 	ResolveReferences();
+ }
+ 
++// Main-thread quiescent publication only. No callback may retain the old COL.
++// Prepared arrays and bounds belong to the caller until this returns true.
++bool
++CEntity::ReplaceInstanceCollision(CColModel *model)
++{
++	if(m_modelIndex < 0 || m_modelIndex >= MODELINFOSIZE || !CModelInfo::GetModelInfo(m_modelIndex) ||
++	   !model || !model->ownsCollisionVolumes || model == GetColModel() ||
++	   m_instanceColRevision == ~(uint64)0) return false;
++	const CVector lo = model->boundingBox.min, hi = model->boundingBox.max;
++	if(!std::isfinite(lo.x) || !std::isfinite(lo.y) || !std::isfinite(lo.z) ||
++	   !std::isfinite(hi.x) || !std::isfinite(hi.y) || !std::isfinite(hi.z) ||
++	   lo.x > hi.x || lo.y > hi.y || lo.z > hi.z) return false;
++	const bool resident = m_inCollisionWorld;
++	if(resident) CWorld::Remove(this);
++	CColModel *old = m_instanceColModel;
++	m_instanceColModel = model;
++	++m_instanceColRevision;
++	if(resident) CWorld::Add(this);
++	delete old; // CColModel retires its native triangle planes/cache entry.
++	return true;
++}
++
+ void
+ CEntity::SetModelIndex(uint32 id)
+ {
+@@ -205,7 +234,7 @@ CEntity::GetBoundRect(void)
+ {
+ 	CRect rect;
+ 	CVector v;
+-	CColModel *col = CModelInfo::GetColModel(m_modelIndex);
++	CColModel *col = GetColModel();
+ 
+ 	rect.ContainPoint(GetMatrix() * col->boundingBox.min);
+ 	rect.ContainPoint(GetMatrix() * col->boundingBox.max);
+@@ -224,27 +253,27 @@ CEntity::GetBoundRect(void)
+ CVector
+ CEntity::GetBoundCentre(void)
+ {
+-	return GetMatrix() * CModelInfo::GetColModel(m_modelIndex)->boundingSphere.center;
++	return GetMatrix() * GetColModel()->boundingSphere.center;
+ }
+ 
+ #ifdef GTA_PS2
+ void
+ CEntity::GetBoundCentre(CVuVector &out)
+ {
+-	TransformPoint(out, GetMatrix(), CModelInfo::GetColModel(m_modelIndex)->boundingSphere.center);
++	TransformPoint(out, GetMatrix(), GetColModel()->boundingSphere.center);
+ }
+ #else
+ void
+ CEntity::GetBoundCentre(CVector &out)
+ {
+-	out = GetMatrix() * CModelInfo::GetColModel(m_modelIndex)->boundingSphere.center;
++	out = GetMatrix() * GetColModel()->boundingSphere.center;
+ }
+ #endif
+ 
+ float
+ CEntity::GetBoundRadius(void)
+ {
+-	return CModelInfo::GetColModel(m_modelIndex)->boundingSphere.radius;
++	return GetColModel()->boundingSphere.radius;
+ }
+ 
+ void
+@@ -470,7 +499,7 @@ CEntity::GetIsOnScreenComplex(void)
+ 		return true;
+ 
+ 	CRect rect = GetBoundRect();
+-	CColModel *colmodel = CModelInfo::GetColModel(m_modelIndex);
++	CColModel *colmodel = GetColModel();
+ 	float z = GetPosition().z;
+ 	float minz = z + colmodel->boundingBox.min.z;
+ 	float maxz = z + colmodel->boundingBox.max.z;
+@@ -625,7 +654,7 @@ CEntity::Remove(void)
+ float
+ CEntity::GetDistanceFromCentreOfMassToBaseOfModel(void)
+ {
+-	return -CModelInfo::GetColModel(m_modelIndex)->boundingBox.min.z;
++	return -GetColModel()->boundingBox.min.z;
+ }
+ 
+ void
+diff --git a/src/entities/Entity.h b/src/entities/Entity.h
+index e66c247..fdebda2 100644
+--- a/src/entities/Entity.h
++++ b/src/entities/Entity.h
+@@ -104,7 +104,12 @@ public:
+ 	void SetType(uint8 type) { m_type = type; }
+ 	uint8 GetStatus() const { return m_status; }
+ 	void SetStatus(uint8 status) { m_status = status; }
+-	CColModel *GetColModel(void) { return CModelInfo::GetModelInfo(m_modelIndex)->GetColModel(); }
++	CColModel *GetColModel(void) { return m_instanceColModel ? m_instanceColModel : CModelInfo::GetModelInfo(m_modelIndex)->GetColModel(); }
++	// Source-host experiment: owns prepared COLs; publish only between queries.
++	CColModel *m_instanceColModel;
++	uint64 m_instanceColRevision;
++	bool m_inCollisionWorld;
++	bool ReplaceInstanceCollision(CColModel *model);
+ 	bool GetIsStatic(void) const { return bIsStatic || bIsStaticWaitingForCollision; }
+ 	void SetIsStatic(bool state) { bIsStatic = state; }
+ #ifdef COMPATIBLE_SAVES
+diff --git a/src/entities/Physical.cpp b/src/entities/Physical.cpp
+index 22e822f..f1cd9da 100644
+--- a/src/entities/Physical.cpp
++++ b/src/entities/Physical.cpp
+@@ -1303,7 +1303,7 @@ CPhysical::ProcessShiftSectorList(CPtrList *lists)
+ 						Aobj->m_pCollidingEntity = nil;
+ 				}else if(Aobj->m_pCollidingEntity != B){
+ 					CMatrix inv;
+-					CVector size = CModelInfo::GetColModel(A->GetModelIndex())->boundingBox.GetSize();
++					CVector size = A->GetColModel()->boundingBox.GetSize();
+ 					size = A->GetMatrix() * size;
+ 					if(size.z < B->GetPosition().z ||
+ 					   (Invert(B->GetMatrix(), inv) * size).z < 0.0f){
+@@ -1321,7 +1321,7 @@ CPhysical::ProcessShiftSectorList(CPtrList *lists)
+ 						Bobj->m_pCollidingEntity = nil;
+ 				}else if(Bobj->m_pCollidingEntity != A){
+ 					CMatrix inv;
+-					CVector size = CModelInfo::GetColModel(B->GetModelIndex())->boundingBox.GetSize();
++					CVector size = B->GetColModel()->boundingBox.GetSize();
+ 					size = B->GetMatrix() * size;
+ 					if(size.z < A->GetPosition().z ||
+ 					   (Invert(A->GetMatrix(), inv) * size).z < 0.0f)
+@@ -1645,7 +1645,7 @@ CPhysical::ProcessCollisionSectorList(CPtrList *lists)
+ 						skipCollision = true;
+ 					else if(Aobj->m_nCollisionDamageEffect < DAMAGE_EFFECT_SMASH_COMPLETELY){
+ 						CMatrix inv;
+-						CVector size = CModelInfo::GetColModel(A->GetModelIndex())->boundingBox.GetSize();
++						CVector size = A->GetColModel()->boundingBox.GetSize();
+ 						size = A->GetMatrix() * size;
+ 						if(size.z < B->GetPosition().z ||
+ 						   (Invert(B->GetMatrix(), inv) * size).z < 0.0f){
+@@ -1664,7 +1664,7 @@ CPhysical::ProcessCollisionSectorList(CPtrList *lists)
+ 						skipCollision = true;
+ 					else if(Bobj->m_nCollisionDamageEffect < DAMAGE_EFFECT_SMASH_COMPLETELY){
+ 						CMatrix inv;
+-						CVector size = CModelInfo::GetColModel(B->GetModelIndex())->boundingBox.GetSize();
++						CVector size = B->GetColModel()->boundingBox.GetSize();
+ 						size = B->GetMatrix() * size;
+ 						if(size.z < A->GetPosition().z ||
+ 						   (Invert(A->GetMatrix(), inv) * size).z < 0.0f){
+@@ -1967,7 +1967,7 @@ CPhysical::ProcessCollisionSectorList(CPtrList *lists)
+ 						Bobj->ObjectDamage(maxImpulseB);
+ 					else if(Bobj->m_nCollisionDamageEffect >= DAMAGE_EFFECT_SMASH_COMPLETELY){
+ 						CMatrix inv;
+-						CVector size = CModelInfo::GetColModel(B->GetModelIndex())->boundingBox.GetSize();
++						CVector size = B->GetColModel()->boundingBox.GetSize();
+ 						size = B->GetMatrix() * size;
+ 						if(size.z < A->GetPosition().z ||
+ 						   (Invert(A->GetMatrix(), inv) * size).z < 0.0f)
+@@ -1982,7 +1982,7 @@ CPhysical::ProcessCollisionSectorList(CPtrList *lists)
+ 					else if(Bobj->m_nCollisionDamageEffect >= DAMAGE_EFFECT_SMASH_COMPLETELY){
+ #endif
+ 						CMatrix inv;
+-						CVector size = CModelInfo::GetColModel(A->GetModelIndex())->boundingBox.GetSize();
++						CVector size = A->GetColModel()->boundingBox.GetSize();
+ 						size = A->GetMatrix() * size;
+ 						if(size.z < B->GetPosition().z ||
+ 						   (Invert(B->GetMatrix(), inv) * size).z < 0.0f)

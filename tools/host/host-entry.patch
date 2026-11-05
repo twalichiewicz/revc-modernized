@@ -1,0 +1,13 @@
+diff --git a/src/skel/glfw/glfw.cpp b/src/skel/glfw/glfw.cpp
+index 9cbfc75..664aa9d 100644
+--- a/src/skel/glfw/glfw.cpp
++++ b/src/skel/glfw/glfw.cpp
+@@ -1947,6 +1947,8 @@ int
+ main(int argc, char *argv[])
+ {
+ #endif
++	extern int HostWingQueryTest(const char *);
++	if(argc==3 && !strcmp(argv[1], "--host-wing-query")) return HostWingQueryTest(argv[2]);
+ 	RwV2d pos;
+ 	RwInt32 i;
+ 
