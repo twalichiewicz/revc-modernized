@@ -48,6 +48,27 @@ class ContinuousProvenance(unittest.TestCase):
         with self.assertRaisesRegex(RuntimeError, "Expected"):
             RUNNER.source_record(self.source, self.root / "source.patch", "0" * 40)
 
+    def test_symlink_and_regular_file_are_different_inputs(self):
+        archive = self.root / "archive"
+        archive.mkdir()
+        (archive / "target.h").write_text("#define VALUE 7\n")
+        (archive / "force.h").write_text("target.h")
+        regular = RUNNER.tree_hash(archive)
+        (archive / "force.h").unlink()
+        (archive / "force.h").symlink_to("target.h")
+        linked = RUNNER.tree_hash(archive)
+        self.assertNotEqual(regular["tree_sha256"], linked["tree_sha256"])
+
+    def test_cached_build_is_bound_to_recorded_source(self):
+        actual = self.root / "actual-source"
+        actual.mkdir()
+        (actual / "CMakeLists.txt").write_text("cmake_minimum_required(VERSION 3.24)\nproject(Fixture NONE)\noption(USE_DOUBLE_PRECISION \"fixture\" ON)\n")
+        build = self.root / "build"
+        subprocess.run(["cmake", "-S", str(actual), "-B", str(build)], capture_output=True, check=True)
+        RUNNER.validate_bullet_build(actual, build)
+        with self.assertRaisesRegex(RuntimeError, "source"):
+            RUNNER.validate_bullet_build(self.source, build)
+
     def test_archive_fingerprint_detects_input_change(self):
         archive = self.root / "archive"
         archive.mkdir()

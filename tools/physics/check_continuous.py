@@ -45,13 +45,19 @@ def tree_hash(source):
     count = 0
     for directory, children, files in os.walk(source):
         children[:] = sorted(d for d in children if d != ".git")
-        paths = [Path(directory) / name for name in files]
-        paths += [Path(directory) / name for name in children if (Path(directory) / name).is_symlink()]
+        paths = [Path(directory) / name for name in files + children]
         for path in sorted(paths):
             relative = str(path.relative_to(source)).encode()
-            data = os.readlink(path).encode() if path.is_symlink() else path.read_bytes()
-            digest.update(len(relative).to_bytes(8, "little") + relative + bytes.fromhex(sha(data)))
-            count += 1
+            if path.is_symlink():
+                kind, data = b"L", os.readlink(path).encode()
+            elif path.is_dir():
+                kind, data = b"D", b""
+            elif path.is_file():
+                kind, data = b"F", path.read_bytes()
+            else:
+                raise RuntimeError(f"Unsupported source entry: {path}")
+            digest.update(kind + len(relative).to_bytes(8, "little") + relative + bytes.fromhex(sha(data)))
+            count += kind != b"D"
     return {"tree_sha256": digest.hexdigest(), "files": count}
 
 
@@ -72,6 +78,20 @@ def dependency_records(build, output):
     return records
 
 
+def validate_bullet_build(source, build):
+    cache = {}
+    for line in (build / "CMakeCache.txt").read_text().splitlines():
+        if line.startswith(("#", "//")) or "=" not in line or ":" not in line:
+            continue
+        key, value = line.split("=", 1)
+        cache[key.split(":", 1)[0]] = value
+    actual_source = cache.get("CMAKE_HOME_DIRECTORY")
+    if not actual_source or Path(actual_source).resolve() != source.resolve():
+        raise RuntimeError(f"Bullet build source does not match recorded source: {actual_source} != {source}")
+    if cache.get("USE_DOUBLE_PRECISION") != "ON":
+        raise RuntimeError("The Bullet build must use double precision")
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     for name in ("ipc-source", "bullet-source", "bullet-build", "build-dir", "output-dir"):
@@ -84,8 +104,7 @@ def main():
     started = time.monotonic()
     records = {"ipc": source_record(ipc, output / "ipc.patch", IPC_PIN),
                "bullet": source_record(bullet, output / "bullet.patch", BULLET_PIN)}
-    if "USE_DOUBLE_PRECISION:BOOL=ON" not in (bullet_build / "CMakeCache.txt").read_text():
-        raise RuntimeError("The Bullet build must use double precision")
+    validate_bullet_build(bullet, bullet_build)
     options = ["-DCMAKE_BUILD_TYPE=Release", "-DCMAKE_CXX_STANDARD=17", "-DCMAKE_OSX_ARCHITECTURES=arm64",
         "-DCMAKE_OSX_DEPLOYMENT_TARGET=15.0", "-DIPC_TOOLKIT_BUILD_TESTS=OFF", "-DIPC_TOOLKIT_BUILD_PYTHON=OFF",
         "-DIPC_TOOLKIT_WITH_CUDA=OFF", "-DIPC_TOOLKIT_WITH_FILIB=OFF", "-DIPC_TOOLKIT_WITH_ABSEIL=OFF",

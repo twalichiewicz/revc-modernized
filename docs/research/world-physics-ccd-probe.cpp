@@ -97,6 +97,25 @@ void NearGrazes() {
 }
 
 
+
+void NearInitialContact() {
+    constexpr double separation=.03,radius=1.5;
+    for(double margin:{.00001,.00002,.0001,.001,.01})for(double angle:{.05,.6,2*std::acos(-1.),5*std::acos(-1.)}) {
+        double theta=std::asin((separation+margin)/radius);
+        Vec target(radius*std::cos(theta),0,radius*std::sin(theta));continuous::LinearPath point(target,target);
+        continuous::RigidPath a({-2,0,0},{0,0,0},{0,0,0},{0,-1,0},angle),b({2,0,0},{0,0,0},{0,0,0},{0,-1,0},angle);
+        auto r=continuous::Sweep(continuous::Primitive::PointEdge,{&point,&a,&b,nullptr},separation);
+        double want=(theta-std::asin(separation/radius))/angle;
+        double timeTolerance=2e-7/(radius*angle)+1e-12;
+        std::printf("near-initial margin=%.8g angle=%.12g actual_time=%.12g want_time=%.12g gap=%.12g refinements=%d\n",margin,angle,r.time,want,r.gap,r.refinements);
+        Expect("near_initial_contact_keeps_earliest_time_and_both_gap_bounds",r.hit&&std::abs(r.time-want)<timeTolerance&&r.gap>=separation-1e-7&&r.gap<=separation+1e-7);
+    }
+    continuous::LinearPath point({1,0,.02},{1,0,.02}),a({-2,0,0},{-2,0,0}),b({2,0,0},{2,0,0});
+    bool rejected=false;try{continuous::Sweep(continuous::Primitive::PointEdge,{&point,&a,&b,nullptr},.03);}
+    catch(const std::runtime_error&){rejected=true;}
+    Expect("deep_initial_overlap_requires_recovery_policy",rejected);
+}
+
 void QueryBenchmark() {
     auto run=[&](const char *name,auto query,bool want) {
         std::vector<double> samples;int maximumRefinements=0;bool valid=true;
@@ -125,7 +144,7 @@ int main(int argc,char **argv) {
     if(argc>1&&std::strcmp(argv[1],"--benchmark")==0){QueryBenchmark();return failed?1:0;}
     if(argc>1&&std::strcmp(argv[1],"--stress")==0) {NearGrazes();std::printf("near-graze matrix: %d/%d passed\n",checks-failed,checks);return failed?1:0;}
     if(argc>1){std::fprintf(stderr,"Unknown probe mode\n");return 2;}
-    Paths();Shots();CrossedEdges();RotatingBlade();Witnesses();
+    Paths();Shots();CrossedEdges();RotatingBlade();Witnesses();NearInitialContact();
     std::printf("continuous geometry matrix: %d/%d passed\n",checks-failed,checks);
     return failed?1:0;
 }
