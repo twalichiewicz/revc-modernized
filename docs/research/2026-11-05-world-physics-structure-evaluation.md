@@ -127,3 +127,5 @@ A separate final self-audit reproduced four NaN position/velocity cases falsely 
 The original project `make test` suite passes. AddressSanitizer runs of mechanics, the 32-structure lifecycle workload and the deliberately failing geometric gate report no address errors after the lifecycle correction. This is not proof against every memory/lifecycle defect. The bounded native ownership regression still has its expected guarded passes and unguarded failures. Ten Python runner/provenance regressions pass, separately from `make test`. The reviewer did not independently rerun these author-executed sanitizer/native/project-suite checks.
 
 Full provenance, initial red runs, the hanging-process sample and sanitizer builds remain under ignored `build/world-physics-evaluation/structure*`. No live gameplay observation is inferred from this headless fixture.
+
+Subsequent work: the [continuous-contact comparison](2026-11-05-world-physics-continuous-contact.md) now builds IPC Toolkit and proves bounded prescribed-trajectory/first-contact events. The failed persistent/full-step gate in this structural note remains unaccepted.
