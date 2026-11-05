@@ -1,0 +1,11 @@
+=== guarded ===
+native world stuck=0 handoff=0 owned_clean=1 native_intact=1 native_collisions=1 native_shifts=0 native_moves=1 PASS
+native world stuck=1 handoff=0 owned_clean=1 native_intact=1 native_collisions=6 native_shifts=2 native_moves=9 PASS
+native world stuck=1 handoff=1 owned_clean=1 native_intact=1 native_collisions=6 native_shifts=2 native_moves=9 PASS
+exit=0
+
+=== unguarded ===
+native world stuck=0 handoff=0 owned_clean=0 native_intact=1 native_collisions=1 native_shifts=0 native_moves=1 FAIL
+native world stuck=1 handoff=0 owned_clean=0 native_intact=1 native_collisions=6 native_shifts=2 native_moves=9 FAIL
+native world stuck=1 handoff=1 owned_clean=0 native_intact=1 native_collisions=6 native_shifts=2 native_moves=9 FAIL
+exit=1

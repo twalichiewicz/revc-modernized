@@ -1,0 +1,149 @@
+diff --git a/src/BulletSoftBody/btSoftBody.h b/src/BulletSoftBody/btSoftBody.h
+index 27705e6..8cbe52d 100644
+--- a/src/BulletSoftBody/btSoftBody.h
++++ b/src/BulletSoftBody/btSoftBody.h
+@@ -1318,0 +1319,2 @@ public:
++	// Local research alteration: mass-weighted unilateral contact with Coulomb
++	// friction and an implicit penalty spring. Not an upstream implementation.
+@@ -1321,14 +1322,0 @@ public:
+-		btAlignedObjectArray<int> indices;
+-		{
+-			// randomize the order of repulsive force
+-			indices.resize(m_faceNodeContacts.size());
+-			for (int i = 0; i < m_faceNodeContacts.size(); ++i)
+-				indices[i] = i;
+-#define NEXTRAND (seed = (1664525L * seed + 1013904223L) & 0xffffffff)
+-			int i, ni;
+-
+-			for (i = 0, ni = indices.size(); i < ni; ++i)
+-			{
+-				btSwap(indices[i], indices[NEXTRAND % ni]);
+-			}
+-		}
+@@ -1337,4 +1325,3 @@ public:
+-			int idx = indices[k];
+-			btSoftBody::DeformableFaceNodeContact& c = m_faceNodeContacts[idx];
+-			btSoftBody::Node* node = c.m_node;
+-			btSoftBody::Face* face = c.m_face;
++			const DeformableFaceNodeContact& c = m_faceNodeContacts[k];
++			Node* node = c.m_node;
++			Face* face = c.m_face;
+@@ -1343,18 +1330,5 @@ public:
+-			btVector3 l = node->m_x - BaryEval(face->m_n[0]->m_x, face->m_n[1]->m_x, face->m_n[2]->m_x, w);
+-			btScalar d = c.m_margin - n.dot(l);
+-			d = btMax(btScalar(0), d);
+-
+-			const btVector3& va = node->m_v;
+-			btVector3 vb = BaryEval(face->m_n[0]->m_v, face->m_n[1]->m_v, face->m_n[2]->m_v, w);
+-			btVector3 vr = va - vb;
+-			const btScalar vn = btDot(vr, n);  // dn < 0 <==> opposing
+-			if (vn > OVERLAP_REDUCTION_FACTOR * d / timeStep)
+-				continue;
+-			btVector3 vt = vr - vn * n;
+-			btScalar I = 0;
+-			btScalar mass = node->m_im == 0 ? 0 : btScalar(1) / node->m_im;
+-			if (applySpringForce)
+-				I = -btMin(m_repulsionStiffness * timeStep * d, mass * (OVERLAP_REDUCTION_FACTOR * d / timeStep - vn));
+-			if (vn < 0)
+-				I += 0.5 * mass * vn;
+-			int face_penetration = 0, node_penetration = node->m_constrained;
++			// A collision-constrained node still has finite mass. Its impulse
++			// must not disappear into an artificial immovable counterpart.
++			const btScalar inverseNode = node->m_im;
++			btScalar inverseFace[3];
++			btScalar inverseEffective = inverseNode;
+@@ -1362,5 +1335,0 @@ public:
+-				face_penetration |= face->m_n[i]->m_constrained;
+-			btScalar I_tilde = 2.0 * I / (1.0 + w.length2());
+-
+-			//             double the impulse if node or face is constrained.
+-			if (face_penetration > 0 || node_penetration > 0)
+@@ -1368 +1337,2 @@ public:
+-				I_tilde *= 2.0;
++				inverseFace[i] = face->m_n[i]->m_im;
++				inverseEffective += w[i] * w[i] * inverseFace[i];
+@@ -1370 +1340,10 @@ public:
+-			if (face_penetration <= 0)
++			if (inverseEffective <= 0 || timeStep <= 0)
++				continue;
++			const btVector3 faceVelocity = BaryEval(face->m_n[0]->m_v, face->m_n[1]->m_v, face->m_n[2]->m_v, w);
++			const btVector3 relative = node->m_v - faceVelocity;
++			const btScalar normalSpeed = relative.dot(n);
++			const btScalar penetration = btMax(btScalar(0), c.m_margin - n.dot(node->m_x -
++				BaryEval(face->m_n[0]->m_x, face->m_n[1]->m_x, face->m_n[2]->m_x, w)));
++			const btScalar stoppingImpulse = btMax(btScalar(0), -normalSpeed) / inverseEffective;
++			btScalar normalImpulse = stoppingImpulse;
++			if (applySpringForce && penetration > 0)
+@@ -1372,2 +1351,10 @@ public:
+-				for (int j = 0; j < 3; ++j)
+-					face->m_n[j]->m_v += w[j] * n * I_tilde * node->m_im;
++				// Backward Euler for a scalar gap spring: lambda=k*h*(d-h*v')
++				// and v'=v+W*lambda. This separates stored penalty work from the
++				// inelastic stopping impulse instead of adding closing speed twice.
++				const btScalar stiffness = btMax(btScalar(0), m_repulsionStiffness);
++				const btScalar springImpulse = stiffness * timeStep *
++					btMax(btScalar(0), penetration - timeStep * normalSpeed) /
++					(1 + stiffness * timeStep * timeStep * inverseEffective);
++				const btScalar recoveryLimit = btMax(stoppingImpulse,
++					(OVERLAP_REDUCTION_FACTOR * penetration / timeStep - normalSpeed) / inverseEffective);
++				normalImpulse = btMin(btMax(stoppingImpulse, springImpulse), recoveryLimit);
+@@ -1375 +1362,4 @@ public:
+-			if (node_penetration <= 0)
++			btVector3 impulse = n * normalImpulse;
++			const btVector3 tangent = relative - n * normalSpeed;
++			const btScalar tangentSpeed = tangent.length();
++			if (tangentSpeed > SIMD_EPSILON && normalImpulse > 0)
+@@ -1377,25 +1367,3 @@ public:
+-				node->m_v -= I_tilde * node->m_im * n;
+-			}
+-
+-			// apply frictional impulse
+-			btScalar vt_norm = vt.safeNorm();
+-			if (vt_norm > SIMD_EPSILON)
+-			{
+-				btScalar delta_vn = -2 * I * node->m_im;
+-				btScalar mu = c.m_friction;
+-				btScalar vt_new = btMax(btScalar(1) - mu * delta_vn / (vt_norm + SIMD_EPSILON), btScalar(0)) * vt_norm;
+-				I = 0.5 * mass * (vt_norm - vt_new);
+-				vt.safeNormalize();
+-				I_tilde = 2.0 * I / (1.0 + w.length2());
+-				//                 double the impulse if node or face is constrained.
+-				if (face_penetration > 0 || node_penetration > 0)
+-					I_tilde *= 2.0;
+-				if (face_penetration <= 0)
+-				{
+-					for (int j = 0; j < 3; ++j)
+-						face->m_n[j]->m_v += w[j] * vt * I_tilde * (face->m_n[j])->m_im;
+-				}
+-				if (node_penetration <= 0)
+-				{
+-					node->m_v -= I_tilde * node->m_im * vt;
+-				}
++				const btScalar tangentImpulse = btMin(tangentSpeed / inverseEffective,
++					btMax(btScalar(0), c.m_friction) * normalImpulse);
++				impulse -= tangent * (tangentImpulse / tangentSpeed);
+@@ -1402,0 +1371,3 @@ public:
++			node->m_v += impulse * inverseNode;
++			for (int i = 0; i < 3; ++i)
++				face->m_n[i]->m_v -= impulse * w[i] * inverseFace[i];
+diff --git a/src/BulletSoftBody/btSoftBodyInternals.h b/src/BulletSoftBody/btSoftBodyInternals.h
+index 1372586..8533761 100644
+--- a/src/BulletSoftBody/btSoftBodyInternals.h
++++ b/src/BulletSoftBody/btSoftBodyInternals.h
+@@ -1796,2 +1796,7 @@ struct btSoftColliders
+-					// todo xuchenhan@: this is assuming mass of all vertices are the same. Need to modify if mass are different for distinct vertices
+-					c.m_weights = btScalar(2) / (btScalar(1) + bary.length2()) * bary;
++					// Local research alteration: J M^-1 J^T for the barycentric
++					// contact point; each vertex receives its own mass-weighted share.
++					ima = bary.x() * bary.x() * n0->m_im +
++						bary.y() * bary.y() * n1->m_im +
++						bary.z() * bary.z() * n2->m_im;
++					c.m_weights = ima > 0 ? btVector3(bary.x() * n0->m_im,
++						bary.y() * n1->m_im, bary.z() * n2->m_im) / ima : btVector3(0, 0, 0);
+@@ -1799,2 +1803,0 @@ struct btSoftColliders
+-					// friction is handled by the nodes to prevent sticking
+-					//                    const btScalar fc = 0;
+@@ -1802,3 +1804,0 @@ struct btSoftColliders
+-
+-					// the effective inverse mass of the face as in https://graphics.stanford.edu/papers/cloth-sig02/cloth.pdf
+-					ima = bary.getX() * c.m_weights.getX() * n0->m_im + bary.getY() * c.m_weights.getY() * n1->m_im + bary.getZ() * c.m_weights.getZ() * n2->m_im;

@@ -40,7 +40,7 @@
 - [x] Change split impulse, damping, face contact, implicit/projection settings, ERP and timestep individually; retain physical exit codes and failed results.
 - [x] Commit reviewed research artifacts after final reproduction and whitespace/source checks.
 
-**Current result:** Build passes. All eight unmodified physical invocations exit 1. A separate experimental one-line inverse-mass correction plus projection passes the five initial world cases. An isolated analytical probe confirms the corrected normal impulse distribution but a light-face case still gains kinetic energy, so both versions of the complete single-contact probe exit 1. Task 2's contact gate remains failed. Rigid joint separation is not a plasticity/fracture result.
+**Initial result:** Build passed, while unmodified contact acceptance and the minimal correction failed. The [follow-up](../../research/2026-11-05-world-physics-conservation-followup.md) now passes the bounded contact gate under a corrected explicit spring/damping policy. This remains an experimental candidate; rigid joint separation is not a plasticity/fracture result.
 
 ## Task 2: Resolve the conservative-contact gate
 
@@ -48,13 +48,13 @@
 
 **Consumes:** Task 1 fixtures/raw results. **Produces:** A documented contact configuration or corrected candidate path with independently measured conservation, or an explicit rejection of that path.
 
-- [ ] Add a free rigid/free sheet reference case with no contact, a single prescribed impulse, unequal node masses and off-center barycentric contact. Assert total linear and angular impulse against an analytical impulse-at-point reference before testing sustained contacts.
-- [ ] Record per-step initial/final mass, linear/angular momentum, contact impulses and external loads. Test at least two geometrically distinct contact locations and reversed participant ordering. Check nonfinite values and distinguish stabilization work from physical impulse.
-- [ ] Trace face/node and rigid/deformable contact assembly against that reference. Diagnose configuration or implementation causes before changing tolerances. No post-step global momentum correction.
-- [ ] Re-run baseline and timestep variants with the diagnosis. Require all contact cases to stay within their declared tolerances, retain geometry separation and show convergence rather than contact removal.
-- [ ] If this path remains unsuitable, evaluate the pinned Chrono core/FEA alternative from the prior-art note using equivalent masses, geometry and accounting. Document actual build dependencies and contact limitations before selecting it. A Jolt rigid comparison is separately labeled and cannot satisfy the deformable gate.
+- [x] Add a free rigid/free sheet reference case with no contact, a single prescribed impulse, unequal node masses and off-center barycentric contact. Assert total linear and angular impulse against an analytical impulse-at-point reference before testing sustained contacts.
+- [x] Record per-step initial/final mass, linear/angular momentum, contact impulses and external loads. Test at least two geometrically distinct contact locations and reversed participant ordering. Check nonfinite values and distinguish stabilization work from physical impulse.
+- [x] Trace face/node and rigid/deformable contact assembly against that reference. Diagnose configuration or implementation causes before changing tolerances. No post-step global momentum correction.
+- [x] Re-run baseline and timestep variants with the diagnosis. Require all contact cases to stay within their declared tolerances, retain geometry separation and show convergence rather than contact removal.
+- [x] Resolve the conditional alternative-engine decision for this gate: the corrected explicit prototype passes the bounded contact tests, so a second engine is not needed for that result. Retain Chrono as the comparison if the structural/stiffness gate makes this path unsuitable; no Chrono build or final SDK selection is claimed.
 
-Progress: the single-contact probe now reproduces the unequal-mass normal impulse imbalance and compares independent linear/angular and effective-mass references. `bullet-unequal-contact-experiment.patch` corrects that recipient inverse mass in a separate checkout, but the light-face test shows remaining impulse-magnitude/energy failure. Unequal per-vertex masses, constrained contacts, sustained angular/energy accounting and broader configurations also remain open. Retain the patch as a diagnostic artifact, not an accepted library fix.
+Result: `bullet-conservative-contact-experiment.patch` and `world-physics-explicit-policy.h` pass 44 contact cases, one force/current-geometry case, 70 whole-step checks and the initial five-case fixture. Three-way contact exposed and corrected a second lost-reaction path. Phase callbacks measure aggregate recipient impulses rather than relying on an overwritten library contact field. These are controlled mass-spring fixtures with uniform coefficients; local stress receipts, heterogeneous material laws, stiff structures and broader engine/host acceptance remain later work. The earlier one-operand patch stays retained as a failed diagnostic.
 
 Run: compile and invoke the fixture using the evaluation note's commands. A successful build is insufficient; accepted fixtures must exit 0 and retain all collision assertions. Record a failed/rejected candidate honestly instead of leaving its acceptance checkbox complete.
 
@@ -87,6 +87,8 @@ Gate: rigid joint breakage, an elastic sheet or a cosmetic hole cannot substitut
 - [ ] Prefer source integration if actual host source is available. If a binary boundary cannot prove one of these contracts, record the precise missing capability and pursue that integration route; do not call library compilation a successful bridge.
 
 Gate: the public macVC repository is download-only. This plan does not assume the port source exists locally or invent an unverified suppression hook.
+
+Progress: [14-vtable/21-method inventory and isolated native scheduling proof](../../research/2026-11-05-world-physics-native-ownership.md) establish the ordinary control/collision/shift/stuck-recovery paths and a controlled suppression seam. Three guarded scenarios pass and all three unguarded controls fail. Full controller/query/stream/lifecycle closure is still open, so Task 4 is not complete and no game handoff is authorized by these results alone.
 
 ## Task 5: Plan and implement one complete game interaction slice
 

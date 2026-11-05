@@ -1,0 +1,373 @@
+{
+  "uuid": "02983a69-6bd0-33f7-b72b-2aca8bcb3c33",
+  "sha256": "a715c2ce363265385b73ac6d2decd386f7d8bbccb61519766907a563a663cc95",
+  "method": "LLVM static disassembly and file-backed vtable pointers; no game execution",
+  "vtables": {
+    "7CEntity": {
+      "0x48": {
+        "target": "0x10003fe10",
+        "symbols": [
+          "__ZN7CEntity14ProcessControlEv"
+        ]
+      },
+      "0x50": {
+        "target": "0x10003fe10",
+        "symbols": [
+          "__ZN7CEntity16ProcessCollisionEv"
+        ]
+      },
+      "0x58": {
+        "target": "0x10003fe10",
+        "symbols": [
+          "__ZN7CEntity12ProcessShiftEv"
+        ]
+      }
+    },
+    "9CPhysical": {
+      "0x48": {
+        "target": "0x100155d50",
+        "symbols": [
+          "__ZN9CPhysical14ProcessControlEv"
+        ]
+      },
+      "0x50": {
+        "target": "0x10015d044",
+        "symbols": [
+          "__ZN9CPhysical16ProcessCollisionEv"
+        ]
+      },
+      "0x58": {
+        "target": "0x10015cd48",
+        "symbols": [
+          "__ZN9CPhysical12ProcessShiftEv"
+        ]
+      }
+    },
+    "11CAutomobile": {
+      "0x48": {
+        "target": "0x100248930",
+        "symbols": [
+          "__ZN11CAutomobile14ProcessControlEv"
+        ]
+      },
+      "0x50": {
+        "target": "0x10015d044",
+        "symbols": [
+          "__ZN9CPhysical16ProcessCollisionEv"
+        ]
+      },
+      "0x58": {
+        "target": "0x10015cd48",
+        "symbols": [
+          "__ZN9CPhysical12ProcessShiftEv"
+        ]
+      }
+    },
+    "5CBoat": {
+      "0x48": {
+        "target": "0x100267340",
+        "symbols": [
+          "__ZN5CBoat14ProcessControlEv"
+        ]
+      },
+      "0x50": {
+        "target": "0x10015d044",
+        "symbols": [
+          "__ZN9CPhysical16ProcessCollisionEv"
+        ]
+      },
+      "0x58": {
+        "target": "0x10015cd48",
+        "symbols": [
+          "__ZN9CPhysical12ProcessShiftEv"
+        ]
+      }
+    },
+    "5CHeli": {
+      "0x48": {
+        "target": "0x100272fe0",
+        "symbols": [
+          "__ZN5CHeli14ProcessControlEv"
+        ]
+      },
+      "0x50": {
+        "target": "0x10015d044",
+        "symbols": [
+          "__ZN9CPhysical16ProcessCollisionEv"
+        ]
+      },
+      "0x58": {
+        "target": "0x10015cd48",
+        "symbols": [
+          "__ZN9CPhysical12ProcessShiftEv"
+        ]
+      }
+    },
+    "6CPlane": {
+      "0x48": {
+        "target": "0x10027643c",
+        "symbols": [
+          "__ZN6CPlane14ProcessControlEv"
+        ]
+      },
+      "0x50": {
+        "target": "0x10015d044",
+        "symbols": [
+          "__ZN9CPhysical16ProcessCollisionEv"
+        ]
+      },
+      "0x58": {
+        "target": "0x10015cd48",
+        "symbols": [
+          "__ZN9CPhysical12ProcessShiftEv"
+        ]
+      }
+    },
+    "4CPed": {
+      "0x48": {
+        "target": "0x100192c88",
+        "symbols": [
+          "__ZN4CPed14ProcessControlEv"
+        ]
+      },
+      "0x50": {
+        "target": "0x10015d044",
+        "symbols": [
+          "__ZN9CPhysical16ProcessCollisionEv"
+        ]
+      },
+      "0x58": {
+        "target": "0x10015cd48",
+        "symbols": [
+          "__ZN9CPhysical12ProcessShiftEv"
+        ]
+      }
+    },
+    "5CBike": {
+      "0x48": {
+        "target": "0x10025d7c4",
+        "symbols": [
+          "__ZN5CBike14ProcessControlEv"
+        ]
+      },
+      "0x50": {
+        "target": "0x10015d044",
+        "symbols": [
+          "__ZN9CPhysical16ProcessCollisionEv"
+        ]
+      },
+      "0x58": {
+        "target": "0x10015cd48",
+        "symbols": [
+          "__ZN9CPhysical12ProcessShiftEv"
+        ]
+      }
+    },
+    "7CObject": {
+      "0x48": {
+        "target": "0x10017ef2c",
+        "symbols": [
+          "__ZN7CObject14ProcessControlEv"
+        ]
+      },
+      "0x50": {
+        "target": "0x10015d044",
+        "symbols": [
+          "__ZN9CPhysical16ProcessCollisionEv"
+        ]
+      },
+      "0x58": {
+        "target": "0x10015cd48",
+        "symbols": [
+          "__ZN9CPhysical12ProcessShiftEv"
+        ]
+      }
+    },
+    "9CBuilding": {
+      "0x48": {
+        "target": "0x10003fe10",
+        "symbols": [
+          "__ZN7CEntity14ProcessControlEv"
+        ]
+      },
+      "0x50": {
+        "target": "0x10003fe10",
+        "symbols": [
+          "__ZN7CEntity16ProcessCollisionEv"
+        ]
+      },
+      "0x58": {
+        "target": "0x10003fe10",
+        "symbols": [
+          "__ZN7CEntity12ProcessShiftEv"
+        ]
+      }
+    },
+    "6CDummy": {
+      "0x48": {
+        "target": "0x10003fe10",
+        "symbols": [
+          "__ZN7CEntity14ProcessControlEv"
+        ]
+      },
+      "0x50": {
+        "target": "0x10003fe10",
+        "symbols": [
+          "__ZN7CEntity16ProcessCollisionEv"
+        ]
+      },
+      "0x58": {
+        "target": "0x10003fe10",
+        "symbols": [
+          "__ZN7CEntity12ProcessShiftEv"
+        ]
+      }
+    },
+    "10CPlayerPed": {
+      "0x48": {
+        "target": "0x1001d5c74",
+        "symbols": [
+          "__ZN10CPlayerPed14ProcessControlEv"
+        ]
+      },
+      "0x50": {
+        "target": "0x10015d044",
+        "symbols": [
+          "__ZN9CPhysical16ProcessCollisionEv"
+        ]
+      },
+      "0x58": {
+        "target": "0x10015cd48",
+        "symbols": [
+          "__ZN9CPhysical12ProcessShiftEv"
+        ]
+      }
+    },
+    "15CCutsceneObject": {
+      "0x48": {
+        "target": "0x10017dea0",
+        "symbols": [
+          "__ZN15CCutsceneObject14ProcessControlEv"
+        ]
+      },
+      "0x50": {
+        "target": "0x10015d044",
+        "symbols": [
+          "__ZN9CPhysical16ProcessCollisionEv"
+        ]
+      },
+      "0x58": {
+        "target": "0x10015cd48",
+        "symbols": [
+          "__ZN9CPhysical12ProcessShiftEv"
+        ]
+      }
+    },
+    "12CDummyObject": {
+      "0x48": {
+        "target": "0x10003fe10",
+        "symbols": [
+          "__ZN7CEntity14ProcessControlEv"
+        ]
+      },
+      "0x50": {
+        "target": "0x10003fe10",
+        "symbols": [
+          "__ZN7CEntity16ProcessCollisionEv"
+        ]
+      },
+      "0x58": {
+        "target": "0x10003fe10",
+        "symbols": [
+          "__ZN7CEntity12ProcessShiftEv"
+        ]
+      }
+    }
+  },
+  "methods": {
+    "_ZN6CWorld7ProcessEv": {
+      "address": "0x100137f7c",
+      "listed_hook": true
+    },
+    "_ZN9CPhysical14ProcessControlEv": {
+      "address": "0x100155d50",
+      "listed_hook": false
+    },
+    "_ZN9CPhysical12ApplyGravityEv": {
+      "address": "0x100155fd4",
+      "listed_hook": false
+    },
+    "_ZN9CPhysical14ApplyMoveSpeedEv": {
+      "address": "0x1001563a0",
+      "listed_hook": false
+    },
+    "_ZN9CPhysical12ProcessShiftEv": {
+      "address": "0x10015cd48",
+      "listed_hook": false
+    },
+    "_ZN9CPhysical16ProcessCollisionEv": {
+      "address": "0x10015d044",
+      "listed_hook": true
+    },
+    "_ZN11CAutomobile14ProcessControlEv": {
+      "address": "0x100248930",
+      "listed_hook": true
+    },
+    "_ZN5CBoat14ProcessControlEv": {
+      "address": "0x100267340",
+      "listed_hook": true
+    },
+    "_ZN5CHeli14ProcessControlEv": {
+      "address": "0x100272fe0",
+      "listed_hook": true
+    },
+    "_ZN6CPlane14ProcessControlEv": {
+      "address": "0x10027643c",
+      "listed_hook": true
+    },
+    "_ZN4CPed14ProcessControlEv": {
+      "address": "0x100192c88",
+      "listed_hook": true
+    },
+    "_ZN6CWorld21GetIsLineOfSightClearERK7CVectorS2_bbbbbbb": {
+      "address": "0x10012e488",
+      "listed_hook": true
+    },
+    "_ZN6CWorld18ProcessLineOfSightERK7CVectorS2_R9CColPointRP7CEntitybbbbbbbb": {
+      "address": "0x10012c554",
+      "listed_hook": true
+    },
+    "_ZN9CPhysical12RemoveAndAddEv": {
+      "address": "0x100155224",
+      "listed_hook": false
+    },
+    "_ZN6CWorld3AddEP7CEntity": {
+      "address": "0x10012beec",
+      "listed_hook": false
+    },
+    "_ZN6CWorld6RemoveEP7CEntity": {
+      "address": "0x10012bfc4",
+      "listed_hook": false
+    },
+    "_ZN7CEntity14ProcessControlEv": {
+      "address": "0x10003fe10",
+      "listed_hook": false
+    },
+    "_ZN5CBike14ProcessControlEv": {
+      "address": "0x10025d7c4",
+      "listed_hook": false
+    },
+    "_ZN7CObject14ProcessControlEv": {
+      "address": "0x10017ef2c",
+      "listed_hook": false
+    },
+    "_ZN10CPlayerPed14ProcessControlEv": {
+      "address": "0x1001d5c74",
+      "listed_hook": true
+    },
+    "_ZN15CCutsceneObject14ProcessControlEv": {
+      "address": "0x10017dea0",
+      "listed_hook": false
+    }
+  }
+}

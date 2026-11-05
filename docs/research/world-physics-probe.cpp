@@ -15,18 +15,20 @@
 #include <cstring>
 #include <memory>
 #include <vector>
+#include "world-physics-explicit-policy.h"
 
 struct Settings {
     const char *name = "baseline";
     btScalar dt = btScalar(1) / 480, damping = .1, erp = .06;
     bool split = true, implicit = false, projection = false, faceContact = true;
+    bool explicitForces = false;
 };
 struct World {
     Settings settings;
     btSoftBodyRigidBodyCollisionConfiguration config;
     btCollisionDispatcher dispatcher{&config};
     btDbvtBroadphase broad;
-    btDeformableBodySolver deformable;
+    std::unique_ptr<btDeformableBodySolver> deformable;
     btDeformableMultiBodyConstraintSolver solver;
     std::unique_ptr<btDeformableMultiBodyDynamicsWorld> world;
     std::vector<std::unique_ptr<btCollisionShape>> shapes;
@@ -34,9 +36,13 @@ struct World {
     std::vector<std::unique_ptr<btSoftBody>> soft;
     std::vector<std::unique_ptr<btDeformableMassSpringForce>> forces;
     explicit World(Settings options) : settings(options) {
-        solver.setDeformableSolver(&deformable);
+        if (settings.explicitForces && (settings.implicit || settings.projection))
+            throw std::invalid_argument("Explicit force policy requires nonprojected explicit stepping");
+        if (settings.explicitForces) deformable = std::make_unique<ExplicitContactSolver>();
+        else deformable = std::make_unique<btDeformableBodySolver>();
+        solver.setDeformableSolver(deformable.get());
         world = std::make_unique<btDeformableMultiBodyDynamicsWorld>(&dispatcher, &broad, &solver,
-                                                                     &config, &deformable);
+                                                                     &config, deformable.get());
         world->setGravity({0, 0, 0});
         world->getWorldInfo().m_gravity = {0, 0, 0};
         world->getWorldInfo().air_density = 0;
@@ -90,8 +96,9 @@ struct World {
         p->setSpringStiffness(100);
         p->generateBendingConstraints(2);
         world->addSoftBody(p);
-        forces.push_back(
-            std::make_unique<btDeformableMassSpringForce>(100, settings.damping, true));
+        if (settings.explicitForces)
+            forces.push_back(std::make_unique<ExplicitSpringForce>(100, settings.damping, true));
+        else forces.push_back(std::make_unique<btDeformableMassSpringForce>(100, settings.damping, true));
         world->addForce(p, forces.back().get());
         return p;
     }
@@ -213,6 +220,8 @@ int main(int argc, char **argv) {
             settings.erp = 0;
         else if (!std::strcmp(argv[1], "half-step"))
             settings.dt /= 2;
+        else if (!std::strcmp(argv[1], "explicit-forces"))
+            settings.explicitForces = true;
         else {
             std::fprintf(stderr, "Unknown diagnostic variant: %s\n", argv[1]);
             return 2;
@@ -220,7 +229,7 @@ int main(int argc, char **argv) {
     } else if (argc != 1) {
         std::fprintf(stderr,
                      "Usage: probe "
-                     "[no-split|no-damping|node-only|implicit|projection|zero-erp|half-step]\n");
+                     "[no-split|no-damping|node-only|implicit|projection|zero-erp|half-step|explicit-forces]\n");
         return 2;
     }
     std::printf("variant=%s\n", settings.name);

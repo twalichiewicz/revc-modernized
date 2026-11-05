@@ -2,6 +2,8 @@
 
 2026-11-05. This is an isolated decision experiment, not a game modification, engine selection, or completion of the [shared-world design](../superpowers/specs/2026-11-05-world-physics-design.md).
 
+Follow-up: the [conservation investigation](2026-11-05-world-physics-conservation-followup.md) retains a stronger corrected prototype and its passing bounded contact checks. The original failures and minimal patch below are preserved as the initial evidence, not the latest candidate's status.
+
 ## Outcome
 
 Bullet's CPU libraries compile and run natively on this Apple M4 / 16 GiB host with Apple Clang 21.0.0, CMake 4.4.4, C++17 and double precision. Rigid breakage/contact and elastic surface contact can run in the same `btDeformableMultiBodyDynamicsWorld`. **The unmodified candidate fails the initial contact fixture.** An isolated analytical test identifies an unequal-mass impulse error; a separate experimental checkout with that one-line correction and projection enabled passes all five initial world cases. A stronger light-face contact test then exposes energy gain despite balanced momentum. Keep this as diagnostic evidence, not an accepted fix, SDK selection or full design acceptance.
