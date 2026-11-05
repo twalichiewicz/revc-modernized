@@ -23,6 +23,39 @@ struct RigidBox {
         return result;
     }
     static std::array<Vec,8> Corners(Vec h){std::array<Vec,8> points;for(int i=0;i<8;++i)points[i]=Vec(i&1?h.x():-h.x(),i&2?h.y():-h.y(),i&4?h.z():-h.z());return points;}
+    bool Contains(Vec point,Vec center,const Eigen::Matrix3d &rotation)const {
+        Vec localPoint=rotation.transpose()*(point-center);
+        if(!localPoint.allFinite())throw std::invalid_argument("Nonfinite solid containment query");
+        return (localPoint.cwiseAbs().array()<=half.array()).all();
+    }
+    bool IntersectsTriangle(std::array<Vec,3> triangle,Vec center,const Eigen::Matrix3d &rotation)const {
+        for(auto &p:triangle){p=rotation.transpose()*(p-center);if(!p.allFinite())throw std::invalid_argument("Nonfinite solid triangle query");}
+        auto separated=[&](Vec axis){
+            double length=axis.norm();if(!std::isfinite(length))throw std::invalid_argument("Unrepresentable solid triangle axis");
+            if(length<1e-12)return false;axis/=length;
+            double radius=half.dot(axis.cwiseAbs()),lo=axis.dot(triangle[0]),hi=lo;
+            for(int i=1;i<3;++i){double value=axis.dot(triangle[i]);lo=std::min(lo,value);hi=std::max(hi,value);}
+            if(!std::isfinite(radius)||!std::isfinite(lo)||!std::isfinite(hi))throw std::invalid_argument("Unrepresentable solid triangle projection");
+            return lo>radius||hi< -radius;
+        };
+        const std::array<Vec,3> axes{Vec::UnitX(),Vec::UnitY(),Vec::UnitZ()};
+        for(auto axis:axes)if(separated(axis))return false;
+        if(separated((triangle[1]-triangle[0]).cross(triangle[2]-triangle[0])))return false;
+        for(int i=0;i<3;++i)for(auto axis:axes)if(separated((triangle[(i+1)%3]-triangle[i]).cross(axis)))return false;
+        return true;
+    }
+    static bool Overlap(const RigidBox &a,Vec ca,const Eigen::Matrix3d &ra,const RigidBox &b,Vec cb,const Eigen::Matrix3d &rb){
+        Vec shift=cb-ca;if(!shift.allFinite())throw std::invalid_argument("Nonfinite solid box query");
+        auto separated=[&](Vec axis){
+            double length=axis.norm();if(!std::isfinite(length))throw std::invalid_argument("Nonfinite solid box axis");
+            if(length<1e-12)return false;axis/=length;
+            double ar=a.half.dot((ra.transpose()*axis).cwiseAbs()),br=b.half.dot((rb.transpose()*axis).cwiseAbs()),distance=std::abs(shift.dot(axis));
+            if(!std::isfinite(ar)||!std::isfinite(br)||!std::isfinite(ar+br)||!std::isfinite(distance))throw std::invalid_argument("Unrepresentable solid box projection");
+            return distance>ar+br;
+        };
+        for(int i=0;i<3;++i){if(separated(ra.col(i))||separated(rb.col(i)))return false;for(int j=0;j<3;++j)if(separated(ra.col(i).cross(rb.col(j))))return false;}
+        return true;
+    }
     RigidBox(World &w,Vec h,double m,Vec position,Vec velocity=Vec::Zero(),Vec spin=Vec::Zero(),Eigen::Quaterniond orientation=Eigen::Quaterniond::Identity(),bool supported=false)
         :half(h),mass(m),anchored(supported),inertia(Inertia(h,m)),local(Corners(h)) {
         if(!position.allFinite()||!velocity.allFinite()||!spin.allFinite()||!orientation.coeffs().allFinite()||std::abs(orientation.norm()-1)>1e-12||
@@ -36,7 +69,8 @@ struct RigidBox {
     }
     bool Valid()const {
         if(!body||body->getCollisionShape()!=shape||body->getCollisionFlags()!=flags||shape->getShapeType()!=BOX_SHAPE_PROXYTYPE||shape->getMargin()!=0)return false;
-        auto *box=static_cast<const btBoxShape*>(shape);if((Point(box->getHalfExtentsWithMargin())-half).norm()>1e-12)return false;
+        auto *box=static_cast<const btBoxShape*>(shape);Vec sdkHalf=Point(box->getHalfExtentsWithMargin()),scale=Point(shape->getLocalScaling());
+        if(!sdkHalf.allFinite()||!scale.allFinite()||(sdkHalf-half).norm()>1e-12)return false;
         auto r=Rotation(body->getCenterOfMassTransform());
         if(!r.allFinite()||!Point(body->getCenterOfMassPosition()).allFinite()||!Point(body->getLinearVelocity()).allFinite()||!Point(body->getAngularVelocity()).allFinite()||
            (r.transpose()*r-Eigen::Matrix3d::Identity()).norm()>1e-10||std::abs(r.determinant()-1)>1e-10)return false;

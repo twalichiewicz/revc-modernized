@@ -145,6 +145,28 @@ void CurvedLoadReceipt(){
     mean/=600;Eigen::Vector3d expected=.1*mean.cross(force);
     Check("external_angular_receipt_follows_curved_material_point",(stats.externalAngular-expected).norm()<1e-11&&stats.substeps==1);
 }
+void InitialSolidGeometry(){
+    for(int scenario=0;scenario<6;++scenario){
+        World w(SettingsFor());structure::Force f;structure::Asset soft(w,f);std::vector<structure::Asset*> assets;
+        std::vector<std::unique_ptr<persistent::RigidBox>> storage;std::vector<persistent::RigidBox*> boxes;
+        auto add=[&](Eigen::Vector3d half,Eigen::Vector3d at){auto b=std::make_unique<persistent::RigidBox>(w,half,1,at);boxes.push_back(b.get());storage.push_back(std::move(b));};
+        if(scenario==0){soft.Node({0,0,0},1);soft.Build();assets.push_back(&soft);add({.5,.5,.5},{0,0,0});}
+        if(scenario==1){add({.5,.5,.5},{0,0,0});add({.1,.1,.1},{0,0,0});}
+        if(scenario==2||scenario==5){add({1,.1,.1},{0,0,0});add({.1,1,.1},{0,0,scenario==2?.05:.4});}
+        if(scenario==3||scenario==4){double z=scenario==3?0:.3;soft.Node({-1,-1,z},1);soft.Node({1,-1,z},1);soft.Node({0,1,z},1);for(int i=0;i<3;++i)soft.Member(i,(i+1)%3,.01,{1000,1e9,0,1,1e9,.5},"skin");soft.Face(0,1,2);soft.Build();assets.push_back(&soft);add({.1,.1,.1},{0,0,0});}
+        bool rejected=false;int revision=soft.revision;try{persistent::Stepper stepper(w,assets, {}, {}, boxes);stepper.Advance(.01,Eigen::MatrixXd::Zero(soft.nodes.size()+8*boxes.size(),3));}catch(const std::invalid_argument&){rejected=true;}
+        const char *names[]={"embedded_point_rejected_before_motion","nested_solid_boxes_rejected_before_motion","crossed_boxes_without_contained_corners_rejected","soft_face_crossing_solid_box_rejected","separate_soft_face_remains_clear","separate_crossed_axes_boxes_remain_clear"};
+        Check(names[scenario],scenario<4?rejected&&soft.revision==revision:!rejected);
+    }
+}
+void NonfiniteSdkGeometry(){
+    for(bool late:{false,true}){
+        World w(SettingsFor());persistent::RigidBox box(w,{.2,.3,.4},8,{0,0,0});bool rejected=false;double time=0;
+        auto corrupt=[&](){box.shape->setLocalScaling({std::numeric_limits<double>::quiet_NaN(),1,1});};
+        if(!late)corrupt();try{persistent::Stepper stepper(w,{}, {}, {}, {&box});if(late)corrupt();stepper.Advance(.01,Eigen::MatrixXd::Zero(8,3));time=stepper.time;}catch(const std::invalid_argument&){rejected=true;}
+        Check(late?"nan_sdk_scaling_after_construction_rejected":"nan_sdk_scaling_before_construction_rejected",rejected&&!box.Valid()&&time==0&&box.body->getCenterOfMassPosition().length()==0&&box.body->getLinearVelocity().length()==0);
+    }
+}
 void Benchmark(int pairs){
     World w(SettingsFor());structure::Force force;std::vector<std::unique_ptr<structure::Asset>> soft;std::vector<std::unique_ptr<persistent::RigidBox>> rigid;
     std::vector<structure::Asset*> assets;std::vector<persistent::RigidBox*> boxes;
@@ -167,4 +189,5 @@ int main(int argc,char **argv){std::setvbuf(stdout,nullptr,_IONBF,0);
     FreeBox();FreeSpin();EccentricForce();PointContact(0);PointContact(.25);PointContact(0,true);PointContact(.25,false,true);
     RotatingStrike(6,false);RotatingStrike(144,true);TwoBoxes(false);TwoBoxes(true);MountedPanel();MountedPanel(true);BoundaryChecks();CurvedLoadReceipt();
     double coarse=SpinError(.02),fine=SpinError(.01),finer=SpinError(.005);Check("asymmetric_rigid_spin_error_converges",fine<.7*coarse&&finer<.7*fine&&finer>0);
+    InitialSolidGeometry();NonfiniteSdkGeometry();
     std::printf("coupled matrix: %d/%d passed\n",checks-failures,checks);return failures?1:0;}

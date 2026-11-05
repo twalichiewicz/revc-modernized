@@ -263,6 +263,22 @@ class Stepper {
         }
         return s;
     }
+    void ValidateSolidGeometry(const State &s)const {
+        // Unsigned surface distances cannot detect containment or a surface
+        // that already crosses a solid. This prototype has no overlap recovery.
+        for(int k=0;k<int(rigids.size());++k) {
+            auto *box=rigids[k];auto &pose=s.poses[k];
+            for(int i=0;i<s.q.rows();++i)if(owners[i]!=k&&box->Contains(s.q.row(i),pose.center,pose.rotation))
+                throw std::invalid_argument("Embedded point in solid box; recovery unsupported");
+            for(auto &f:faces)if(owners[f.ids[0]]<0) {
+                bool alive=true;for(int edge:f.edges)if(edge>=0)alive&=!s.bars[edge].broken;
+                if(alive&&box->IntersectsTriangle({s.q.row(f.ids[0]),s.q.row(f.ids[1]),s.q.row(f.ids[2])},pose.center,pose.rotation))
+                    throw std::invalid_argument("Surface intersects solid box; recovery unsupported");
+            }
+            for(int j=k+1;j<int(rigids.size());++j)if(RigidBox::Overlap(*box,pose.center,pose.rotation,*rigids[j],s.poses[j].center,s.poses[j].rotation))
+                throw std::invalid_argument("Solid boxes overlap; recovery unsupported");
+        }
+    }
     State Solve(const State &old,double dt,const Matrix &forces,Stats &stats)const {
         Geometry geometry=Mesh(old);State current=old;Matrix predicted=old.q+dt*old.v;
         Vector diagonal(old.q.size());
@@ -407,6 +423,7 @@ class Stepper {
         for(int i=0;i<registered.size();++i)if(!bodies.count(registered[i]))throw std::invalid_argument("Unowned structural participant");
         reference=Snapshot().q;
         ValidateIsland();
+        ValidateSolidGeometry(Snapshot());
     }
     Stats Advance(double dt,const Eigen::MatrixXd &loads) {
         if(!std::isfinite(dt)||dt<=0||loads.rows()!=int(mass.size())||loads.cols()!=3||!loads.allFinite())throw std::invalid_argument("Invalid physical interval/load");
@@ -415,9 +432,11 @@ class Stepper {
             throw std::invalid_argument("Unrepresentable physical interval/clock");
         ValidateIsland();
         State before=Snapshot();if(!before.q.allFinite()||!before.v.allFinite())throw std::invalid_argument("Invalid structural snapshot");
+        ValidateSolidGeometry(before);
         Stats stats;State after=Interval(before,dt,loads,stats,0);
         if(!after.q.allFinite()||!after.v.allFinite())throw std::invalid_argument("Nonfinite publication state");
         ValidateStats(stats);
+        ValidateSolidGeometry(after);
         std::vector<std::pair<Eigen::Vector3d,Eigen::Vector3d>> acceptedVelocities;
         for(int k=0;k<int(rigids.size());++k) {
             if(!after.poses[k].center.allFinite()||!after.poses[k].rotation.allFinite()||
