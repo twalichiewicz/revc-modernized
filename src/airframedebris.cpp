@@ -45,7 +45,7 @@ bool Emit(uint8_t *v,const Piece *pieces,size_t count)
  *reinterpret_cast<uint16_t *>(object+0x64)|=0x1000;*reinterpret_cast<uint32_t *>(object+0x60)&=~0x400u;
  const float size=std::max({hi.x-lo.x,hi.y-lo.y,hi.z-lo.z,.1f}),mass=std::clamp(15.f+size*8.f,15.f,250.f);
  *reinterpret_cast<float *>(object+0xcc)=mass;*reinterpret_cast<float *>(object+0xd0)=mass*size*size*.25f;*reinterpret_cast<float *>(object+0xd8)=.99f;*reinterpret_cast<float *>(object+0xe0)=.1f;
- *reinterpret_cast<uint16_t *>(object+0x1b5)=(*reinterpret_cast<uint16_t *>(object+0x1b5)&~1u)|0x80u;
+ object[0x1b5]=uint8_t((object[0x1b5]&~1u)|0x80u);
  *reinterpret_cast<uint16_t *>(object+0x1e0)=*reinterpret_cast<uint16_t *>(v+0x210);
  *reinterpret_cast<Vec3 *>(object+0x84)=*reinterpret_cast<Vec3 *>(v+0x84);auto &velocity=*reinterpret_cast<Vec3 *>(object+0x84);velocity.z+=.035f;
  *reinterpret_cast<Vec3 *>(object+0x90)=*reinterpret_cast<Vec3 *>(v+0x90);auto &turn=*reinterpret_cast<Vec3 *>(object+0x90);turn.x+=.02f;turn.y+=.015f;

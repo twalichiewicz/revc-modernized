@@ -32,4 +32,17 @@ int main(){Setup();CHECK(airportheli::Install());airportheli::gRandom=RandomHeli
  V(gPlayer,0x38)=V(buildings[0],0x38);airportheli::Frame(5000);CHECK(choices==2&&lastRequest!=first);if(lastRequest>=0){streamInfo[lastRequest*32+0x10]=1;airportheli::Frame(6000);}CHECK(autoAllocated==2);
  const int oldDestroyed=destroyed;++vehicleFlags[0];*reinterpret_cast<int16_t *>(jetVehicles[0]+0x6a)=140;airportheli::Frame(6100);CHECK(destroyed==oldDestroyed);
  gConfig.planes=false;airportheli::Frame(7000);CHECK(!airportheli::Owns(jetVehicles[1]));
+ // Native unloaded requests overwrite flags and recursively request the TXD.
+ // Keep only our own bit, and return it on cancellation or successful spawn.
+ auto pending=[&](uint8_t modelFlags,uint8_t txdFlags){
+  airportheli::Reset();gConfig.planes=true;choices=0;V(gPlayer,0x38)=V(buildings[0],0x38);
+  streamInfo[155*32+0x10]=streamInfo[(6500+17)*32+0x10]=0;
+  streamInfo[155*32+0x11]=modelFlags;streamInfo[(6500+17)*32+0x11]=txdFlags;
+  *reinterpret_cast<int16_t *>(heliInfo[0]+0x2e)=17;
+  airportheli::Frame(8000);
+ };
+ pending(4,4);CHECK(streamInfo[155*32+0x11]==5&&streamInfo[(6500+17)*32+0x11]==5);
+ gConfig.planes=false;airportheli::Frame(8100);CHECK(streamInfo[155*32+0x11]==4&&streamInfo[(6500+17)*32+0x11]==4);
+ pending(1,3);gConfig.planes=false;airportheli::Frame(8100);CHECK(streamInfo[155*32+0x11]==1&&streamInfo[(6500+17)*32+0x11]==3);
+ pending(0,2);streamInfo[155*32+0x10]=1;const int beforeSpawn=autoAllocated;airportheli::Frame(9000);CHECK(autoAllocated==beforeSpawn+1&&streamInfo[155*32+0x11]==0&&streamInfo[(6500+17)*32+0x11]==2);
  std::printf("airport helipad: %d failures\n",failures);return failures?1:0;}

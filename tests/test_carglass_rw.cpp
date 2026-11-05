@@ -8,6 +8,9 @@
 #include <cstdio>
 #include <cstring>
 #include <cstdlib>
+#if __has_feature(address_sanitizer)
+#include <sanitizer/asan_interface.h>
+#endif
 #include "../src/carglass.cpp"
 #include "../src/airframedebris.cpp"
 #include "nativejetshadowarm.h"
@@ -75,11 +78,17 @@ void Shadow(rw::Atomic *atomic,rw::Geometry *geometry)
  using Append=int (*)(std::vector<float> &,rw::Atomic *,bool,std::vector<float> *);
  auto append=reinterpret_cast<Append>(code.Address(0x10016c540));
  atomic->setGeometry(geometry,0);append(coordinates,atomic,false,nullptr);
+#if __has_feature(address_sanitizer)
+ // Native instructions update vector::end without libc++'s ASan annotations.
+ // Only expose the size that native append actually returned, within capacity.
+ Check(coordinates.size()<=coordinates.capacity(),"native shadow append respects capacity");
+ __asan_unpoison_memory_region(coordinates.data(),coordinates.size()*sizeof(float));
+#endif
  size_t at=0;
  for(int i=0;i<geometry->numTriangles;i++){
   const auto &t=geometry->triangles[i];
   for(auto index:t.v){const auto p=geometry->morphTargets[0].vertices[index];
-   Check(at+3<=coordinates.size(),"native shadow receives every metal vertex");
+   if(at+3>coordinates.size()){Check(false,"native shadow receives every metal vertex");return;}
    Check(coordinates[at]==p.x&&coordinates[at+1]==p.y&&coordinates[at+2]==p.z,"native shadow uses exact dented CPU vertex positions");at+=3;
   }
  }
@@ -129,7 +138,7 @@ void BindDebris()
 {
  auto &n=airframedebris::n;airframedebris::gReady=true;game::api.AircraftDebris=airframedebris::Emit;game::api.timeMs=&physicsTime;game::api.modelInfoPtrs=physicsModels;physicsModels[245]=objectInfo;
  n.temporary=&temporaryPieces;n.reference=[](uint8_t *v){return v==vehicle?1:-1;};
- n.allocate=[](size_t size)->void *{Check(size==sizeof physicalPiece,"exact native CObject allocation");return temporaryPieces?nullptr:physicalPiece;};n.construct=[](uint8_t *o){std::memset(o,0,sizeof physicalPiece);};
+ n.allocate=[](size_t size)->void *{Check(size==sizeof physicalPiece,"exact native CObject allocation");return temporaryPieces?nullptr:physicalPiece;};n.construct=[](uint8_t *o){std::memset(o,0,sizeof physicalPiece);o[0x1b5]=1;o[0x1b6]=0x5a;};
  n.destroy=[](uint8_t *o){auto c=*reinterpret_cast<rw::Clump **>(o+0x58);if(c)c->destroy();if(o[0x1b4]==3)--temporaryPieces;--sourceRefs;std::memset(o,0,sizeof physicalPiece);};
  n.setModel=[](uint8_t *o,unsigned model){Check(model==245,"native collision proxy for physical component");*reinterpret_cast<int16_t *>(o+0x6a)=int16_t(model);};n.referenceModel=[](uint8_t *,int model){Check(model==game::EntityModel(vehicle),"debris pins the actual aircraft's model and textures");++sourceRefs;};
  n.attach=[](uint8_t *o,void *c){auto clump=static_cast<rw::Clump *>(c);*reinterpret_cast<void **>(o+0x58)=c;std::memcpy(o+8,&clump->getFrame()->matrix,64);};
@@ -170,6 +179,7 @@ void StockSkin(const char *file,int model)
  }
  const int beforeParts=physicalAdds;Check(carglass::SeverSection(vehicle,{0,-1,0},0),"stock aircraft whole tail skin splits across all source atomics");Check(physicalAdds==beforeParts+1&&temporaryPieces==1,"stock split produces one real RenderWare assembly on a native-shaped physical object");
  auto debris=*reinterpret_cast<rw::Clump **>(physicalPiece+0x58);Check(debris&&debris->countAtomics()>0,"physical detached section retains real source materials and triangles");
+ Check(physicalPiece[0x1b5]==0x80&&physicalPiece[0x1b6]==0x5a,"debris flag byte preserves adjacent packed fields");
  carglass::Restore(vehicle);airframedebris::n.destroy(physicalPiece);Check(temporaryPieces==0&&sourceRefs==0,"native debris cleanup releases geometry and parent model references");
  Check(tested>0,"stock helicopter tested actual opaque skin");std::printf("stock skin: %s %u atomics passed\n",file,tested);clump->destroy();
 }

@@ -17,7 +17,8 @@ void Destroy(uint8_t *v){auto table=*reinterpret_cast<void (***)(uint8_t *)>(v);
 void *(*gAllocate)(size_t);void (*gConstruct)(uint8_t *,int,uint8_t),(*gDestroy)(uint8_t *)=Destroy,(*gAdd)(uint8_t *),(*gRemove)(uint8_t *),(*gMatrix)(void *),(*gFrame)(uint8_t *),(*gDeletable)(int);
 bool (*gMission)();uint32_t (*gRandom)()=+[](){return arc4random();};void (*gRestart)(),(*gShutdown)();
 struct Slot {uint8_t *v=nullptr;void *base=nullptr,*flags=nullptr,*vtable=nullptr;int ref=-1,model=-1;};Slot gSlot;
-int gChoice=-1;bool gRequested=false;uint32_t gClock=0,gAttempt=0;bool gSeen=false;
+int gChoice=-1;uint32_t gClock=0,gAttempt=0;bool gSeen=false;
+struct Pins {uint8_t *stream=nullptr,**table=nullptr,*info=nullptr;int model=-1,txd=-1;bool modelOwned=false,txdOwned=false;std::array<uint8_t,21> name{};};Pins gPins;
 Pool Get(void **binding,int maximum){Pool p;if(!binding||!*binding)return p;auto b=static_cast<uint8_t *>(*binding);p={*reinterpret_cast<uint8_t **>(b),*reinterpret_cast<uint8_t **>(b+8),*reinterpret_cast<int *>(b+16)};if(!p.entries||!p.flags||p.count<1||p.count>maximum)return {};return p;}
 int Ref(uint8_t *v,const Pool &p){auto a=reinterpret_cast<uintptr_t>(v),b=reinterpret_cast<uintptr_t>(p.entries);if(!v||!p.entries||a<b||(a-b)%0x6f0)return -1;size_t i=(a-b)/0x6f0;return i<size_t(p.count)&&!(p.flags[i]&128)?int(i*256)|p.flags[i]:-1;}
 uint8_t *Live(){const auto p=Get(gVehicles,10000);return gSlot.v&&p.entries==gSlot.base&&p.flags==gSlot.flags&&Ref(gSlot.v,p)==gSlot.ref&&game::api.PoolsGetVehicle(gSlot.ref)==gSlot.v&&*reinterpret_cast<void **>(gSlot.v)==gSlot.vtable&&game::EntityModel(gSlot.v)==gSlot.model&&*reinterpret_cast<int *>(gSlot.v+0x348)==0&&gSlot.v[0x294]==1?gSlot.v:nullptr;}
@@ -26,7 +27,25 @@ float Distance(Vec3 a,Vec3 b){const float x=a.x-b.x,y=a.y-b.y,z=a.z-b.z;return s
 Vec3 Position(const uint8_t *v){return *reinterpret_cast<const Vec3 *>(v+0x38);}
 bool Finite(Vec3 v){return std::isfinite(v.x)&&std::isfinite(v.y)&&std::isfinite(v.z);}
 Vec3 Transform(const float *m,Vec3 p){return {m[12]+m[0]*p.x+m[4]*p.y+m[8]*p.z,m[13]+m[1]*p.x+m[5]*p.y+m[9]*p.z,m[14]+m[2]*p.x+m[6]*p.y+m[10]*p.z};}
-void Release(){if(gRequested&&gChoice>=0)gDeletable(gChoice);gRequested=false;gChoice=-1;}
+bool SamePins(const Pins &p){return p.info&&p.stream==gStreaming&&p.table==game::api.modelInfoPtrs&&p.table&&p.model>=0&&p.model<6500&&p.table[p.model]==p.info&&p.info[0x1d]==6&&*reinterpret_cast<const int16_t *>(p.info+0x2e)==p.txd&&!std::memcmp(p.name.data(),p.info+8,p.name.size());}
+void ReleasePins(){
+ const auto p=gPins;gPins={};if(!SamePins(p))return;
+ if(p.modelOwned&&(gStreaming[size_t(p.model)*32+0x11]&1))gDeletable(p.model);
+ if(p.txdOwned&&(gStreaming[size_t(6500+p.txd)*32+0x11]&1))gDeletable(6500+p.txd);
+}
+void Request(){
+ if(gPins.info&&!SamePins(gPins))ReleasePins();auto info=game::api.modelInfoPtrs[gChoice];if(!info||info[0x1d]!=6)return;
+ const int txd=*reinterpret_cast<const int16_t *>(info+0x2e);if(txd<0||txd>=1385)return;
+ if(!gPins.info){gPins={gStreaming,game::api.modelInfoPtrs,info,gChoice,txd};std::memcpy(gPins.name.data(),info+8,gPins.name.size());}
+ const auto modelFlags=gStreaming[size_t(gChoice)*32+0x11],txdFlags=gStreaming[size_t(6500+txd)*32+0x11];
+ // Unloaded native requests assign flags. Admit the texture first to preserve
+ // its existing pins when the model recursively requests that dependency.
+ game::api.RequestModel(6500+txd,txdFlags|1);game::api.RequestModel(gChoice,modelFlags|1);
+ if(!SamePins(gPins)){gPins={};return;}
+ gPins.modelOwned|=!(modelFlags&1)&&(gStreaming[size_t(gChoice)*32+0x11]&1);
+ gPins.txdOwned|=!(txdFlags&1)&&(gStreaming[size_t(6500+txd)*32+0x11]&1);
+}
+void Release(){ReleasePins();gChoice=-1;}
 void Reset(){Release();gSlot={};gSeen=false;gAttempt=0;}
 void Restart(){Reset();gRestart();}void Shutdown(){Reset();gShutdown();}
 struct Pad {uint8_t *v=nullptr;Pool pool;int index=-1;uint8_t generation=0;std::array<float,16> pose{};Vec3 centre{};};
@@ -69,7 +88,7 @@ void Frame(uint32_t now){
  if(!gConfig.planes||!player||*gArea||gMission()||*gCutscene||game::Health(player)<=0){Release();return;}
  Pad pad;if(!FindPad(pad)||Distance(pad.centre,Position(player))>220){Release();return;}
  if(gChoice<0)gChoice=kModels[gRandom()%6];auto info=game::api.modelInfoPtrs[gChoice];if(!info||info[0x1d]!=6)return;
- if(gStreaming[size_t(gChoice)*32+0x10]!=1||!*reinterpret_cast<void **>(info+0x30)){game::api.RequestModel(gChoice,2);gRequested=true;return;}
+ if(gStreaming[size_t(gChoice)*32+0x10]!=1||!*reinterpret_cast<void **>(info+0x30)){Request();return;}
  if(gAttempt&&now>=gAttempt&&now-gAttempt<500)return;gAttempt=now;Spawn(pad);
 }
 bool Install(){if(gReady)return true;
