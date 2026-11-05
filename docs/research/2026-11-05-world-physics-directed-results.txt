@@ -605,3 +605,13 @@ Pinned sources
 }
 
 Separate repository make test exit0, provenance11/11, child-process exits5/5 pass.
+
+Rebuilt original Bullet controls (separate solver path)
+initial: exit=0; Scope: CPU rigid breakage + elastic contact coupling only. Plasticity/fracture, angular CCD, real assets, city performance and game ownership are NOT validated.
+conservation: exit=0; contact matrix: 44/44 passed
+step: exit=0; world-step matrix: 70/70 passed
+material: exit=0; material matrix: 15/15 passed
+face-tree: exit=0; disconnected-face-tree faces=16 actual_face_hits=16 phantom_gap_hits=0 PASS
+geometry: exit=1; geometric contact gate: 42/50 passed
+benchmark: exit=0; structure benchmark_exercises_contact_and_fracture PASS
+structure: exit=0; structural matrix: 71/71 passed

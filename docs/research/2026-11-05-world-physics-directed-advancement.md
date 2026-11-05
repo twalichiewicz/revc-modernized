@@ -80,6 +80,12 @@ On this Apple M4 host,20-call release medians are about0.71µs for the near-tang
 
 The complete fast strike is much more expensive: the measured standalone4.167ms simulated interval takes about54ms wall time, counting303 nonlinear iterations including failed attempts, eight accepted substeps and seven subdivisions. This is **not a real-time world budget**. The generic four-pair benchmark remains around2.3ms per5ms step; neither small workload validates a city, calibrated stiff structures or hard scheduling bounds. Raw final timings, including sanitizer overhead, are retained separately.
 
+## Fresh review and repeatability
+
+A fresh reviewer independently reproduced79 geometry,3 graze,4 fast-gate and63 coupled checks, confirmed matching current fixture/executable hashes, and found no Critical, Important or actionable Minor findings. The certificate algebra was reviewed separately from the author's sanitizer, repository and provenance runs. Those broader runs remain author evidence, not independently repeated checks.
+
+Repeated executions of the same binary vary in adaptive work and final trajectory values: the reviewer observed7 accepted substeps/6 subdivisions/235 nonlinear iterations instead of the retained8/7/303, and decreasing angular errors14.28→7.55→3.75Nms rather than14.28→6.98→4.00. Both measured runs pass the bounded checks. The cause and acceptable range of this sensitivity are unestablished; deterministic replay and full-world accuracy are not claimed. The timings/tables above describe retained individual measurements.
+
 ## Reproduction
 
 ```sh
