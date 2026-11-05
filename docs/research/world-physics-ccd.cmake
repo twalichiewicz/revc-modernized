@@ -1,10 +1,12 @@
 # Add the research target at the end of upstream configuration, without editing
 # or installing IPC Toolkit. Used via CMAKE_PROJECT_IPCToolkit_INCLUDE.
 function(world_physics_add_ccd_probe)
-  foreach(probe ccd contact)
+  foreach(probe ccd contact persistent incremental)
   set(probe_file "${probe}")
   if(probe STREQUAL "contact")
     set(probe_file "contact-event")
+  elseif(probe STREQUAL "incremental")
+    set(probe_file "incremental-material")
   endif()
   add_executable(world_physics_${probe} "${CMAKE_CURRENT_FUNCTION_LIST_DIR}/world-physics-${probe_file}-probe.cpp")
   target_compile_features(world_physics_${probe} PRIVATE cxx_std_17)

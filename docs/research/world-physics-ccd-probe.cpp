@@ -98,6 +98,15 @@ void NearGrazes() {
 
 
 
+
+void PointPairs() {
+    continuous::LinearPath a({0,0,.5},{0,0,-1.5}),b({0,0,0},{0,0,0}),miss({1,0,.5},{1,0,-1.5});
+    auto r=continuous::Sweep(continuous::Primitive::PointPoint,{&a,&b,nullptr,nullptr},.01);
+    Expect("codimensional_point_contact_time",r.hit&&std::abs(r.time-.245)<1e-6&&r.gap>=.01-1e-7&&r.gap<=.01+1e-7);
+    r=continuous::Sweep(continuous::Primitive::PointPoint,{&miss,&b,nullptr,nullptr},.01);
+    Expect("codimensional_points_preserve_empty_space",!r.hit);
+}
+
 void NearInitialContact() {
     constexpr double separation=.03,radius=1.5;
     for(double margin:{.00001,.00002,.0001,.001,.01})for(double angle:{.05,.6,2*std::acos(-1.),5*std::acos(-1.)}) {
@@ -144,7 +153,7 @@ int main(int argc,char **argv) {
     if(argc>1&&std::strcmp(argv[1],"--benchmark")==0){QueryBenchmark();return failed?1:0;}
     if(argc>1&&std::strcmp(argv[1],"--stress")==0) {NearGrazes();std::printf("near-graze matrix: %d/%d passed\n",checks-failed,checks);return failed?1:0;}
     if(argc>1){std::fprintf(stderr,"Unknown probe mode\n");return 2;}
-    Paths();Shots();CrossedEdges();RotatingBlade();Witnesses();NearInitialContact();
+    Paths();Shots();CrossedEdges();RotatingBlade();Witnesses();NearInitialContact();PointPairs();
     std::printf("continuous geometry matrix: %d/%d passed\n",checks-failed,checks);
     return failed?1:0;
 }

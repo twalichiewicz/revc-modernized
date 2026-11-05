@@ -1,0 +1,201 @@
+Force-driven persistent contact, release + ASAN; research only.
+
+=== persistent-final ===
+
+geometry.txt
+continuous geometry matrix: 61/61 passed
+exit=0
+elapsed_s=0.003275
+
+grazes.txt
+near-graze radius=2.031 hit=0 gap=0.600201539729 refinement=36
+ccd near_graze_resolves_actual_contact_or_miss PASS
+near-graze radius=2.03001 hit=0 gap=0.599908974725 refinement=308
+ccd near_graze_resolves_actual_contact_or_miss PASS
+near-graze radius=2.02999 hit=1 gap=0.0300000999243 refinement=284
+ccd near_graze_resolves_actual_contact_or_miss PASS
+near-graze matrix: 3/3 passed
+exit=0
+elapsed_s=0.002288
+
+events.txt
+contact event matrix: 167/167 passed
+exit=0
+elapsed_s=0.132950
+
+incremental-material.txt
+incremental-material elastic_potential_force_tangent PASS
+incremental-material plastic_reduced_potential PASS
+incremental-material trial_does_not_mutate_history PASS
+incremental-material accepted_plastic_state PASS
+incremental-material no_fixed_strain_projection_loss_double_count PASS
+incremental-material permanent_set_unloads_to_zero_force PASS
+incremental-material repeated_commit_does_not_spend_work PASS
+incremental-material hardening_potential_and_tangent PASS
+incremental-material fracture_cannot_spend_dissipated_work PASS
+incremental-material fracture_spends_once_after_commit PASS
+incremental-material broken_member_cannot_repeat_work PASS
+incremental-material invalid_trial_cannot_mutate_state PASS
+incremental material matrix: 12/12 passed
+exit=0
+elapsed_s=0.002253
+
+persistent.txt
+persistent implicit_bar_matches_hand_solution PASS
+persistent one_clock_and_balanced_internal_forces PASS
+persistent bar_numerical_loss_is_measured PASS
+persistent free_mass_has_force_driven_motion PASS
+persistent external_work_and_numerical_loss PASS
+persistent nonfinite_load_cannot_publish_partial_state PASS
+loaded panels supported=0 gap_min=0.0126684849 gap_loaded=0.0198496085 gap_final=0.0182205074 contacts=15 newton=829 retries=0 momentum_error=3.48590583e-13
+persistent free_panels_resist_and_release PASS
+persistent free_panel_recontact PASS
+persistent unequal_mass_contact_preserves_momentum PASS
+persistent free_geometry_stays_current PASS
+loaded panels supported=1 gap_min=0.00953756356 gap_loaded=0.0205376246 gap_final=0.0223972499 contacts=15 newton=797 retries=0 momentum_error=3.89214779e-08
+persistent supported_panels_resist_and_release PASS
+persistent supported_panel_recontact PASS
+persistent fixed_support_receives_contact_reaction PASS
+persistent support_geometry_stays_current PASS
+persistent broken_mount_splits_registered_graph PASS
+persistent support_identity_survives_fragment_rebuild PASS
+persistent exhausted_solve_does_not_publish_trial_state PASS
+persistent nonfinite_contact_settings_rejected PASS
+persistent force_driven_tear_removes_actual_query_face PASS
+persistent tear_does_not_duplicate_mass_or_fracture_work PASS
+fragment recontact gap_min=0.0155547436 released=0.0767481289 contacts=17 fragments=2
+persistent severed_fragments_recontact_in_same_island PASS
+persistent fragment_faces_and_registered_mass_stay_current PASS
+persistent changed_mass_rejected_before_motion PASS
+persistent fast_point_cannot_tunnel_through_intact_face PASS
+persistent fast_point_preserves_clear_miss PASS
+rotating bar dt=0.02 angular_error=0.00187898918 numerical_loss=0.00196989128
+rotating bar dt=0.01 angular_error=0.000953003755 numerical_loss=0.00105770902
+rotating bar dt=0.005 angular_error=0.000477953139 numerical_loss=0.000575498021
+persistent angular_integration_error_converges_without_correction PASS
+persistent matrix: 26/26 passed
+exit=0
+elapsed_s=0.147805
+
+persistent-benchmark.txt
+persistent benchmark pairs=1 nodes=6 members=6 triangles=2 fixed_nodes=3 steps=120 simulated_s=.6 wall_s=0.034377 us_per_step=286.477775 seconds_per_simulated_second=0.057296 nonlinear_iterations=433 accepted_substeps=120 retries=0 peak_contact_stencils=15 process_peak_rss_bytes=13828096
+persistent benchmark pairs=4 nodes=24 members=24 triangles=8 fixed_nodes=12 steps=120 simulated_s=.6 wall_s=0.117653 us_per_step=980.440625 seconds_per_simulated_second=0.196088 nonlinear_iterations=433 accepted_substeps=120 retries=0 peak_contact_stencils=60 process_peak_rss_bytes=15794176
+exit=0
+elapsed_s=0.157085
+
+provenance source pins
+{
+  "ipc": {
+    "source": "/Users/waliwalu/GitHub/vc-minimap/build/world-physics-evaluation/ipc-toolkit",
+    "revision": "54d58ebcf1f6dd0cf95bcc58afd79839ca603a99",
+    "patch_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "patch": "ipc.patch"
+  },
+  "bullet": {
+    "source": "/Users/waliwalu/GitHub/vc-minimap/build/world-physics-evaluation/bullet-conservative-experiment",
+    "revision": "d3afe76132fc76b0f9b2359cbaef47a3766e7fbb",
+    "patch_sha256": "1731e7f846cde53c78ac3973fb431d214272fb875ec7c7b1926ed4e0df5479b8",
+    "patch": "bullet.patch"
+  }
+}
+
+=== persistent-asan ===
+
+geometry.txt
+continuous geometry matrix: 61/61 passed
+exit=0
+elapsed_s=0.375174
+
+grazes.txt
+near-graze radius=2.031 hit=0 gap=0.600201539729 refinement=36
+ccd near_graze_resolves_actual_contact_or_miss PASS
+near-graze radius=2.03001 hit=0 gap=0.599908974725 refinement=308
+ccd near_graze_resolves_actual_contact_or_miss PASS
+near-graze radius=2.02999 hit=1 gap=0.0300000999243 refinement=284
+ccd near_graze_resolves_actual_contact_or_miss PASS
+near-graze matrix: 3/3 passed
+exit=0
+elapsed_s=0.013101
+
+events.txt
+contact event matrix: 167/167 passed
+exit=0
+elapsed_s=0.212438
+
+incremental-material.txt
+incremental-material elastic_potential_force_tangent PASS
+incremental-material plastic_reduced_potential PASS
+incremental-material trial_does_not_mutate_history PASS
+incremental-material accepted_plastic_state PASS
+incremental-material no_fixed_strain_projection_loss_double_count PASS
+incremental-material permanent_set_unloads_to_zero_force PASS
+incremental-material repeated_commit_does_not_spend_work PASS
+incremental-material hardening_potential_and_tangent PASS
+incremental-material fracture_cannot_spend_dissipated_work PASS
+incremental-material fracture_spends_once_after_commit PASS
+incremental-material broken_member_cannot_repeat_work PASS
+incremental-material invalid_trial_cannot_mutate_state PASS
+incremental material matrix: 12/12 passed
+exit=0
+elapsed_s=0.107211
+
+persistent.txt
+persistent implicit_bar_matches_hand_solution PASS
+persistent one_clock_and_balanced_internal_forces PASS
+persistent bar_numerical_loss_is_measured PASS
+persistent free_mass_has_force_driven_motion PASS
+persistent external_work_and_numerical_loss PASS
+persistent nonfinite_load_cannot_publish_partial_state PASS
+loaded panels supported=0 gap_min=0.0126684849 gap_loaded=0.0198496085 gap_final=0.0182205074 contacts=15 newton=829 retries=0 momentum_error=1.57323734e-13
+persistent free_panels_resist_and_release PASS
+persistent free_panel_recontact PASS
+persistent unequal_mass_contact_preserves_momentum PASS
+persistent free_geometry_stays_current PASS
+loaded panels supported=1 gap_min=0.00953756356 gap_loaded=0.0205376246 gap_final=0.0223972499 contacts=15 newton=797 retries=0 momentum_error=3.89214779e-08
+persistent supported_panels_resist_and_release PASS
+persistent supported_panel_recontact PASS
+persistent fixed_support_receives_contact_reaction PASS
+persistent support_geometry_stays_current PASS
+persistent broken_mount_splits_registered_graph PASS
+persistent support_identity_survives_fragment_rebuild PASS
+persistent exhausted_solve_does_not_publish_trial_state PASS
+persistent nonfinite_contact_settings_rejected PASS
+persistent force_driven_tear_removes_actual_query_face PASS
+persistent tear_does_not_duplicate_mass_or_fracture_work PASS
+fragment recontact gap_min=0.0155547436 released=0.0748809687 contacts=17 fragments=2
+persistent severed_fragments_recontact_in_same_island PASS
+persistent fragment_faces_and_registered_mass_stay_current PASS
+persistent changed_mass_rejected_before_motion PASS
+persistent fast_point_cannot_tunnel_through_intact_face PASS
+persistent fast_point_preserves_clear_miss PASS
+rotating bar dt=0.02 angular_error=0.00187898918 numerical_loss=0.00196989128
+rotating bar dt=0.01 angular_error=0.000953003755 numerical_loss=0.00105770902
+rotating bar dt=0.005 angular_error=0.000477953139 numerical_loss=0.000575498021
+persistent angular_integration_error_converges_without_correction PASS
+persistent matrix: 26/26 passed
+exit=0
+elapsed_s=0.857321
+
+persistent-benchmark.txt
+persistent benchmark pairs=1 nodes=6 members=6 triangles=2 fixed_nodes=3 steps=120 simulated_s=.6 wall_s=0.134782 us_per_step=1123.180550 seconds_per_simulated_second=0.224636 nonlinear_iterations=433 accepted_substeps=120 retries=0 peak_contact_stencils=15 process_peak_rss_bytes=142786560
+persistent benchmark pairs=4 nodes=24 members=24 triangles=8 fixed_nodes=12 steps=120 simulated_s=.6 wall_s=0.292428 us_per_step=2436.897567 seconds_per_simulated_second=0.487380 nonlinear_iterations=433 accepted_substeps=120 retries=0 peak_contact_stencils=60 process_peak_rss_bytes=465256448
+exit=0
+elapsed_s=0.454228
+
+provenance source pins
+{
+  "ipc": {
+    "source": "/Users/waliwalu/GitHub/vc-minimap/build/world-physics-evaluation/ipc-toolkit",
+    "revision": "54d58ebcf1f6dd0cf95bcc58afd79839ca603a99",
+    "patch_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "patch": "ipc.patch"
+  },
+  "bullet": {
+    "source": "/Users/waliwalu/GitHub/vc-minimap/build/world-physics-evaluation/bullet-conservative-experiment",
+    "revision": "d3afe76132fc76b0f9b2359cbaef47a3766e7fbb",
+    "patch_sha256": "1731e7f846cde53c78ac3973fb431d214272fb875ec7c7b1926ed4e0df5479b8",
+    "patch": "bullet.patch"
+  }
+}
+
+Repository make test exit0; Python provenance11/11 and child-process exits5/5 pass.

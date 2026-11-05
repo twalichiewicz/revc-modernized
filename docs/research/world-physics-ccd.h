@@ -7,6 +7,7 @@
 #include <ipc/ccd/nonlinear_ccd.hpp>
 #include <ipc/distance/point_triangle.hpp>
 #include <ipc/distance/point_edge.hpp>
+#include <ipc/distance/point_point.hpp>
 #include <ipc/distance/edge_edge.hpp>
 #include <Eigen/Geometry>
 #include <array>
@@ -46,18 +47,19 @@ struct RigidPath : Path {
         return std::nextafter(bound,std::numeric_limits<double>::infinity());
     }
 };
-enum class Primitive {PointTriangle,PointEdge,EdgeEdge};
+enum class Primitive {PointTriangle,PointEdge,EdgeEdge,PointPoint};
 struct Result {bool hit;double time,gap;int refinements;};
 inline Result Sweep(Primitive type,std::array<const Path*,4> p,double separation,int maxRefinements=1024) {
     if(maxRefinements<=0)throw std::invalid_argument("Invalid refinement budget");
     if(!std::isfinite(separation)||separation<0)throw std::invalid_argument("Invalid separation");
-    const int count=type==Primitive::PointEdge?3:4;
+    const int count=type==Primitive::PointPoint?2:type==Primitive::PointEdge?3:4;
     for(int i=0;i<count;++i) {
         if(!p[i])throw std::invalid_argument("Missing trajectory");
         for(double t:{0.,1.}) {auto x=(*p[i])(t);if(x.size()!=3||!x.allFinite())throw std::invalid_argument("Invalid trajectory endpoint");}
     }
     auto distance=[&](double t) {
-        double squared=type==Primitive::PointTriangle?ipc::point_triangle_distance((*p[0])(t),(*p[1])(t),(*p[2])(t),(*p[3])(t)):
+        double squared=type==Primitive::PointPoint?ipc::point_point_distance((*p[0])(t),(*p[1])(t)):
+            type==Primitive::PointTriangle?ipc::point_triangle_distance((*p[0])(t),(*p[1])(t),(*p[2])(t),(*p[3])(t)):
             type==Primitive::PointEdge?ipc::point_edge_distance((*p[0])(t),(*p[1])(t),(*p[2])(t)):
             ipc::edge_edge_distance((*p[0])(t),(*p[1])(t),(*p[2])(t),(*p[3])(t));
         if(!std::isfinite(squared)||squared<0)throw std::runtime_error("Invalid primitive distance");
@@ -69,7 +71,7 @@ inline Result Sweep(Primitive type,std::array<const Path*,4> p,double separation
         speed[i]=p[i]->max_speed();
         if(!std::isfinite(speed[i])||speed[i]<0)throw std::invalid_argument("Invalid trajectory speed bound");
     }
-    const double relativeSpeed=type==Primitive::PointEdge?speed[0]+std::max(speed[1],speed[2]):
+    const double relativeSpeed=type==Primitive::PointPoint?speed[0]+speed[1]:type==Primitive::PointEdge?speed[0]+std::max(speed[1],speed[2]):
         type==Primitive::PointTriangle?speed[0]+std::max({speed[1],speed[2],speed[3]}):
         std::max(speed[0],speed[1])+std::max(speed[2],speed[3]);
     if(!std::isfinite(relativeSpeed))throw std::invalid_argument("Relative speed bound overflow");

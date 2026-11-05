@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Build isolated IPC/Bullet first-contact probes, record inputs and physical exits.
+"""Build isolated IPC/Bullet contact probes, record inputs and physical exits.
 
 No game launch, installation or normal plugin dependency changes. Exit 1 is a
 completed physical rejection; exit 2 is a build/provenance/process failure.
@@ -97,6 +97,7 @@ def main():
     for name in ("ipc-source", "bullet-source", "bullet-build", "build-dir", "output-dir"):
         parser.add_argument(f"--{name}", required=True, type=Path)
     parser.add_argument("--asan", action="store_true", help="Instrument this separate IPC/probe build with AddressSanitizer")
+    parser.add_argument("--persistent", action="store_true", help="Also evaluate the experimental implicit node-island coordinator")
     args = parser.parse_args()
     ipc, bullet, bullet_build, build, output = [p.resolve() for p in
         (args.ipc_source, args.bullet_source, args.bullet_build, args.build_dir, args.output_dir)]
@@ -118,7 +119,10 @@ def main():
     if args.asan:
         options += ["-DCMAKE_C_FLAGS=-fsanitize=address -fno-omit-frame-pointer",
                     "-DCMAKE_CXX_FLAGS=-fsanitize=address -fno-omit-frame-pointer", "-DCMAKE_EXE_LINKER_FLAGS=-fsanitize=address"]
-    provenance = {"sources": records, "cmake_options": options, "asan": args.asan,
+    targets = ["world_physics_ccd", "world_physics_contact"]
+    if args.persistent:
+        targets += ["world_physics_incremental", "world_physics_persistent"]
+    provenance = {"sources": records, "cmake_options": options, "asan": args.asan, "persistent": args.persistent,
         "runner_sha256": sha(Path(__file__).read_bytes()),
         "fixtures_sha256": {p.name: sha(p.read_bytes()) for p in (ROOT / "docs/research").glob("world-physics-*") if p.suffix in (".h", ".cpp", ".cmake")},
         "compiler": subprocess.check_output(["xcrun", "clang++", "--version"], text=True)}
@@ -127,7 +131,7 @@ def main():
     with (output / "build.log").open("w") as log:
         subprocess.run(["cmake", "--build", str(bullet_build), "--target", *LIBRARIES, "--parallel", "4"], stdout=log, stderr=subprocess.STDOUT, check=True)
         subprocess.run(["cmake", "-S", str(ipc), "-B", str(build), *options], stdout=log, stderr=subprocess.STDOUT, check=True)
-        subprocess.run(["cmake", "--build", str(build), "--target", "world_physics_ccd", "world_physics_contact", "--parallel", "4"], stdout=log, stderr=subprocess.STDOUT, check=True)
+        subprocess.run(["cmake", "--build", str(build), "--target", *targets, "--parallel", "4"], stdout=log, stderr=subprocess.STDOUT, check=True)
     for name, directory in (("ipc", build), ("bullet", bullet_build)):
         cache = (directory / "CMakeCache.txt").read_bytes()
         (output / f"{name}-CMakeCache.txt").write_bytes(cache)
@@ -139,9 +143,14 @@ def main():
     provenance["dependencies"] = dependency_records(build, output)
     provenance["libraries_sha256"] = {name: sha((bullet_build / "src" / name / f"lib{name}.a").read_bytes()) for name in LIBRARIES}
     provenance["ipc_library_sha256"] = sha((build / "libipc_toolkit.a").read_bytes())
+    provenance["executables_sha256"] = {name: sha((build / name).read_bytes()) for name in targets}
     statuses = {}
-    for name, executable, arguments in [("geometry", "world_physics_ccd", []), ("grazes", "world_physics_ccd", ["--stress"]),
-                                        ("events", "world_physics_contact", []), ("benchmark", "world_physics_ccd", ["--benchmark"])]:
+    runs = [("geometry", "world_physics_ccd", []), ("grazes", "world_physics_ccd", ["--stress"]),
+            ("events", "world_physics_contact", []), ("benchmark", "world_physics_ccd", ["--benchmark"])]
+    if args.persistent:
+        runs += [("incremental-material", "world_physics_incremental", []), ("persistent", "world_physics_persistent", []),
+                 ("persistent-benchmark", "world_physics_persistent", ["--benchmark"])]
+    for name, executable, arguments in runs:
         run_started = time.monotonic()
         result = subprocess.run([str(build / executable), *arguments], capture_output=True, text=True, timeout=60)
         (output / f"{name}.txt").write_text(result.stdout + result.stderr + f"exit={result.returncode}\nelapsed_s={time.monotonic()-run_started:.6f}\n")
