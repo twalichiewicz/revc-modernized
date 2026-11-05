@@ -10,6 +10,7 @@
 #include <cstdlib>
 #include "../src/carglass.cpp"
 #include "nativejetshadowarm.h"
+#include "../tools/bake/gamefiles.h"
 
 namespace game {Api api{};}
 Config gConfig;
@@ -27,6 +28,13 @@ void Check(bool ok,const char *message)
 void Bind()
 {
  auto &r=carglass::rw;
+ r.atomics=[](void *c,void *(*cb)(void *,void *),void *data)->void *{auto clump=static_cast<rw::Clump *>(c);for(auto link=clump->atomics.link.next;link!=&clump->atomics.link;link=link->next)if(!cb(rw::Atomic::fromClump(link),data))break;return c;};
+ r.root=[](const void *c)->void *{return static_cast<const rw::Clump *>(c)->getFrame();};
+ r.geometry=[](const void *a)->void *{return static_cast<const rw::Atomic *>(a)->geometry;};
+ r.atomicFlags=[](const void *a)->unsigned{return static_cast<const rw::Atomic *>(a)->getFlags();};
+ r.createAtomic=[]()->void *{return rw::Atomic::create();};
+ r.destroyAtomic=[](void *a){static_cast<rw::Atomic *>(a)->destroy();return 1;};
+ r.setGeometry=[](void *a,void *g,unsigned flags)->void *{static_cast<rw::Atomic *>(a)->setGeometry(static_cast<rw::Geometry *>(g),flags);return a;};
  r.frame=[](const void *a)->void *{return static_cast<const rw::Atomic *>(a)->getFrame();};
  r.name=[](void *){return "door_lf_hi_ok";};
  r.parent=[](const void *f)->void *{return static_cast<const rw::Frame *>(f)->getParent();};
@@ -113,11 +121,47 @@ void Copy(bool strip,bool broken,bool glassOnly,bool dented)
  for(int i=0;i<skin->numVertices;i++){auto n=skin->morphTargets[0].normals[i];Check(std::isfinite(n.x)&&std::fabs(n.x-1)<1e-5f,"interpolated real skin normals retained");}
  skin->destroy();copy->destroy();atomic->destroy();source->destroy();root->destroyHierarchy();glass->destroy();metal->destroy();
 }
+alignas(16) uint8_t vehicle[0x6f0]{},pool[24]{};uint8_t allocation=1;void *poolAddress=pool;
+uint8_t *GetVehicle(int ref){return ref==1?vehicle:nullptr;}
+void StockSkin(const char *file,int model)
+{
+ const char *data=std::getenv("GAMEDATA");if(!data)data="/Applications/Grand Theft Auto Vice City.app/Contents/Resources/GameData";
+ ImgArchive img;Check(img.Open(std::string(data)+"/models/gta3.img"),"stock IMG opens");std::vector<uint8_t> bytes;Check(img.Read(file,bytes),"stock helicopter DFF exists");
+ rw::Texture::setLoadTextures(false);rw::StreamMemory stream;stream.open(bytes.data(),uint32_t(bytes.size()));
+ Check(rw::findChunk(&stream,rw::ID_CLUMP,nullptr,nullptr),"stock clump found");auto clump=rw::Clump::streamRead(&stream);Check(clump,"stock clump reads into real RenderWare");
+ std::memset(vehicle,0,sizeof vehicle);*reinterpret_cast<void **>(pool)=vehicle;*reinterpret_cast<void **>(pool+8)=&allocation;*reinterpret_cast<int *>(pool+16)=1;
+ *reinterpret_cast<void **>(vehicle+0x58)=clump;*reinterpret_cast<unsigned *>(vehicle+0x60)=2;*reinterpret_cast<int16_t *>(vehicle+0x6a)=int16_t(model);vehicle[0x297]=0x40;
+ auto matrix=reinterpret_cast<float *>(vehicle+8);matrix[0]=matrix[5]=matrix[10]=matrix[15]=1;
+ carglass::gPool=&poolAddress;carglass::gReady=true;gConfig.carDeformation=true;game::api.PoolsGetVehicle=GetVehicle;
+ unsigned tested=0;
+ for(auto link=clump->atomics.link.next;link!=&clump->atomics.link;link=link->next){
+  auto atomic=rw::Atomic::fromClump(link);auto source=atomic->geometry;auto original=std::vector<rw::Triangle>(source->triangles,source->triangles+source->numTriangles);
+  for(int t=0;t<source->numTriangles;t++){
+   const auto tri=source->triangles[t];auto mat=source->matList.materials[tri.matId];if(mat->color.alpha!=255)continue;
+   const auto verts=source->morphTargets[0].vertices;const Vec3 a{verts[tri.v[0]].x,verts[tri.v[0]].y,verts[tri.v[0]].z},b{verts[tri.v[1]].x,verts[tri.v[1]].y,verts[tri.v[1]].z},c{verts[tri.v[2]].x,verts[tri.v[2]].y,verts[tri.v[2]].z};
+   auto n=carglass::Cross(carglass::Sub(b,a),carglass::Sub(c,a));const float len=std::sqrt(skinmodel::Dot(n,n));if(len<.03f)continue;n={n.x/len,n.y/len,n.z/len};const Vec3 centre{(a.x+b.x+c.x)/3,(a.y+b.y+c.y)/3,(a.z+b.z+c.z)/3};
+   Vec3 hit,origin,normalPoint;Check(carglass::InCar(atomic->getFrame(),clump->getFrame(),centre,hit)&&carglass::InCar(atomic->getFrame(),clump->getFrame(),{},origin)&&carglass::InCar(atomic->getFrame(),clump->getFrame(),n,normalPoint),"stock frame hierarchy transforms hit");const auto normal=carglass::Sub(normalPoint,origin);
+   Check(carglass::Perforate(vehicle,atomic,hit,normal,80),"stock helicopter accepts production private skin perforation");auto copy=atomic->geometry;
+   Check(copy!=source&&copy->meshHeader&&!(copy->flags&rw::Geometry::TRISTRIP),"stock hole builds a private native triangle list");
+   Check(!std::memcmp(original.data(),source->triangles,original.size()*sizeof(rw::Triangle)),"stock shared triangles preserved");
+   bool covered=false;for(int j=0;j<copy->numTriangles;j++){auto face=copy->triangles[j];auto v=copy->morphTargets[0].vertices;std::array<Vec3,3> p;for(int k=0;k<3;k++)p[k]={v[face.v[k]].x,v[face.v[k]].y,v[face.v[k]].z};
+    // Restrict to the original sheet; the opposite cabin wall can remain.
+    if(std::fabs(skinmodel::Dot(carglass::Sub(p[0],centre),n))>.005f)continue;
+    const auto cross0=carglass::Cross(carglass::Sub(p[1],p[0]),carglass::Sub(centre,p[0])),cross1=carglass::Cross(carglass::Sub(p[2],p[1]),carglass::Sub(centre,p[1])),cross2=carglass::Cross(carglass::Sub(p[0],p[2]),carglass::Sub(centre,p[2]));
+    if(skinmodel::Dot(cross0,cross1)>=-1e-10f&&skinmodel::Dot(cross1,cross2)>=-1e-10f&&skinmodel::Dot(cross2,cross0)>=-1e-10f)covered=true;
+   }Check(!covered,"actual stock skin has an open hole at impact, not a texture overlay");
+   carglass::Restore(vehicle);Check(atomic->geometry==source,"stock repair restores shared original");++tested;break;
+  }
+ }
+ Check(tested>0,"stock helicopter tested actual opaque skin");std::printf("stock skin: %s %u atomics passed\n",file,tested);clump->destroy();
+}
+
 }
 int main()
 {
  Check(rw::Engine::init()&&rw::Engine::open(nullptr)&&rw::Engine::start(),"NULL renderer initialized");Bind();
  for(bool strip:{false,true})for(bool glassOnly:{false,true})for(bool broken:{false,true})for(bool dented:{false,true})Copy(strip,broken,glassOnly,dented);
+ StockSkin("sparrow.dff",199);StockSkin("maverick.dff",217);
  Check(rw::Geometry::numAllocated==0&&rw::Material::numAllocated==0,"all native geometry/material references released");
  rw::Engine::stop();rw::Engine::close();rw::Engine::term();std::puts("carglass real mesh builder: all passed");
 }

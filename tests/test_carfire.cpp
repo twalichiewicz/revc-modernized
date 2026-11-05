@@ -63,8 +63,10 @@ uint8_t *Nearest(void *,CVector at,float *distance){uint8_t *best=nullptr;for(in
 uint8_t *Furthest(void *m,CVector at,float minimum,float maximum){float d=maximum;auto *f=Nearest(m,at,&d);return d>minimum?f:nullptr;}
 void NativeCannon(uint8_t *){}
 void NativePlaneControl(uint8_t *){}
+bool NativeEngineAudio(uint8_t *,uint8_t *){return true;}
 void NativeDispatch(){++dispatches;}
 void *Native(const char *s){
+ if(strstr(s,"ProcessEngineDamage"))return reinterpret_cast<void *>(NativeEngineAudio);
  if(strstr(s,"TellOccupantsToLeaveCar"))return reinterpret_cast<void *>(CrewLeave);
  if(strstr(s,"CHeli14ProcessControl")||strstr(s,"CPlane14ProcessControl")||strstr(s,"CBoat14ProcessControl"))return reinterpret_cast<void *>(NativePlaneControl);
  if(strstr(s,"FireTruckControl"))return reinterpret_cast<void *>(NativeCannon);if(strstr(s,"FindFurthestFire"))return reinterpret_cast<void *>(Furthest);

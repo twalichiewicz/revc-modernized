@@ -297,6 +297,9 @@ bool BulletWeapon(uint8_t *weapon)
 }
 void Hook_Impact(uint8_t *weapon,uint8_t *shooter,uint8_t *victim,CVector *from,CVector *to,uint8_t *point,CVector2D ahead)
 {
+ // The component owner consumes the certified camera-ray receipt downstream.
+ // Keep this older hit-counter path solely as the unmanaged fallback.
+ if(victim&&api.AirframeEffects&&api.AirframeEffects(victim).managed){gImpact(weapon,shooter,victim,from,to,point,ahead);return;}
  Contact c;
  if(from&&to&&point&&BulletWeapon(weapon)&&FindRotor(*from,*to,shooter,c)){
   const CVector d=Sub(c.at,*from),native=Sub(*reinterpret_cast<CVector *>(point),*from);
@@ -311,6 +314,7 @@ void Hook_BulletUpdate()
    const auto b=nativebullet::Read(gBullets,i);if(b.active!=1||(b.type!=28&&b.type!=29))continue;
    CVector from{b.position.x,b.position.y,b.position.z},to=Add(from,Mul({b.velocity.x,b.velocity.y,b.velocity.z},*api.timeStep*.5f));Contact c;
    if(to.x<=-2400||to.x>=1600||std::fabs(to.y)>=2000||!FindRotor(from,to,b.creator,c))continue;
+   if(api.AirframeEffects&&api.AirframeEffects(c.vehicle).managed)continue;
    auto current=nativebullet::Read(gBullets,i);if(std::memcmp(&current,&b,sizeof b)||!RotorContact(c))continue;
    current=nativebullet::Read(gBullets,i);if(!std::memcmp(&current,&b,sizeof b))gBullets[i*nativebullet::kStride+offsetof(nativebullet::Record,active)]=0;
   }

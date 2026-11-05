@@ -78,7 +78,7 @@ void NativeControl(uint8_t *v)
  damage(v,scripted?200.0f:0.0f,0);
  Check(*reinterpret_cast<void **>(v+0x160)==handling[i],"damage callbacks retain real handling allocation");
 }
-void NativeDoor(uint8_t *v,int node,int index,bool noFlying){Check(!noFlying,"ballistic parts retain native flying objects");const int nodes[]={17,18,15,11,16,12};Check(node==nodes[index],"ballistic door uses verified native frame node");++bodyCallbacks;if(Door(v+0x34c,index)==3)++spawns;}
+void NativeDoor(uint8_t *v,int node,int index,bool noFlying){Check(index<2||!noFlying,"ballistic doors retain native flying objects");const int nodes[]={17,18,15,11,16,12};Check(node==nodes[index],"ballistic door uses verified native frame node");++bodyCallbacks;if(Door(v+0x34c,index)==3&&!noFlying)++spawns;}
 void NativeBumper(uint8_t *v,int node,int index,bool noFlying){Check(node==index+2&&!noFlying,"ballistic bumper retains native node and flying objects");++bodyCallbacks;if(Panel(v+0x34c,index)==3)++spawns;}
 void NativeFix(uint8_t *v){++nativeFixes;memset(v+0x34c,0,24);}
 void Reset()
@@ -100,6 +100,19 @@ void Cases()
   for(int i=0;i<30;i++)carparts::Projectile(vehicles[0],token,component,20);
   Check(State(vehicles[0],component)==3&&spawns==1,"repeated localized rounds detach exactly the struck native part");Check(F(vehicles[0],0x2a0)==health,"part damage does not invent whole-health damage");
  }
+ for(int model:{155,177,199,217,218,227}){
+  Reset();*reinterpret_cast<int16_t *>(vehicles[0]+0x6a)=model;auto t=carparts::BeginBullet(vehicles[0]);
+  for(int i=0;i<30;i++)carparts::Projectile(vehicles[0],t,7,20);
+  Check(t.revision&&State(vehicles[0],7)==3&&spawns==1,"automobile helicopter doors use native ballistic stages and flying parts");
+ }
+ for(bool main:{true,false}){
+  Reset();*reinterpret_cast<int16_t *>(vehicles[0]+0x6a)=199;const int node=main?17:18,part=main?0:1;
+  *reinterpret_cast<void **>(vehicles[0]+0x440+node*8)=reinterpret_cast<void *>(0x1234);
+  Check(carparts::SeverRotor(vehicles[0],main)&&Door(vehicles[0]+0x34c,part)==3&&spawns==1,"failed helicopter rotor detaches native flying part");
+  Check(carparts::SeverRotor(vehicles[0],main)&&spawns==1,"stream reapplication hides missing rotor without respawning debris");
+ }
+ Reset();*reinterpret_cast<int16_t *>(vehicles[0]+0x6a)=199;Check(!carparts::SeverRotor(vehicles[0],true)&&spawns==0,"absent rotor frame cannot fake part loss");
+ for(auto type:{std::pair<int,int>{180,4},{165,3},{211,0}}){Reset();*reinterpret_cast<int16_t *>(vehicles[0]+0x6a)=type.first;*reinterpret_cast<int *>(vehicles[0]+0x348)=type.second;Check(!carparts::SeverRotor(vehicles[0],true)&&calls.empty(),"rotor detachment never uses automobile layout for native aircraft classes or cars");}
  Reset();auto bullet=carparts::BeginBullet(vehicles[0]);for(int i=0;i<5;i++)carparts::Projectile(vehicles[0],bullet,7,20);Check(State(vehicles[0],7)==0,"individual light rounds accumulate before breaking hinges");fix(vehicles[0]);for(int i=0;i<50;i++)carparts::Projectile(vehicles[0],bullet,7,200);Check(State(vehicles[0],7)==0,"repair retires in-flight part leases");
  Reset();hits={{7,60},{7,60},{7,60}};Run();Check(State(vehicles[0],7)==1&&bodyCallbacks==1,"one native collision callback burst advances only one state");
  for(int i=0;i<100;i++)Run(20);Check(State(vehicles[0],7)==1,"sustained scrape across frames keeps damaged stage");
@@ -127,12 +140,22 @@ void Cases()
  Reset();hits={{11,100},{11,100},{11,100},{15,100},{15,100},{15,100}};Run();Check(calls.size()==6&&std::all_of(calls.begin(),calls.end(),[](const Call &c){return c.force==100;}),"wings and windscreen retain exact native component progression");
  Reset();Set(vehicles[0],7,1);poolFlags[0]|=0x80;Run();Check(calls[0].force==60,"unallocated vehicle cannot obtain part ownership");
  Reset();throwNative=true;try{Run();}catch(int){}calls.clear();Set(vehicles[0],7,1);damage(vehicles[0],0,0);Check(calls[0].force==60,"exception restores control and damage contexts");
+ // Native pre-render may select either a blurred or solid rotor every frame.
+ struct RenderPart {const char *name;unsigned flags=12;};static RenderPart renderParts[]={{"toprotor"},{"rearrotor"},{"chassis_hi"}};
+ carparts::gPreRender=+[](uint8_t *){for(auto &p:renderParts)p.flags|=4u;};
+ carparts::gAtomics=+[](void *c,void *(*cb)(void *,void *),void *data)->void *{for(auto &p:renderParts)cb(&p,data);return c;};
+ carparts::gFrame=+[](const void *a)->void *{return const_cast<void *>(a);};carparts::gParent=+[](const void *)->void *{return nullptr;};carparts::gName=+[](void *f){return static_cast<RenderPart *>(f)->name;};
+ carparts::gFlags=+[](const void *a){return static_cast<const RenderPart *>(a)->flags;};carparts::gSetFlags=+[](void *a,unsigned flags)->void *{static_cast<RenderPart *>(a)->flags=flags;return a;};
+ Reset();gConfig.heliDamage=true;*reinterpret_cast<int16_t *>(vehicles[0]+0x6a)=199;Set(vehicles[0],5,3);carparts::PreRender(vehicles[0]);Check(renderParts[0].flags==8&&renderParts[1].flags==12&&renderParts[2].flags==12,"native blur selection cannot redraw severed main rotor or hide intact tail and body");
+ Set(vehicles[0],6,3);carparts::PreRender(vehicles[0]);Check(renderParts[0].flags==8&&renderParts[1].flags==8&&renderParts[2].flags==12,"both severed rotor surfaces stay hidden after native rendering selection");
+ fix(vehicles[0]);carparts::PreRender(vehicles[0]);Check(renderParts[0].flags==12&&renderParts[1].flags==12,"native repair and pre-render restore rotor visibility");
  Check(std::all_of(calls.begin(),calls.end(),[](const Call &c){return c.multiplier==.731f;}),"native collision-coefficient argument preserved");
 }
 }
 namespace hooks {
 void *Chain(const char *s,void *replacement){using namespace fixture;
 #define CHAIN(n,v,T) if(!strcmp(s,n)){auto old=v;v=reinterpret_cast<T>(replacement);return reinterpret_cast<void *>(old);}
+ if(!strcmp(s,"_ZN11CAutomobile9PreRenderEv"))return reinterpret_cast<void *>(NativeControl);
  CHAIN("_ZN11CAutomobile14ProcessControlEv",control,Control);
  CHAIN("_ZN11CAutomobile13VehicleDamageEft",damage,Damage);
  CHAIN("_ZN14CDamageManager11ApplyDamageE10tComponentff",apply,Apply);
@@ -142,6 +165,7 @@ void *Chain(const char *s,void *replacement){using namespace fixture;
 }
 }
 static void *Lookup(void *,const char *s){using namespace fixture;
+ if(strstr(s,"RpClumpForAllAtomics")||strstr(s,"RpAtomicGetFrame")||strstr(s,"RwFrameGetParent")||strstr(s,"GetFrameNodeName")||strstr(s,"RpAtomicGetFlags")||strstr(s,"RpAtomicSetFlags"))return reinterpret_cast<void *>(NativeControl);
  if(strstr(s,"SetDoorDamage"))return reinterpret_cast<void *>(NativeDoor);
  if(strstr(s,"SetBumperDamage"))return reinterpret_cast<void *>(NativeBumper);
  if(!strcmp(s,"_ZN6CPools15ms_pVehiclePoolE"))return &poolPointer;

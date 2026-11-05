@@ -50,5 +50,13 @@ int main(){using namespace fixture;Setup();game::api.PoolsGetVehicle=Get;game::a
  __asan_unpoison_memory_region(car+0x388,sizeof car-0x388);
 #endif
  for(size_t i=0x388;i<sizeof car;i++)Check(car[i]==0,"CPlane owner never touches automobile-only members");
+ Setup();*reinterpret_cast<int16_t *>(car+0x6a)=199;*reinterpret_cast<int *>(car+0x348)=0;models[199]=info;
+ int rotorLoss[2]{};static int *lossCounts;lossCounts=rotorLoss;game::api.AircraftRotorLoss=+[](uint8_t *,bool main){++lossCounts[main?0:1];return true;};
+ auto rotorToken=airframedamage::BeginBullet(car);projectilemodel::Layer blade{.5f,1,projectilemodel::Material::Skin};projectilemodel::Ray exposed{{-20,0,5},{20,0,5},.5f,1,20,&blade,1};
+ for(int i=0;i<10;i++)airframedamage::Projectile(car,rotorToken,exposed,nullptr,airframemodel::MainRotor);
+ auto rotorEffect=game::api.AirframeEffects(car);Check(rotorEffect.rotor==0&&rotorEffect.antiTorque==1&&rotorLoss[0]==1&&rotorLoss[1]==0,"actual exposed blade outside COL fails only main rotor and detaches once");
+ *reinterpret_cast<void **>(car+0x58)=reinterpret_cast<void *>(5);airframedamage::BeginBullet(car);airframedamage::Tick(car);Check(rotorLoss[0]==2&&game::api.AirframeEffects(car).rotor==0,"new render clump reapplies existing rotor failure without healing systems");
+ airframedamage::Repair(car);airframedamage::Tick(car);Check(game::api.AirframeEffects(car).rotor==1&&rotorLoss[0]==2,"repair clears rotor presentation and function together");
+ auto tail=airframedamage::BeginBullet(car);for(int i=0;i<10;i++)airframedamage::Projectile(car,tail,exposed,nullptr,airframemodel::TailRotor);Check(game::api.AirframeEffects(car).antiTorque==0&&game::api.AirframeEffects(car).rotor==1&&rotorLoss[1]==1,"tail rotor part loss owns yaw instead of killing main lift");
  printf("airframedamage: %s\n",bad?"FAILED":"all passed");return bad?1:0;
 }

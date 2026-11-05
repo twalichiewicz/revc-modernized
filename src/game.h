@@ -309,6 +309,7 @@ struct Api {
  void (*AirframeBurn)(uint8_t *,float);
  void (*AirframeFlightUsed)(uint8_t *);
  void (*AirframeCollision)(uint8_t *,Vec3,float);
+ bool (*AircraftRotorLoss)(uint8_t *,bool main);
  bool (*VehicleFireManaged)(const uint8_t *);
  void (*RearmVehicleFire)(uint8_t *);
  void (*RepairVehicleFire)(uint8_t *);

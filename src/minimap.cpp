@@ -816,6 +816,7 @@ __attribute__((constructor)) void Init()
 		Log("car parts: native collision hook missing; re-run install.sh");
 	if (!carmechanics::Install())
 		Log("car mechanics: native performance hooks missing; re-run install.sh");
+ game::api.AircraftRotorLoss=+[](uint8_t *v,bool main){return game::EntityModel(v)==165&&*reinterpret_cast<const int *>(v+0x348)==3?heli::FailRotor(v,main):carparts::SeverRotor(v,main);};
 	if (!airframedamage::Install())
   Log("airframes: component/skin lifecycle bindings missing; re-run install.sh");
  if (!carimpact::Install())

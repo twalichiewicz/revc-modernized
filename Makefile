@@ -143,7 +143,7 @@ test-game-assets: $(BUILD)/test_carparts $(BUILD)/test_cardeform $(BUILD)/test_m
 .PHONY: test-carglass-rw
 test-carglass-rw: | $(BUILD)
 	@test -n "$(LIBRW_ROOT)" -a -n "$(LIBRW_STATIC)" || { echo 'Set LIBRW_ROOT and LIBRW_STATIC to a NULL-backend librw source/build'; exit 2; }
-	$(CXX) $(CXXFLAGS) -DRW_NULL -isystem "$(LIBRW_ROOT)" -Isrc -o $(BUILD)/test_carglass_rw tests/test_carglass_rw.cpp src/glassmodel.cpp src/dentmodel.cpp "$(LIBRW_STATIC)"
+	$(CXX) $(CXXFLAGS) -DRW_NULL -isystem "$(LIBRW_ROOT)" -Isrc -o $(BUILD)/test_carglass_rw tests/test_carglass_rw.cpp src/glassmodel.cpp src/dentmodel.cpp tools/bake/gamefiles.cpp "$(LIBRW_STATIC)" -lz
 	$(BUILD)/test_carglass_rw
 
 $(BUILD)/test_glass_assets: tests/test_glass_assets.cpp src/glassmodel.cpp tools/bake/visualmodel.cpp tools/bake/gamefiles.cpp src/mapdata.cpp $(wildcard src/*.h tools/bake/*.h) | $(BUILD)
@@ -349,6 +349,8 @@ test-game-assets: $(BUILD)/test_glass_assets $(BUILD)/test_estateassets $(BUILD)
 	GAMEDATA="$(GAMEDATA)" $(BUILD)/test_handling_assets
 	GAMEDATA="$(GAMEDATA)" MACVC_NATIVE="$(MACVC_NATIVE)" $(BUILD)/test_utility_native
 	GAMEDATA="$(GAMEDATA)" $(BUILD)/test_mapassets
+	MACVC_NATIVE="$(MACVC_NATIVE)" $(BUILD)/test_shotreceipt_native
+	MACVC_NATIVE="$(MACVC_NATIVE)" $(BUILD)/test_carfire_audio_native
 	GAMEDATA="$(GAMEDATA)" $(BUILD)/test_shotcollision --assets
 	GAMEDATA="$(GAMEDATA)" $(BUILD)/test_rotorassets
 	GAMEDATA="$(GAMEDATA)" $(BUILD)/test_planeflight_assets
@@ -807,3 +809,11 @@ test-game-assets: $(BUILD)/test_airframe_assets
 $(BUILD)/test_airframeroute_native: tests/test_airframeroute_native.cpp tests/test_airframedamage.cpp src/airframedamage.cpp src/airframemodel.cpp src/projectilemodel.cpp src/mechanicalmodel.cpp src/partsmodel.cpp $(wildcard src/*.h) | $(BUILD)
 	$(CXX) $(CXXFLAGS) -Isrc -o $@ tests/test_airframeroute_native.cpp src/airframemodel.cpp src/projectilemodel.cpp src/mechanicalmodel.cpp src/partsmodel.cpp
 test-game-assets: $(BUILD)/test_airframeroute_native
+
+$(BUILD)/test_shotreceipt_native: tests/test_shotreceipt_native.cpp tests/test_shotcollision.cpp tests/nativejetshadowarm.h src/shotcollision.cpp tools/bake/visualmodel.cpp tools/bake/gamefiles.cpp src/mapdata.cpp $(wildcard src/*.h tools/bake/*.h) | $(BUILD)
+	$(CXX) $(CXXFLAGS) -Isrc -o $@ tests/test_shotreceipt_native.cpp tools/bake/visualmodel.cpp tools/bake/gamefiles.cpp src/mapdata.cpp -lz
+
+$(BUILD)/test_carfire_audio_native: tests/test_carfire_audio_native.cpp tests/test_carfire.cpp tests/nativejetshadowarm.h src/carfire.cpp src/firemodel.cpp $(wildcard src/*.h) | $(BUILD)
+	$(CXX) $(CXXFLAGS) -Isrc -o $@ tests/test_carfire_audio_native.cpp src/firemodel.cpp
+
+test-game-assets: $(BUILD)/test_shotreceipt_native $(BUILD)/test_carfire_audio_native

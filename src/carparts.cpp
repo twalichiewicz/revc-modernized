@@ -8,6 +8,7 @@
 #include <cmath>
 #include <cstdint>
 #include <dlfcn.h>
+#include <cstring>
 
 namespace carparts {namespace {
 constexpr size_t kStride=0x6f0,kDamage=0x34c,kSlots=256;
@@ -15,6 +16,9 @@ void **gPool;
 int (*gDoorStatus)(void *,int),(*gPanelStatus)(void *,int);
 void (*gControl)(uint8_t *),(*gVehicleDamage)(uint8_t *,float,uint16_t),(*gFix)(uint8_t *);
 bool (*gApply)(uint8_t *,int,float,float);
+void (*gPreRender)(uint8_t *);
+void *(*gAtomics)(void *,void *(*)(void *,void *),void *),*(*gFrame)(const void *),*(*gParent)(const void *),*(*gSetFlags)(void *,unsigned);
+unsigned (*gFlags)(const void *);const char *(*gName)(void *);
 bool gReady;uint64_t gSerial;
 void (*gSetDoor)(uint8_t *,int,int,bool),(*gSetBumper)(uint8_t *,int,int,bool);
 struct Identity {
@@ -43,6 +47,15 @@ bool Eligible(const Identity &id)
  return id.clump&&id.model>=0&&id.model!=171&&id.model!=162&&
         *reinterpret_cast<const int *>(v+0x348)==0&&!game::IsAircraft(v)&&!game::Wrecked(v)&&
         (v[0x297]&0x40)&&!(game::EntityFlags(v)&(1u<<27));
+}
+bool AutoHeli(const Identity &id)
+{
+ if(*reinterpret_cast<const int *>(id.vehicle+0x348)!=0)return false;
+ switch(id.model){case 155:case 177:case 199:case 217:case 218:case 227:return true;default:return false;}
+}
+bool BallisticEligible(const Identity &id)
+{
+ return Eligible(id)||(gConfig.heliDamage&&AutoHeli(id)&&id.clump&&!game::Wrecked(id.vehicle)&&(id.vehicle[0x297]&0x40)&&!(game::EntityFlags(id.vehicle)&(1u<<27)));
 }
 struct History {Identity id;std::array<partsmodel::Episode,partsmodel::kParts> parts{};std::array<float,partsmodel::kParts> strain{};uint64_t revision=0;};
 std::array<History,kSlots> gHistory;
@@ -133,6 +146,23 @@ bool ApplyDamage(uint8_t *manager,int component,float force,float multiplier)
  if(result&&Current(c->id)&&State(c->id.vehicle,slot)>before)c->progressed|=bit;
  return result;
 }
+int RotorFrame(void *frame)
+{
+ for(int depth=0;frame&&depth<16;depth++,frame=gParent(frame)){
+  const char *n=gName(frame);if(!n)continue;
+  if(!std::strcmp(n,"toprotor")||!std::strcmp(n,"bonnet_hi_ok")||!std::strcmp(n,"bonnet_hi_dam"))return 1;
+  if(!std::strcmp(n,"rearrotor")||!std::strcmp(n,"backrotor")||!std::strcmp(n,"boot_hi_ok")||!std::strcmp(n,"boot_hi_dam"))return 2;
+ }return 0;
+}
+void *HideRotor(void *atomic,void *data)
+{
+ if((*static_cast<const unsigned *>(data))&RotorFrame(gFrame(atomic)))gSetFlags(atomic,gFlags(atomic)&~4u);return atomic;
+}
+void PreRender(uint8_t *v)
+{
+ gPreRender(v);Identity id;if(!gReady||!gConfig.carParts||!gConfig.heliDamage||!Identify(v,id)||!AutoHeli(id)||!id.clump)return;
+ const unsigned mask=(gDoorStatus(v+kDamage,0)==3?1u:0u)|(gDoorStatus(v+kDamage,1)==3?2u:0u);if(mask)gAtomics(id.clump,HideRotor,const_cast<unsigned *>(&mask));
+}
 void Fix(uint8_t *v)
 {
  Identity id;if(Identify(v,id)){
@@ -143,11 +173,11 @@ void Fix(uint8_t *v)
  gFix(v);
 }
 } // namespace
-BulletToken BeginBullet(uint8_t *v){Identity id;if(!gReady||!gConfig.carParts||!Identify(v,id)||!Eligible(id))return {};return {Record(id).revision};}
+BulletToken BeginBullet(uint8_t *v){Identity id;if(!gReady||!gConfig.carParts||!Identify(v,id)||!BallisticEligible(id))return {};return {Record(id).revision};}
 void Projectile(uint8_t *v,const BulletToken &token,int component,float budget)
 {
  Identity id;const int slot=partsmodel::Slot(component);
- if(!token.revision||!gReady||!gConfig.carParts||slot<0||!std::isfinite(budget)||budget<=0||!Identify(v,id)||!Eligible(id)||!(v[0x297]&0x40)||(game::EntityFlags(v)&((1u<<25)|(1u<<17))))return;
+ if(!token.revision||!gReady||!gConfig.carParts||slot<0||!std::isfinite(budget)||budget<=0||!Identify(v,id)||!BallisticEligible(id)||(AutoHeli(id)&&(component<7||component>10))||!(v[0x297]&0x40)||(game::EntityFlags(v)&((1u<<25)|(1u<<17))))return;
  auto &h=Record(id);if(h.revision!=token.revision)return;const int before=State(v,slot);if(before<0||before>=3)return;
  // Repeated rounds load the struck fastenings. Each accepted shot can advance
  // one native stage; the next stage needs a new independent localized round.
@@ -157,23 +187,39 @@ void Projectile(uint8_t *v,const BulletToken &token,int component,float budget)
  if(p.panel)gSetBumper(v,nodes[slot],p.index,false);else gSetDoor(v,nodes[slot],p.index,false);
  if(Current(id)&&Record(id).revision==token.revision&&State(v,slot)>before)Log("car parts: ref %d model %d %s ballistic %s -> %s",id.ref,id.model,p.name,StateName(before,p.panel),StateName(State(v,slot),p.panel));
 }
+bool SeverRotor(uint8_t *v,bool main)
+{
+ Identity id;if(!gReady||!gConfig.carParts||!Identify(v,id)||!AutoHeli(id)||!BallisticEligible(id)||(game::EntityFlags(v)&((1u<<17)|(1u<<25))))return false;
+ const int component=main?5:6,node=main?17:18,door=main?0:1;
+ if(!*reinterpret_cast<void **>(v+0x440+node*8))return false;
+ auto &history=Record(id);const auto revision=history.revision;const bool alreadyMissing=State(v,component-5)==3;
+ for(int i=0;i<3&&State(v,component-5)<3;i++){
+  if(!gApply(v+kDamage,component,200,1)||!Current(id)||Record(id).revision!=revision)return false;
+ }
+ if(State(v,component-5)!=3)return false;
+ gSetDoor(v,node,door,alreadyMissing);
+ return Current(id)&&Record(id).revision==revision&&State(v,component-5)==3;
+}
 bool Enabled(){return gReady&&gConfig.carParts;}
 bool Install()
 {
  if(gReady||!gConfig.carParts)return true;
 #define BIND(v,s) v=reinterpret_cast<decltype(v)>(dlsym(RTLD_MAIN_ONLY,s));if(!v)return false
  BIND(gSetDoor,"_ZN11CAutomobile13SetDoorDamageEi6eDoorsb");BIND(gSetBumper,"_ZN11CAutomobile15SetBumperDamageEi7ePanelsb");
+ BIND(gAtomics,"_Z20RpClumpForAllAtomicsPN2rw5ClumpEPFPNS_6AtomicES3_PvES4_");BIND(gFrame,"_Z16RpAtomicGetFramePKN2rw6AtomicE");BIND(gParent,"_Z16RwFrameGetParentPKN2rw5FrameE");
+ BIND(gName,"_Z16GetFrameNodeNamePN2rw5FrameE");BIND(gFlags,"_Z16RpAtomicGetFlagsPKN2rw6AtomicE");BIND(gSetFlags,"_Z16RpAtomicSetFlagsPN2rw6AtomicEj");
  BIND(gPool,"_ZN6CPools15ms_pVehiclePoolE");
  BIND(gDoorStatus,"_ZN14CDamageManager13GetDoorStatusEi");BIND(gPanelStatus,"_ZN14CDamageManager14GetPanelStatusEi");
 #undef BIND
  if(!game::api.PoolsGetVehicle||!game::api.timeMs)return false;
 #define CHAIN(v,s,f) if(!v)v=reinterpret_cast<decltype(v)>(hooks::Chain(s,reinterpret_cast<void *>(f)))
+ CHAIN(gPreRender,"_ZN11CAutomobile9PreRenderEv",PreRender);
  CHAIN(gControl,"_ZN11CAutomobile14ProcessControlEv",Control);
  CHAIN(gVehicleDamage,"_ZN11CAutomobile13VehicleDamageEft",VehicleDamage);
  CHAIN(gApply,"_ZN14CDamageManager11ApplyDamageE10tComponentff",ApplyDamage);
  CHAIN(gFix,"_ZN11CAutomobile3FixEv",Fix);
 #undef CHAIN
- gReady=gControl&&gVehicleDamage&&gApply&&gFix;
+ gReady=gPreRender&&gControl&&gVehicleDamage&&gApply&&gFix;
  if(gReady)Log("car parts: native damage, swinging and detachment; 350 ms contact gap, stronger later hits");
  else Log("car parts: native hook missing; re-run install.sh");
  return gReady;

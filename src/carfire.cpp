@@ -18,6 +18,7 @@ bool (*gMission)();CVector (*gCoords)();int *gDuty;
 void (*gControl)(uint8_t *),(*gDamage)(uint8_t *,float,uint16_t),(*gInflict)(uint8_t *,uint8_t *,int,float,CVector);
 void (*gProcess)(uint8_t *),(*gExtinguish)(uint8_t *),(*gFix)(uint8_t *),(*gDelete)(uint8_t *),(*gRestart)(),(*gDispatch)();
 void (*gPlaneControl)(uint8_t *),(*gBoatControl)(uint8_t *),(*gHeliControl)(uint8_t *);
+bool (*gEngineAudio)(uint8_t *,uint8_t *);
 void (*gLeave)(uint8_t *),(*gCannon)(uint8_t *);
 uint8_t *(*gFurthest)(void *,CVector,float,float);
 uint8_t *(*gStart)(void *,uint8_t *,uint8_t *,float,uint8_t),*(*gNearest)(void *,CVector,float *);
@@ -176,6 +177,16 @@ uint8_t *Nearest(void *manager,CVector at,float *radius){
  return gNearest(manager,at,radius);
 }
 void Dispatch(){DispatchScope scope;const int before=gDuty?*gDuty:0;gDispatch();if(scope.allowed&&gDuty&&*gDuty>before)Log("car fire: native firetruck dispatch accepted (%d on duty)",*gDuty);}
+bool EngineAudio(uint8_t *audio,uint8_t *params)
+{
+ // Native ProcessEngineDamage selects the fire loop solely below250 hull
+ // health. Managed fire has a different source of truth; keep steam/engine
+ // sounds, native distance rejection and all unmanaged behavior untouched.
+ if(params){auto *v=*reinterpret_cast<uint8_t **>(params+0x10);Identity id;const float distance=*reinterpret_cast<const float *>(params+8);
+  if(Identify(v,id)&&Eligible(id)&&game::VehicleHealth(v)<250&&std::isfinite(distance)&&distance>=0&&distance<1600&&!Burning(v,false))return true;
+ }
+ return gEngineAudio(audio,params);
+}
 bool ReadBurning(const uint8_t *v){return Burning(v,!game::Wrecked(v)&&game::VehicleHealth(v)<game::kVehicleOnFire);}
 bool ReadService(const uint8_t *v){return gReady&&gConfig.carFire&&Service(const_cast<uint8_t *>(v));}
 } // namespace
@@ -196,9 +207,9 @@ bool Install()
  C(gDispatch,"_ZN8CCarCtrl28GenerateEmergencyServicesCarEv",Dispatch);C(gTotal,"_ZNK12CFireManager19GetTotalActiveFiresEv",Total);C(gNearest,"_ZN12CFireManager15FindNearestFireE7CVectorPf",Nearest);
  C(gHeliControl,"_ZN5CHeli14ProcessControlEv",HeliControl);C(gPlaneControl,"_ZN6CPlane14ProcessControlEv",PlaneControl);C(gBoatControl,"_ZN5CBoat14ProcessControlEv",BoatControl);
  C(gLeave,"_ZN6CCarAI23TellOccupantsToLeaveCarEP8CVehicle",Leave);
- C(gCannon,"_ZN11CAutomobile16FireTruckControlEv",Cannon);C(gFurthest,"_ZN12CFireManager33FindFurthestFire_NeverMindFireMenE7CVectorff",Furthest);
+ C(gEngineAudio,"_ZN13cAudioManager19ProcessEngineDamageER14cVehicleParams",EngineAudio);C(gCannon,"_ZN11CAutomobile16FireTruckControlEv",Cannon);C(gFurthest,"_ZN12CFireManager33FindFurthestFire_NeverMindFireMenE7CVectorff",Furthest);
 #undef C
- gReady=gHeliControl&&gPlaneControl&&gBoatControl&&gControl&&gDamage&&gInflict&&gProcess&&gExtinguish&&gFix&&gDelete&&gRestart&&gDispatch&&gTotal&&gNearest&&gLeave&&gCannon&&gFurthest;
+ gReady=gEngineAudio&&gHeliControl&&gPlaneControl&&gBoatControl&&gControl&&gDamage&&gInflict&&gProcess&&gExtinguish&&gFix&&gDelete&&gRestart&&gDispatch&&gTotal&&gNearest&&gLeave&&gCannon&&gFurthest;
  if(gReady){game::api.VehicleFireManaged=+[](const uint8_t *v){Identity id;return Identify(const_cast<uint8_t *>(v),id)&&Eligible(id);};game::api.RearmVehicleFire=+[](uint8_t *v){auto lease=Capture(v);if(Current(lease))firemodel::Rearm(gHistory[size_t(lease.id.ref>>8)].state);};game::api.RepairVehicleFire=+[](uint8_t *v){Forget(v,true);};game::api.VehicleBurning=ReadBurning;game::api.VehicleFireService=ReadService;Log("car fire: progressive native fires and single-fire emergency response enabled");}return gReady;
 }
 }

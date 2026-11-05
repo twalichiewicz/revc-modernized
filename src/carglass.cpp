@@ -380,7 +380,8 @@ bool Perforate(uint8_t *v,const void *identity,Vec3 hit,Vec3 normal,float budget
   if(isNew){pending.holder=rw.createAtomic();if(!pending.holder)return false;rw.setGeometry(pending.holder,source,0);car.parts.reserve(kMaxParts);}
   rw.setGeometry(atomic,pending.copy,0);
   if(isNew){car.parts.push_back({atomic,pending.holder,pending.copy,pending.bytes,{},std::move(holes)});pending.holder=nullptr;}else{gBytes-=old->bytes;old->copy=pending.copy;old->bytes=pending.bytes;old->holes=std::move(holes);}gBytes+=pending.bytes;
-  if(found==gCars.end())gCars.push_back(std::move(fresh));return true;
+  if(found==gCars.end())gCars.push_back(std::move(fresh));
+  if(count==0||count==7||count==15||count==31||count==63)Log("airframe skin: ref %d model %d holes %zu",Ref(v),game::EntityModel(v),count+1);return true;
  }catch(const std::bad_alloc &){return false;}
 }
 bool Opening(uint8_t *v,Vec3 from,Vec3 to,float &fraction)

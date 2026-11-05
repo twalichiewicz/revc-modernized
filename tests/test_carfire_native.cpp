@@ -6,6 +6,7 @@
 #include "nativejetshadowarm.h"
 namespace nativefire {
 using namespace fixture;using namespace nativejetshadowtest;
+int visibleFlames=0;void *Flame(int type,const CVector &p,const CVector &,uint8_t *,float,int,int,int,int){if(type==27&&std::isfinite(p.x)&&std::isfinite(p.y)&&std::isfinite(p.z))++visibleFlames;return nullptr;}
 Code *activeCode;void *countEntry;int spawned=0,requests=0,existingTrucks=0,refs=0,flee=0,sprays=0;alignas(8) uint8_t streaming[0x2000]{};uintptr_t vtable[64]{};
 void Ignore(...){}int Zero(){return 0;}bool Yes(int){return true;}bool No(int){return false;}uint8_t *NoVehicle(){return nullptr;}
 uint8_t *Player(){return player;}CVector Coords(){return {0,0,0};}
@@ -129,10 +130,13 @@ int main(){if(ExistingFireChecks())return 1;using namespace fixture;using namesp
  Code burning;burning.Add(0x1000e5df4,0x1000e62a4);burning.bindings={{0x10010c0b4,reinterpret_cast<void *>(NoVehicle)},{0x10010c0f4,reinterpret_cast<void *>(NoVehicle)},
   {0x10027d608,entries.at("_ZN8CVehicle13InflictDamageEP7CEntity11eWeaponTypef7CVector")},{0x100172f48,reinterpret_cast<void *>(Transform)},
   {0x100210fec,reinterpret_cast<void *>(Ignore)},{0x100208a10,reinterpret_cast<void *>(Ignore)},
-  {0x100143f28,reinterpret_cast<void *>(Zero)},{0x10020445c,reinterpret_cast<void *>(Ignore)},{0x1000e62a4,entries.at("_ZN5CFire10ExtinguishEv")}};burning.Finish();
+  {0x100143f28,reinterpret_cast<void *>(Zero)},{0x10020445c,reinterpret_cast<void *>(Flame)},{0x1000e62a4,entries.at("_ZN5CFire10ExtinguishEv")}};burning.Finish();
  alignas(8) uint8_t info[0x100]{};Store(burning.Page(0x1006b2050+150*8),info);carfire::gProcess=reinterpret_cast<Fn>(burning.Address(0x1000e5df4));carfire::gInflict=reinterpret_cast<Inflict>(code.Address(0x10027d608));
  Reset();carmechanics::sample.running=true;carmechanics::sample.electrical=.9f;carmechanics::sample.breach=.4f;Store(fires.Page(0x10058d660),now);*reinterpret_cast<void **>(cars[0])=vtable;F(cars[0],0x2a0)=200;
  for(int i=0;i<150;i++){now+=100;timeStep=5;Store(burning.Page(0x10058d660),now);Store(burning.Page(0x10058d674),timeStep);Control()(cars[0]);if(auto *fire=*reinterpret_cast<uint8_t **>(cars[0]+0x280))Process()(fire);}
  Check(carfire::Burning(cars[0],false)&&blasts==0&&F(cars[0],0x2a0)==0,"actual native fire processing and lethal damage compose without a five-second blast");
+ Reset();visibleFlames=0;*reinterpret_cast<int16_t *>(cars[0]+0x6a)=199;Store(burning.Page(0x1006b2050+199*8),info);*reinterpret_cast<void **>(cars[0])=vtable;game::api.AirframeEffects=+[](const uint8_t *){airframemodel::Effects e;e.managed=true;return e;};game::api.AirframeFire=+[](const uint8_t *){return carmechanics::sample;};carmechanics::sample.running=true;carmechanics::sample.electrical=.9f;carmechanics::sample.breach=.4f;
+ for(int i=0;i<100;i++){now+=100;timeStep=5;Store(fires.Page(0x10058d660),now);Store(burning.Page(0x10058d660),now);Store(burning.Page(0x10058d674),timeStep);Control()(cars[0]);if(auto *f=*reinterpret_cast<uint8_t **>(cars[0]+0x280))Process()(f);}
+ Check(carfire::Burning(cars[0],false)&&visibleFlames>0&&F(cars[0],0x2a0)>250,"actual native healthy-hull helicopter system fire emits finite visible flame particles");
  printf("carfire native: %s\n",failures?"FAILED":"all passed");return failures?1:0;
 }

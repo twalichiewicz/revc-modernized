@@ -75,6 +75,9 @@ int main(){
 #endif
   printf("rotor asset %s: contact (%.3f,%.3f,%.3f), main hidden\n",asset.first,(a.x+b.x)/2,(a.y+b.y)/2,(a.z+b.z)/2);
  }
+ Setup();Check(LoadAircraftParts("sparrow"),"managed rotor stock asset loads");*reinterpret_cast<int16_t *>(cars.data()+0x6a)=199;flightmodel::gRotors.clear();Vec3 a{},b{};Check(RotorRay(a,b),"managed rotor captured actual triangle");CVector from{a.x,a.y,a.z},to{b.x,b.y,b.z};uint32_t weapon=26;alignas(16) uint8_t point[0x30]{};game::api.ProcessLineOfSight=AssetWorld;game::api.AirframeEffects=+[](const uint8_t *){airframemodel::Effects e;e.managed=true;return e;};gNativeImpacts=0;
+ for(int i=0;i<3;i++)flightmodel::Hook_Impact(reinterpret_cast<uint8_t *>(&weapon),peds.data()+0x8d0*2,cars.data(),&from,&to,point,{});
+ Check(gNativeImpacts==3&&!flightmodel::RotorFailed(cars.data()),"independent airframe damage retains impact delivery instead of legacy rotor hit-counter interception");game::api.AirframeEffects=nullptr;
  Check(gPoliceFailures==1,"scripted CHeli routes one failure through its own controller API without automobile offsets");
  printf("rotorassets: %d failures\n",fail);return fail?1:0;
 }
