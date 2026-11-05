@@ -72,7 +72,9 @@ struct World {
         btTransform transform;
         transform.setIdentity();
         transform.setOrigin(at);
-        body->setWorldTransform(transform);
+        // Keep the interpolation pose/inertia consistent too: deformable
+        // predicted contacts read it even for an immovable obstacle.
+        body->setCenterOfMassTransform(transform);
         body->setLinearVelocity(velocity);
         body->setFriction(0);
         body->setRestitution(0);

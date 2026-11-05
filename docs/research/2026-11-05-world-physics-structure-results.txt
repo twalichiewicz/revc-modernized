@@ -1,0 +1,419 @@
+Structural feasibility results, 2026-11-05
+Research only: geometric gate FAILED; no SDK acceptance or game installation.
+
+--- initial ---
+variant=explicit-forces
+rigid-wing miss: joint_broken=0 chassis_slowdown=0.000000 m/s static_reaction=0.000000 Ns momentum_error=0.000000000 Ns PASS
+rigid-wing strike: joint_broken=1 chassis_slowdown=0.555556 m/s static_reaction=2702.992514 Ns momentum_error=0.000000000 Ns PASS
+rigid-soft: projectile_vz=0.721065 m/s sheet_pz=-5.721065 Ns elastic_shape_change=0.147493 m momentum_error=0.000000000 Ns PASS
+soft-soft symmetric: signed_separation=0.092553 m top_pz=0.039870 Ns momentum_error=0.000000000 Ns PASS
+soft-soft asymmetric: signed_separation=0.079410 m top_pz=-0.096840 Ns momentum_error=0.000000000 Ns PASS
+Scope: CPU rigid breakage + elastic contact coupling only. Plasticity/fracture, angular CCD, real assets, city performance and game ownership are NOT validated.
+exit=0
+
+--- conservation ---
+current-geometry force: force_error=0 N torque_error=0 Nm PASS
+contact equal          rotation=0 centroid=0 P=0 L=0 share=0 velocity=0 KE=0.500000000->0.137681159 reference=0.137681159 PASS
+contact equal          rotation=0 centroid=1 P=1.11e-16 L=0 share=0 velocity=0 KE=0.500000000->0.125000000 reference=0.125000000 PASS
+contact equal          rotation=1 centroid=0 P=0 L=1.04e-17 share=0 velocity=0 KE=0.500000000->0.137681159 reference=0.137681159 PASS
+contact equal          rotation=1 centroid=1 P=0 L=2.31e-16 share=0 velocity=0 KE=0.500000000->0.125000000 reference=0.125000000 PASS
+contact heavy-face     rotation=0 centroid=0 P=0 L=4.44e-16 share=0 velocity=0 KE=0.500000000->0.079831933 reference=0.079831933 PASS
+contact heavy-face     rotation=0 centroid=1 P=0 L=0 share=0 velocity=0 KE=0.500000000->0.071428571 reference=0.071428571 PASS
+contact heavy-face     rotation=1 centroid=0 P=0 L=5.82e-17 share=0 velocity=0 KE=0.500000000->0.079831933 reference=0.079831933 PASS
+contact heavy-face     rotation=1 centroid=1 P=1.11e-16 L=5.72e-17 share=0 velocity=0 KE=0.500000000->0.071428571 reference=0.071428571 PASS
+contact light-face     rotation=0 centroid=0 P=0 L=0 share=5.55e-17 velocity=0 KE=0.500000000->0.395833333 reference=0.395833333 PASS
+contact light-face     rotation=0 centroid=1 P=0 L=0 share=5.55e-17 velocity=0 KE=0.500000000->0.384615385 reference=0.384615385 PASS
+contact light-face     rotation=1 centroid=0 P=0 L=2.29e-16 share=6.21e-17 velocity=0 KE=0.500000000->0.395833333 reference=0.395833333 PASS
+contact light-face     rotation=1 centroid=1 P=0 L=2.22e-16 share=0 velocity=0 KE=0.500000000->0.384615385 reference=0.384615385 PASS
+contact mixed-face     rotation=0 centroid=0 P=0 L=0 share=0 velocity=0 KE=0.500000000->0.165551839 reference=0.165551839 PASS
+contact mixed-face     rotation=0 centroid=1 P=0 L=0 share=0 velocity=0 KE=0.500000000->0.271573604 reference=0.271573604 PASS
+contact mixed-face     rotation=1 centroid=0 P=0 L=2.22e-16 share=3.47e-18 velocity=0 KE=0.500000000->0.165551839 reference=0.165551839 PASS
+contact mixed-face     rotation=1 centroid=1 P=0 L=2.22e-16 share=0 velocity=0 KE=0.500000000->0.271573604 reference=0.271573604 PASS
+contact fixed-node     rotation=0 centroid=0 P=0 L=8.88e-16 share=0 velocity=0 KE=1.500000000->0.184210526 reference=0.184210526 PASS
+contact fixed-node     rotation=0 centroid=1 P=0 L=8.88e-16 share=0 velocity=0 KE=1.500000000->0.000000000 reference=0.000000000 PASS
+contact fixed-node     rotation=1 centroid=0 P=0 L=1.12e-16 share=0 velocity=0 KE=1.500000000->0.184210526 reference=0.184210526 PASS
+contact fixed-node     rotation=1 centroid=1 P=2.24e-16 L=2.22e-16 share=0 velocity=0 KE=1.500000000->0.000000000 reference=0.000000000 PASS
+contact fixed-face     rotation=0 centroid=0 P=0 L=0 share=0 velocity=0 KE=0.500000000->0.000000000 reference=0.000000000 PASS
+contact fixed-face     rotation=0 centroid=1 P=0 L=0 share=0 velocity=0 KE=0.500000000->0.000000000 reference=0.000000000 PASS
+contact fixed-face     rotation=1 centroid=0 P=1.11e-16 L=2.3e-16 share=0 velocity=0 KE=0.500000000->0.000000000 reference=0.000000000 PASS
+contact fixed-face     rotation=1 centroid=1 P=5.55e-17 L=5.55e-17 share=0 velocity=0 KE=0.500000000->0.000000000 reference=0.000000000 PASS
+contact fixed-vertex   rotation=0 centroid=0 P=0 L=4.44e-16 share=2.78e-17 velocity=0 KE=0.500000000->0.129629630 reference=0.129629630 PASS
+contact fixed-vertex   rotation=0 centroid=1 P=0 L=2.22e-16 share=0 velocity=0 KE=0.500000000->0.125000000 reference=0.125000000 PASS
+contact fixed-vertex   rotation=1 centroid=0 P=3.49e-17 L=5.55e-17 share=3.47e-18 velocity=0 KE=0.500000000->0.129629630 reference=0.129629630 PASS
+contact fixed-vertex   rotation=1 centroid=1 P=4.16e-17 L=5.72e-17 share=0 velocity=0 KE=0.500000000->0.125000000 reference=0.125000000 PASS
+contact all-fixed      rotation=0 centroid=0 P=0 L=0 share=0 velocity=0 KE=0.000000000->0.000000000 reference=0.000000000 PASS
+contact all-fixed      rotation=0 centroid=1 P=0 L=0 share=0 velocity=0 KE=0.000000000->0.000000000 reference=0.000000000 PASS
+contact all-fixed      rotation=1 centroid=0 P=0 L=0 share=0 velocity=0 KE=0.000000000->0.000000000 reference=0.000000000 PASS
+contact all-fixed      rotation=1 centroid=1 P=0 L=0 share=0 velocity=0 KE=0.000000000->0.000000000 reference=0.000000000 PASS
+contact separating     rotation=0 centroid=0 P=0 L=0 share=0 velocity=0 KE=1.000000000->1.000000000 reference=1.000000000 PASS
+contact separating     rotation=0 centroid=1 P=0 L=0 share=0 velocity=0 KE=1.000000000->1.000000000 reference=1.000000000 PASS
+contact separating     rotation=1 centroid=0 P=0 L=0 share=0 velocity=0 KE=1.000000000->1.000000000 reference=1.000000000 PASS
+contact separating     rotation=1 centroid=1 P=0 L=0 share=0 velocity=0 KE=1.000000000->1.000000000 reference=1.000000000 PASS
+contact sliding        rotation=0 centroid=0 P=0 L=0 share=1.19e-16 velocity=0 KE=5.500000000->4.372969188 reference=4.372969188 PASS
+contact sliding        rotation=0 centroid=1 P=0 L=8.9e-16 share=1.16e-16 velocity=2.78e-17 KE=5.500000000->4.730243676 reference=4.730243676 PASS
+contact sliding        rotation=1 centroid=0 P=0 L=0 share=0 velocity=0 KE=5.500000000->4.372969188 reference=4.372969188 PASS
+contact sliding        rotation=1 centroid=1 P=0 L=8.95e-16 share=2.31e-16 velocity=0 KE=5.500000000->4.730243676 reference=4.730243676 PASS
+contact sticking       rotation=0 centroid=0 P=0 L=4.45e-16 share=0 velocity=0 KE=0.506250000->0.167621237 reference=0.167621237 PASS
+contact sticking       rotation=0 centroid=1 P=0 L=4.45e-16 share=7.76e-18 velocity=3.1e-17 KE=0.506250000->0.274968274 reference=0.274968274 PASS
+contact sticking       rotation=1 centroid=0 P=5.55e-17 L=5.55e-17 share=1.55e-17 velocity=0 KE=0.506250000->0.167621237 reference=0.167621237 PASS
+contact sticking       rotation=1 centroid=1 P=0 L=0 share=0 velocity=0 KE=0.506250000->0.274968274 reference=0.274968274 PASS
+contact matrix: 44/44 passed
+exit=0
+
+--- step ---
+world rigid-sheet mass=2 nonuniform=0 reverse=0 miss=0 location=0 dt=0.002083333 projection=0 contacts=3494 max_P=7.10544174e-15 max_L=2.95169233e-05 max_energy_gain=0 mass_error=0 min_clearance=0.028582 primary_P=5.27e-16 secondary_P=0 max_recipient_I=0.160475 PASS
+world rigid-sheet mass=2 nonuniform=0 reverse=0 miss=0 location=1 dt=0.002083333 projection=0 contacts=2595 max_P=6.21966856e-15 max_L=7.04393994e-05 max_energy_gain=0 mass_error=0 min_clearance=0.028775 primary_P=5.9e-16 secondary_P=0 max_recipient_I=0.1287 PASS
+world rigid-sheet mass=20 nonuniform=0 reverse=0 miss=0 location=0 dt=0.002083333 projection=0 contacts=2350 max_P=6.21848979e-15 max_L=0.000107892936 max_energy_gain=0 mass_error=0 min_clearance=0.028950 primary_P=3.89e-16 secondary_P=0 max_recipient_I=1.0242 PASS
+world rigid-sheet mass=20 nonuniform=0 reverse=0 miss=0 location=1 dt=0.002083333 projection=0 contacts=2039 max_P=3.55509177e-15 max_L=0.000143000438 max_energy_gain=0 mass_error=0 min_clearance=0.029196 primary_P=5.34e-16 secondary_P=0 max_recipient_I=0.831647 PASS
+world sheets nonuniform=0 reverse=0 dt=0.002083333 projection=0 gap=0.079410 max_P=1.11022302e-15 max_L=4.69097583e-17 max_energy_gain=0 mass_error=0 primary_P=0 secondary_P=5.38e-17 max_recipient_I=0.0111523 PASS
+world rigid-sheet mass=2 nonuniform=1 reverse=0 miss=0 location=0 dt=0.002083333 projection=0 contacts=3501 max_P=7.99406001e-15 max_L=8.58567506e-05 max_energy_gain=0 mass_error=0 min_clearance=0.028678 primary_P=5e-16 secondary_P=0 max_recipient_I=0.212823 PASS
+world rigid-sheet mass=2 nonuniform=1 reverse=0 miss=0 location=1 dt=0.002083333 projection=0 contacts=3687 max_P=5.35763497e-15 max_L=8.61606541e-05 max_energy_gain=0 mass_error=0 min_clearance=0.025701 primary_P=9.17e-16 secondary_P=0 max_recipient_I=0.132833 PASS
+world rigid-sheet mass=20 nonuniform=1 reverse=0 miss=0 location=0 dt=0.002083333 projection=0 contacts=3542 max_P=4.49798778e-15 max_L=0.000371586211 max_energy_gain=0 mass_error=0 min_clearance=0.029515 primary_P=3.75e-16 secondary_P=0 max_recipient_I=1.22354 PASS
+world rigid-sheet mass=20 nonuniform=1 reverse=0 miss=0 location=1 dt=0.002083333 projection=0 contacts=2548 max_P=4.44089226e-15 max_L=0.00107557965 max_energy_gain=0 mass_error=0 min_clearance=0.027008 primary_P=6.13e-16 secondary_P=0 max_recipient_I=0.602178 PASS
+world sheets nonuniform=1 reverse=0 dt=0.002083333 projection=0 gap=0.079296 max_P=1.83186799e-15 max_L=9.14198328e-16 max_energy_gain=0 mass_error=0 primary_P=0 secondary_P=1.8e-16 max_recipient_I=0.0202768 PASS
+world rigid-sheet mass=2 nonuniform=0 reverse=1 miss=0 location=0 dt=0.002083333 projection=0 contacts=3494 max_P=7.10544174e-15 max_L=2.95169233e-05 max_energy_gain=0 mass_error=0 min_clearance=0.028582 primary_P=5.27e-16 secondary_P=0 max_recipient_I=0.160475 PASS
+world rigid-sheet mass=2 nonuniform=0 reverse=1 miss=0 location=1 dt=0.002083333 projection=0 contacts=2595 max_P=6.21966856e-15 max_L=7.04393994e-05 max_energy_gain=0 mass_error=0 min_clearance=0.028775 primary_P=5.9e-16 secondary_P=0 max_recipient_I=0.1287 PASS
+world rigid-sheet mass=20 nonuniform=0 reverse=1 miss=0 location=0 dt=0.002083333 projection=0 contacts=2350 max_P=6.21848979e-15 max_L=0.000107892936 max_energy_gain=0 mass_error=0 min_clearance=0.028950 primary_P=3.89e-16 secondary_P=0 max_recipient_I=1.0242 PASS
+world rigid-sheet mass=20 nonuniform=0 reverse=1 miss=0 location=1 dt=0.002083333 projection=0 contacts=2039 max_P=3.55509177e-15 max_L=0.000143000438 max_energy_gain=0 mass_error=0 min_clearance=0.029196 primary_P=5.34e-16 secondary_P=0 max_recipient_I=0.831647 PASS
+world sheets nonuniform=0 reverse=1 dt=0.002083333 projection=0 gap=0.079410 max_P=2.3869795e-15 max_L=8.02883736e-17 max_energy_gain=0 mass_error=0 primary_P=0 secondary_P=5.38e-17 max_recipient_I=0.0111523 PASS
+world rigid-sheet mass=2 nonuniform=1 reverse=1 miss=0 location=0 dt=0.002083333 projection=0 contacts=3501 max_P=7.99406001e-15 max_L=8.58567506e-05 max_energy_gain=0 mass_error=0 min_clearance=0.028678 primary_P=5e-16 secondary_P=0 max_recipient_I=0.212823 PASS
+world rigid-sheet mass=2 nonuniform=1 reverse=1 miss=0 location=1 dt=0.002083333 projection=0 contacts=3687 max_P=5.35763497e-15 max_L=8.61606541e-05 max_energy_gain=0 mass_error=0 min_clearance=0.025701 primary_P=9.17e-16 secondary_P=0 max_recipient_I=0.132833 PASS
+world rigid-sheet mass=20 nonuniform=1 reverse=1 miss=0 location=0 dt=0.002083333 projection=0 contacts=3542 max_P=4.49798778e-15 max_L=0.000371586211 max_energy_gain=0 mass_error=0 min_clearance=0.029515 primary_P=3.75e-16 secondary_P=0 max_recipient_I=1.22354 PASS
+world rigid-sheet mass=20 nonuniform=1 reverse=1 miss=0 location=1 dt=0.002083333 projection=0 contacts=2548 max_P=4.44089226e-15 max_L=0.00107557965 max_energy_gain=0 mass_error=0 min_clearance=0.027008 primary_P=6.13e-16 secondary_P=0 max_recipient_I=0.602178 PASS
+world sheets nonuniform=1 reverse=1 dt=0.002083333 projection=0 gap=0.079296 max_P=1.27675648e-15 max_L=1.32999206e-15 max_energy_gain=0 mass_error=0 primary_P=0 secondary_P=3.23e-16 max_recipient_I=0.0202768 PASS
+world rigid-sheet mass=20 nonuniform=0 reverse=0 miss=1 location=0 dt=0.002083333 projection=0 contacts=0 max_P=0 max_L=0 max_energy_gain=0 mass_error=0 min_clearance=-2.958623 primary_P=0 secondary_P=0 max_recipient_I=0 PASS
+world three-way dt=0.002083333 projection=0 max_P=5.35423548e-15 max_L=0.00011927046 max_energy_gain=0 min_clearance=0.028269 lower_Pz=-2.117219 primary_P=3.33e-16 secondary_P=3.52e-16 max_recipient_I=1.0242 PASS
+world rigid-sheet mass=2 nonuniform=0 reverse=0 miss=0 location=0 dt=0.001041667 projection=0 contacts=6840 max_P=7.10570539e-15 max_L=2.38980283e-05 max_energy_gain=0 mass_error=0 min_clearance=0.029477 primary_P=7.29e-16 secondary_P=0 max_recipient_I=0.286629 PASS
+world rigid-sheet mass=2 nonuniform=0 reverse=0 miss=0 location=1 dt=0.001041667 projection=0 contacts=5047 max_P=6.23197375e-15 max_L=4.85050433e-05 max_energy_gain=0 mass_error=0 min_clearance=0.029429 primary_P=7.12e-16 secondary_P=0 max_recipient_I=0.21018 PASS
+world rigid-sheet mass=20 nonuniform=0 reverse=0 miss=0 location=0 dt=0.001041667 projection=0 contacts=4528 max_P=5.33949126e-15 max_L=8.82145149e-05 max_energy_gain=0 mass_error=0 min_clearance=0.029555 primary_P=3.89e-16 secondary_P=0 max_recipient_I=1.86434 PASS
+world rigid-sheet mass=20 nonuniform=0 reverse=0 miss=0 location=1 dt=0.001041667 projection=0 contacts=4045 max_P=4.46711741e-15 max_L=9.23559846e-05 max_energy_gain=0 mass_error=0 min_clearance=0.029688 primary_P=6.07e-16 secondary_P=0 max_recipient_I=1.50765 PASS
+world sheets nonuniform=0 reverse=0 dt=0.001041667 projection=0 gap=0.075467 max_P=4.4408921e-16 max_L=4.09069564e-16 max_energy_gain=0 mass_error=0 primary_P=0 secondary_P=3.47e-17 max_recipient_I=0.0109877 PASS
+world rigid-sheet mass=2 nonuniform=1 reverse=0 miss=0 location=0 dt=0.001041667 projection=0 contacts=6975 max_P=7.99469085e-15 max_L=6.12285795e-05 max_energy_gain=0 mass_error=0 min_clearance=0.029505 primary_P=4.44e-16 secondary_P=0 max_recipient_I=0.390311 PASS
+world rigid-sheet mass=2 nonuniform=1 reverse=0 miss=0 location=1 dt=0.001041667 projection=0 contacts=7262 max_P=6.22220332e-15 max_L=8.25407028e-05 max_energy_gain=0 mass_error=0 min_clearance=0.028075 primary_P=8.74e-16 secondary_P=0 max_recipient_I=0.0741743 PASS
+world rigid-sheet mass=20 nonuniform=1 reverse=0 miss=0 location=0 dt=0.001041667 projection=0 contacts=7049 max_P=5.38572611e-15 max_L=0.000231695994 max_energy_gain=0 mass_error=0 min_clearance=0.029849 primary_P=4.44e-16 secondary_P=0 max_recipient_I=2.25375 PASS
+world rigid-sheet mass=20 nonuniform=1 reverse=0 miss=0 location=1 dt=0.001041667 projection=0 contacts=5030 max_P=4.93799695e-15 max_L=0.000755047381 max_energy_gain=0 mass_error=0 min_clearance=0.028865 primary_P=5.83e-16 secondary_P=0 max_recipient_I=0.651179 PASS
+world sheets nonuniform=1 reverse=0 dt=0.001041667 projection=0 gap=0.076130 max_P=1.94289029e-15 max_L=3.97331417e-16 max_energy_gain=0 mass_error=0 primary_P=0 secondary_P=2.08e-17 max_recipient_I=0.0199776 PASS
+world rigid-sheet mass=2 nonuniform=0 reverse=1 miss=0 location=0 dt=0.001041667 projection=0 contacts=6840 max_P=7.10570539e-15 max_L=2.38980283e-05 max_energy_gain=0 mass_error=0 min_clearance=0.029477 primary_P=7.29e-16 secondary_P=0 max_recipient_I=0.286629 PASS
+world rigid-sheet mass=2 nonuniform=0 reverse=1 miss=0 location=1 dt=0.001041667 projection=0 contacts=5047 max_P=6.23197375e-15 max_L=4.85050433e-05 max_energy_gain=0 mass_error=0 min_clearance=0.029429 primary_P=7.12e-16 secondary_P=0 max_recipient_I=0.21018 PASS
+world rigid-sheet mass=20 nonuniform=0 reverse=1 miss=0 location=0 dt=0.001041667 projection=0 contacts=4528 max_P=5.33949126e-15 max_L=8.82145149e-05 max_energy_gain=0 mass_error=0 min_clearance=0.029555 primary_P=3.89e-16 secondary_P=0 max_recipient_I=1.86434 PASS
+world rigid-sheet mass=20 nonuniform=0 reverse=1 miss=0 location=1 dt=0.001041667 projection=0 contacts=4045 max_P=4.46711741e-15 max_L=9.23559846e-05 max_energy_gain=0 mass_error=0 min_clearance=0.029688 primary_P=6.07e-16 secondary_P=0 max_recipient_I=1.50765 PASS
+world sheets nonuniform=0 reverse=1 dt=0.001041667 projection=0 gap=0.075467 max_P=1.60982339e-15 max_L=7.95226268e-16 max_energy_gain=0 mass_error=0 primary_P=0 secondary_P=3.47e-17 max_recipient_I=0.0109877 PASS
+world rigid-sheet mass=2 nonuniform=1 reverse=1 miss=0 location=0 dt=0.001041667 projection=0 contacts=6975 max_P=7.99469085e-15 max_L=6.12285795e-05 max_energy_gain=0 mass_error=0 min_clearance=0.029505 primary_P=4.44e-16 secondary_P=0 max_recipient_I=0.390311 PASS
+world rigid-sheet mass=2 nonuniform=1 reverse=1 miss=0 location=1 dt=0.001041667 projection=0 contacts=7262 max_P=6.22220332e-15 max_L=8.25407028e-05 max_energy_gain=0 mass_error=0 min_clearance=0.028075 primary_P=8.74e-16 secondary_P=0 max_recipient_I=0.0741743 PASS
+world rigid-sheet mass=20 nonuniform=1 reverse=1 miss=0 location=0 dt=0.001041667 projection=0 contacts=7049 max_P=5.38572611e-15 max_L=0.000231695994 max_energy_gain=0 mass_error=0 min_clearance=0.029849 primary_P=4.44e-16 secondary_P=0 max_recipient_I=2.25375 PASS
+world rigid-sheet mass=20 nonuniform=1 reverse=1 miss=0 location=1 dt=0.001041667 projection=0 contacts=5030 max_P=4.93799695e-15 max_L=0.000755047381 max_energy_gain=0 mass_error=0 min_clearance=0.028865 primary_P=5.83e-16 secondary_P=0 max_recipient_I=0.651179 PASS
+world sheets nonuniform=1 reverse=1 dt=0.001041667 projection=0 gap=0.076130 max_P=1.49880108e-15 max_L=6.24387039e-16 max_energy_gain=0 mass_error=0 primary_P=0 secondary_P=2.08e-17 max_recipient_I=0.0199776 PASS
+world rigid-sheet mass=20 nonuniform=0 reverse=0 miss=1 location=0 dt=0.001041667 projection=0 contacts=0 max_P=0 max_L=0 max_energy_gain=0 mass_error=0 min_clearance=-2.958623 primary_P=0 secondary_P=0 max_recipient_I=0 PASS
+world three-way dt=0.001041667 projection=0 max_P=7.99890852e-15 max_L=6.40552336e-05 max_energy_gain=0 min_clearance=0.029262 lower_Pz=-2.129540 primary_P=3.61e-16 secondary_P=2.93e-16 max_recipient_I=1.86434 PASS
+world rigid-sheet mass=2 nonuniform=0 reverse=0 miss=0 location=0 dt=0.000520833 projection=0 contacts=13594 max_P=1.06586792e-14 max_L=1.58707737e-05 max_energy_gain=0 mass_error=0 min_clearance=0.029797 primary_P=7.91e-16 secondary_P=0 max_recipient_I=0.274686 PASS
+world rigid-sheet mass=2 nonuniform=0 reverse=0 miss=0 location=1 dt=0.000520833 projection=0 contacts=9887 max_P=7.10609145e-15 max_L=3.11724714e-05 max_energy_gain=0 mass_error=0 min_clearance=0.029785 primary_P=8.04e-16 secondary_P=0 max_recipient_I=0.201422 PASS
+world rigid-sheet mass=20 nonuniform=0 reverse=0 miss=0 location=0 dt=0.000520833 projection=0 contacts=9081 max_P=8.00135783e-15 max_L=5.83791343e-05 max_energy_gain=0 mass_error=0 min_clearance=0.029832 primary_P=4.44e-16 secondary_P=0 max_recipient_I=1.78666 PASS
+world rigid-sheet mass=20 nonuniform=0 reverse=0 miss=0 location=1 dt=0.000520833 projection=0 contacts=8081 max_P=6.21823928e-15 max_L=5.7558569e-05 max_energy_gain=0 mass_error=0 min_clearance=0.029894 primary_P=5.36e-16 secondary_P=0 max_recipient_I=1.44483 PASS
+world sheets nonuniform=0 reverse=0 dt=0.000520833 projection=0 gap=0.067766 max_P=4.99600361e-16 max_L=2.88163643e-16 max_energy_gain=0 mass_error=0 primary_P=0 secondary_P=8.33e-17 max_recipient_I=0.0104664 PASS
+world rigid-sheet mass=2 nonuniform=1 reverse=0 miss=0 location=0 dt=0.000520833 projection=0 contacts=13884 max_P=8.88922413e-15 max_L=3.73331614e-05 max_energy_gain=0 mass_error=0 min_clearance=0.029835 primary_P=6.28e-16 secondary_P=0 max_recipient_I=0.374048 PASS
+world rigid-sheet mass=2 nonuniform=1 reverse=0 miss=0 location=1 dt=0.000520833 projection=0 contacts=13780 max_P=8.01194991e-15 max_L=5.09316049e-05 max_energy_gain=0 mass_error=0 min_clearance=0.029344 primary_P=7.36e-16 secondary_P=0 max_recipient_I=0.0710837 PASS
+world rigid-sheet mass=20 nonuniform=1 reverse=0 miss=0 location=0 dt=0.000520833 projection=0 contacts=14093 max_P=7.99565345e-15 max_L=0.000128375943 max_energy_gain=0 mass_error=0 min_clearance=0.029953 primary_P=4.44e-16 secondary_P=0 max_recipient_I=2.15984 PASS
+world rigid-sheet mass=20 nonuniform=1 reverse=0 miss=0 location=1 dt=0.000520833 projection=0 contacts=10022 max_P=7.99364943e-15 max_L=0.000404886593 max_energy_gain=0 mass_error=0 min_clearance=0.029642 primary_P=5.79e-16 secondary_P=0 max_recipient_I=0.624047 PASS
+world sheets nonuniform=1 reverse=0 dt=0.000520833 projection=0 gap=0.067657 max_P=1.83186799e-15 max_L=5.48146457e-16 max_energy_gain=0 mass_error=0 primary_P=0 secondary_P=2.78e-17 max_recipient_I=0.0188861 PASS
+world rigid-sheet mass=2 nonuniform=0 reverse=1 miss=0 location=0 dt=0.000520833 projection=0 contacts=13594 max_P=1.06586792e-14 max_L=1.58707737e-05 max_energy_gain=0 mass_error=0 min_clearance=0.029797 primary_P=7.91e-16 secondary_P=0 max_recipient_I=0.274686 PASS
+world rigid-sheet mass=2 nonuniform=0 reverse=1 miss=0 location=1 dt=0.000520833 projection=0 contacts=9887 max_P=7.10609145e-15 max_L=3.11724714e-05 max_energy_gain=0 mass_error=0 min_clearance=0.029785 primary_P=8.04e-16 secondary_P=0 max_recipient_I=0.201422 PASS
+world rigid-sheet mass=20 nonuniform=0 reverse=1 miss=0 location=0 dt=0.000520833 projection=0 contacts=9081 max_P=8.00135783e-15 max_L=5.83791343e-05 max_energy_gain=0 mass_error=0 min_clearance=0.029832 primary_P=4.44e-16 secondary_P=0 max_recipient_I=1.78666 PASS
+world rigid-sheet mass=20 nonuniform=0 reverse=1 miss=0 location=1 dt=0.000520833 projection=0 contacts=8081 max_P=6.21823928e-15 max_L=5.7558569e-05 max_energy_gain=0 mass_error=0 min_clearance=0.029894 primary_P=5.36e-16 secondary_P=0 max_recipient_I=1.44483 PASS
+world sheets nonuniform=0 reverse=1 dt=0.000520833 projection=0 gap=0.067766 max_P=1.60982339e-15 max_L=3.80496711e-16 max_energy_gain=0 mass_error=0 primary_P=0 secondary_P=8.5e-17 max_recipient_I=0.0104664 PASS
+world rigid-sheet mass=2 nonuniform=1 reverse=1 miss=0 location=0 dt=0.000520833 projection=0 contacts=13884 max_P=8.88922413e-15 max_L=3.73331614e-05 max_energy_gain=0 mass_error=0 min_clearance=0.029835 primary_P=6.28e-16 secondary_P=0 max_recipient_I=0.374048 PASS
+world rigid-sheet mass=2 nonuniform=1 reverse=1 miss=0 location=1 dt=0.000520833 projection=0 contacts=13780 max_P=8.01194991e-15 max_L=5.09316049e-05 max_energy_gain=0 mass_error=0 min_clearance=0.029344 primary_P=7.36e-16 secondary_P=0 max_recipient_I=0.0710837 PASS
+world rigid-sheet mass=20 nonuniform=1 reverse=1 miss=0 location=0 dt=0.000520833 projection=0 contacts=14093 max_P=7.99565345e-15 max_L=0.000128375943 max_energy_gain=0 mass_error=0 min_clearance=0.029953 primary_P=4.44e-16 secondary_P=0 max_recipient_I=2.15984 PASS
+world rigid-sheet mass=20 nonuniform=1 reverse=1 miss=0 location=1 dt=0.000520833 projection=0 contacts=10022 max_P=7.99364943e-15 max_L=0.000404886593 max_energy_gain=0 mass_error=0 min_clearance=0.029642 primary_P=5.79e-16 secondary_P=0 max_recipient_I=0.624047 PASS
+world sheets nonuniform=1 reverse=1 dt=0.000520833 projection=0 gap=0.067657 max_P=9.43689571e-16 max_L=3.56180738e-16 max_energy_gain=0 mass_error=0 primary_P=0 secondary_P=2.78e-17 max_recipient_I=0.0188861 PASS
+world rigid-sheet mass=20 nonuniform=0 reverse=0 miss=1 location=0 dt=0.000520833 projection=0 contacts=0 max_P=0 max_L=0 max_energy_gain=0 mass_error=0 min_clearance=-2.958623 primary_P=0 secondary_P=0 max_recipient_I=0 PASS
+world three-way dt=0.000520833 projection=0 max_P=9.77092757e-15 max_L=6.59461736e-05 max_energy_gain=0 min_clearance=0.029619 lower_Pz=-2.175740 primary_P=4.44e-16 secondary_P=2.22e-16 max_recipient_I=1.78666 PASS
+world three-way dt=0.000520833 projection=0 max_P=9.77092757e-15 max_L=6.59461736e-05 max_energy_gain=0 min_clearance=0.029619 lower_Pz=-2.175740 primary_P=4.44e-16 secondary_P=2.22e-16 max_recipient_I=1.78666 PASS
+world three-way dt=0.000260417 projection=0 max_P=1.33228393e-14 max_L=3.87164268e-05 max_energy_gain=0 min_clearance=0.029821 lower_Pz=-2.161474 primary_P=3.61e-16 secondary_P=2.29e-16 max_recipient_I=1.6313 PASS
+world three-way dt=0.000130208 projection=0 max_P=1.25172021e-14 max_L=2.12859783e-05 max_energy_gain=0 min_clearance=0.029912 lower_Pz=-2.161911 primary_P=4.44e-16 secondary_P=2.5e-16 max_recipient_I=1.32057 PASS
+three-way refinement 3840->7680Hz: dx=0.00336101815 m dv=0.00561284237 m/s PASS
+world-step matrix: 70/70 passed
+exit=0
+
+--- material ---
+material elastic_force_and_energy PASS
+material elastic_unload PASS
+material plastic_return PASS
+material return_work_partition PASS
+material permanent_set_at_zero_force PASS
+material repeat_sample_spends_nothing PASS
+material isotropic_hardening PASS
+material fracture_needs_available_work PASS
+material fracture_spends_once PASS
+material broken_member_is_inert PASS
+material compression_plasticity PASS
+material compression_unload PASS
+material reject_nonfinite_before_state_change PASS
+material reject_zero_reference_length PASS
+material reject_overflow_without_partial_state PASS
+material matrix: 15/15 passed
+exit=0
+
+--- face-tree ---
+disconnected-face-tree faces=0 actual_face_hits=0 phantom_gap_hits=0 PASS
+disconnected-face-tree faces=1 actual_face_hits=1 phantom_gap_hits=0 PASS
+disconnected-face-tree faces=2 actual_face_hits=2 phantom_gap_hits=0 PASS
+disconnected-face-tree faces=3 actual_face_hits=3 phantom_gap_hits=0 PASS
+disconnected-face-tree faces=5 actual_face_hits=5 phantom_gap_hits=0 PASS
+disconnected-face-tree faces=16 actual_face_hits=16 phantom_gap_hits=0 PASS
+exit=0
+
+--- structure ---
+structure different_materials_keep_distinct_forces PASS
+structure central_internal_forces_conserve_momentum PASS
+structure intact_actual_collision_face PASS
+structure fractured_mount_splits_graph PASS
+structure split_keeps_mass_momentum_and_energy PASS
+structure body_rebuild_matches_state PASS
+structure unequal_fragment_mass_and_inertia PASS
+structure no_phantom_hull_across_gap PASS
+structure surviving_fragments_have_collision PASS
+structure repeated_tear_removes_actual_faces PASS
+structure collision_render_aero_share_current_surface PASS
+structure fixture_initial_momentum_is_literal PASS
+wall clip normal rate=19200 steps=3072 nodes=20 members=94 faces=23 fragments=2 assembly_slowdown=5.24764601 chassis_slowdown=0.0163496571 mountF=2749.58439 plastic=0.0258409836 brokenMounts=16 deflection=6.54192784 reaction=1218.27183 dP=3.04694282e-11 dL=0.00398679798 energyGain=1.16415322e-09 peak_contacts=4 cpu_s=0.023400 rebuilds=21 rebuild_s=0.000744
+structure wall_work_and_reactions PASS
+structure wall_load_deforms_and_severs PASS
+mount_receipts root_dP=2.385388e-12 root_dL=3.09925607e-12 impulse=38.6337546 angular_impulse=125.345039 parent_mass=200 detached_mass=28
+structure mount_transmits_force_and_torque_to_chassis PASS
+structure split_preserves_parent_and_wing_mass PASS
+fragment_inertia parent_Izz=82.0016513 detached_Izz=19.4898016 kg_m2
+structure separated_fragments_retain_geometric_inertia PASS
+structure current_collision_surface_after_crash PASS
+wall clip oblique rate=19200 steps=3072 nodes=20 members=94 faces=23 fragments=2 assembly_slowdown=4.54087455 chassis_slowdown=-0.0473549654 mountF=2749.79251 plastic=0.0254196491 brokenMounts=16 deflection=6.32849156 reaction=1051.20486 dP=2.18560381e-11 dL=0.000965266392 energyGain=1.16415322e-09 peak_contacts=4 cpu_s=0.019927 rebuilds=22 rebuild_s=0.000635
+structure wall_work_and_reactions PASS
+structure wall_load_deforms_and_severs PASS
+mount_receipts root_dP=6.75726654e-12 root_dL=8.15855632e-12 impulse=28.5219506 angular_impulse=99.1193166 parent_mass=200 detached_mass=28
+structure mount_transmits_force_and_torque_to_chassis PASS
+structure split_preserves_parent_and_wing_mass PASS
+fragment_inertia parent_Izz=82.0032828 detached_Izz=14.766979 kg_m2
+structure separated_fragments_retain_geometric_inertia PASS
+structure current_collision_surface_after_crash PASS
+wall miss normal rate=19200 steps=3072 nodes=20 members=94 faces=36 fragments=1 assembly_slowdown=-1.42108547e-13 chassis_slowdown=1.37845291e-12 mountF=8.05133737e-08 plastic=0 brokenMounts=0 deflection=3.37507799e-13 reaction=0 dP=5.09317033e-11 dL=1.41881174e-10 energyGain=5.58793545e-09 peak_contacts=0 cpu_s=0.012294 rebuilds=1 rebuild_s=0.000044
+structure wall_work_and_reactions PASS
+structure clear_miss_keeps_structure PASS
+mount_receipts root_dP=3.03271397e-11 root_dL=1.32038133e-10 impulse=3.11066102e-10 angular_impulse=9.19660545e-10 parent_mass=228 detached_mass=0
+structure mount_transmits_force_and_torque_to_chassis PASS
+structure split_preserves_parent_and_wing_mass PASS
+fragment_inertia parent_Izz=206.725614 detached_Izz=0 kg_m2
+structure separated_fragments_retain_geometric_inertia PASS
+structure current_collision_surface_after_crash PASS
+wall clip normal rate=38400 steps=6144 nodes=20 members=94 faces=22 fragments=2 assembly_slowdown=5.34425021 chassis_slowdown=0.135343793 mountF=2749.098 plastic=0.0253310111 brokenMounts=16 deflection=5.8071777 reaction=1228.94276 dP=3.66100408e-11 dL=0.000607177936 energyGain=2.09547579e-09 peak_contacts=4 cpu_s=0.041999 rebuilds=23 rebuild_s=0.000619
+structure wall_work_and_reactions PASS
+structure wall_load_deforms_and_severs PASS
+mount_receipts root_dP=1.65841223e-11 root_dL=3.73297329e-11 impulse=84.5366989 angular_impulse=222.882789 parent_mass=200 detached_mass=28
+structure mount_transmits_force_and_torque_to_chassis PASS
+structure split_preserves_parent_and_wing_mass PASS
+fragment_inertia parent_Izz=82.0011575 detached_Izz=15.0992221 kg_m2
+structure separated_fragments_retain_geometric_inertia PASS
+structure current_collision_surface_after_crash PASS
+wall clip oblique rate=38400 steps=6144 nodes=20 members=94 faces=23 fragments=2 assembly_slowdown=4.52412327 chassis_slowdown=-0.0485407986 mountF=2749.80883 plastic=0.0252966846 brokenMounts=16 deflection=6.33116112 reaction=1047.32062 dP=2.54811148e-11 dL=0.000714551853 energyGain=2.09547579e-09 peak_contacts=4 cpu_s=0.032613 rebuilds=23 rebuild_s=0.000560
+structure wall_work_and_reactions PASS
+structure wall_load_deforms_and_severs PASS
+mount_receipts root_dP=2.49954059e-12 root_dL=4.87573302e-12 impulse=28.5556102 angular_impulse=97.7349024 parent_mass=200 detached_mass=28
+structure mount_transmits_force_and_torque_to_chassis PASS
+structure split_preserves_parent_and_wing_mass PASS
+fragment_inertia parent_Izz=82.0030212 detached_Izz=14.8928027 kg_m2
+structure separated_fragments_retain_geometric_inertia PASS
+structure current_collision_surface_after_crash PASS
+wall miss normal rate=38400 steps=6144 nodes=20 members=94 faces=36 fragments=1 assembly_slowdown=-3.69482223e-13 chassis_slowdown=3.97903932e-13 mountF=4.88054042e-08 plastic=0 brokenMounts=0 deflection=2.38031816e-13 reaction=0 dP=9.09494702e-11 dL=2.57387001e-10 energyGain=1.0477379e-08 peak_contacts=0 cpu_s=0.024705 rebuilds=1 rebuild_s=0.000038
+structure wall_work_and_reactions PASS
+structure clear_miss_keeps_structure PASS
+mount_receipts root_dP=7.60570468e-11 root_dL=2.76118872e-10 impulse=1.61358867e-10 angular_impulse=1.05868909e-10 parent_mass=228 detached_mass=0
+structure mount_transmits_force_and_torque_to_chassis PASS
+structure split_preserves_parent_and_wing_mass PASS
+fragment_inertia parent_Izz=206.725614 detached_Izz=0 kg_m2
+structure separated_fragments_retain_geometric_inertia PASS
+structure current_collision_surface_after_crash PASS
+wall clip normal rate=76800 steps=12288 nodes=20 members=94 faces=23 fragments=2 assembly_slowdown=5.28005004 chassis_slowdown=0.0548108158 mountF=2749.99738 plastic=0.0252066277 brokenMounts=16 deflection=6.51824449 reaction=1222.39251 dP=3.50165322e-11 dL=0.00103524672 energyGain=9.31322575e-10 peak_contacts=4 cpu_s=0.083579 rebuilds=23 rebuild_s=0.000538
+structure wall_work_and_reactions PASS
+structure wall_load_deforms_and_severs PASS
+mount_receipts root_dP=8.72129823e-12 root_dL=1.56268098e-11 impulse=49.2532208 angular_impulse=151.355009 parent_mass=200 detached_mass=28
+structure mount_transmits_force_and_torque_to_chassis PASS
+structure split_preserves_parent_and_wing_mass PASS
+fragment_inertia parent_Izz=82.0019075 detached_Izz=16.3647521 kg_m2
+structure separated_fragments_retain_geometric_inertia PASS
+structure current_collision_surface_after_crash PASS
+wall clip oblique rate=76800 steps=12288 nodes=20 members=94 faces=23 fragments=2 assembly_slowdown=4.49325085 chassis_slowdown=-0.047383069 mountF=2749.9568 plastic=0.0251544629 brokenMounts=16 deflection=6.33591011 reaction=1039.38566 dP=8.11792137e-11 dL=0.000440953325 energyGain=9.31322575e-10 peak_contacts=4 cpu_s=0.059055 rebuilds=25 rebuild_s=0.000571
+structure wall_work_and_reactions PASS
+structure wall_load_deforms_and_severs PASS
+mount_receipts root_dP=7.86624135e-11 root_dL=9.43557446e-12 impulse=29.6112049 angular_impulse=98.9567107 parent_mass=200 detached_mass=28
+structure mount_transmits_force_and_torque_to_chassis PASS
+structure split_preserves_parent_and_wing_mass PASS
+fragment_inertia parent_Izz=82.0021513 detached_Izz=15.3881562 kg_m2
+structure separated_fragments_retain_geometric_inertia PASS
+structure current_collision_surface_after_crash PASS
+wall miss normal rate=76800 steps=12288 nodes=20 members=94 faces=36 fragments=1 assembly_slowdown=-1.00897068e-12 chassis_slowdown=-1.98951966e-12 mountF=1.4361845e-07 plastic=0 brokenMounts=0 deflection=6.11066753e-13 reaction=0 dP=2.65572453e-10 dL=2.42835093e-10 energyGain=3.16649675e-08 peak_contacts=0 cpu_s=0.048758 rebuilds=1 rebuild_s=0.000038
+structure wall_work_and_reactions PASS
+structure clear_miss_keeps_structure PASS
+mount_receipts root_dP=2.40112906e-10 root_dL=9.64311809e-11 impulse=1.66651665e-10 angular_impulse=6.51222932e-10 parent_mass=228 detached_mass=0
+structure mount_transmits_force_and_torque_to_chassis PASS
+structure split_preserves_parent_and_wing_mass PASS
+fragment_inertia parent_Izz=206.725614 detached_Izz=0 kg_m2
+structure separated_fragments_retain_geometric_inertia PASS
+structure current_collision_surface_after_crash PASS
+structural matrix: 66/66 passed
+exit=0
+
+--- geometry ---
+projectile rate=480 hole=0 empty=0 moving_surface=0 ray=1 impulse=0 min_clearance=-3.66666667 dP=0 dL=0 energyGain=0
+structure projectile_actual_material_query PASS
+structure fast_projectile_stops_at_intact_material FAIL
+structure projectile_reactions_are_conservative PASS
+projectile rate=480 hole=1 empty=0 moving_surface=0 ray=0 impulse=6.39734408e-17 min_clearance=-3.66666667 dP=6.39734408e-17 dL=1.38777878e-16 energyGain=0
+structure projectile_actual_material_query PASS
+structure projectile_passes_empty_or_torn_surface PASS
+structure projectile_reactions_are_conservative PASS
+projectile rate=480 hole=0 empty=1 moving_surface=0 ray=0 impulse=0 min_clearance=-3.66666667 dP=0 dL=0 energyGain=0
+structure projectile_actual_material_query PASS
+structure projectile_passes_empty_or_torn_surface PASS
+structure projectile_reactions_are_conservative PASS
+projectile rate=480 hole=0 empty=0 moving_surface=1 ray=1 impulse=0 min_clearance=-3.66666667 dP=0 dL=0 energyGain=0
+structure projectile_actual_material_query PASS
+structure fast_projectile_stops_at_intact_material FAIL
+structure projectile_reactions_are_conservative PASS
+projectile rate=19200 hole=0 empty=0 moving_surface=0 ray=1 impulse=0 min_clearance=-2.52083333 dP=0 dL=0 energyGain=0
+structure projectile_actual_material_query PASS
+structure fast_projectile_stops_at_intact_material FAIL
+structure projectile_reactions_are_conservative PASS
+projectile rate=19200 hole=1 empty=0 moving_surface=0 ray=0 impulse=1.80411242e-16 min_clearance=-2.52083333 dP=1.80411242e-16 dL=1.80411242e-16 energyGain=0
+structure projectile_actual_material_query PASS
+structure projectile_passes_empty_or_torn_surface PASS
+structure projectile_reactions_are_conservative PASS
+projectile rate=19200 hole=0 empty=1 moving_surface=0 ray=0 impulse=0 min_clearance=-2.52083333 dP=0 dL=0 energyGain=0
+structure projectile_actual_material_query PASS
+structure projectile_passes_empty_or_torn_surface PASS
+structure projectile_reactions_are_conservative PASS
+projectile rate=19200 hole=0 empty=0 moving_surface=1 ray=1 impulse=9.99310476 min_clearance=0.0195175747 dP=3.63797881e-12 dL=1.70321941e-11 energyGain=0
+structure projectile_actual_material_query PASS
+structure fast_projectile_stops_at_intact_material PASS
+structure projectile_reactions_are_conservative PASS
+projectile rate=192000 hole=0 empty=0 moving_surface=0 ray=1 impulse=9.99310476 min_clearance=0.0195215309 dP=2.84217094e-14 dL=6.08450838e-14 energyGain=0
+structure projectile_actual_material_query PASS
+structure fast_projectile_stops_at_intact_material PASS
+structure projectile_reactions_are_conservative PASS
+projectile rate=192000 hole=1 empty=0 moving_surface=0 ray=0 impulse=2.3716912e-16 min_clearance=-2.5 dP=5.24609749e-16 dL=7.91033905e-16 energyGain=0
+structure projectile_actual_material_query PASS
+structure projectile_passes_empty_or_torn_surface PASS
+structure projectile_reactions_are_conservative PASS
+projectile rate=192000 hole=0 empty=1 moving_surface=0 ray=0 impulse=0 min_clearance=-2.5 dP=0 dL=0 energyGain=0
+structure projectile_actual_material_query PASS
+structure projectile_passes_empty_or_torn_surface PASS
+structure projectile_reactions_are_conservative PASS
+projectile rate=192000 hole=0 empty=0 moving_surface=1 ray=1 impulse=9.99310476 min_clearance=0.0195215309 dP=4.72937245e-11 dL=3.76507013e-10 energyGain=0
+structure projectile_actual_material_query PASS
+structure fast_projectile_stops_at_intact_material PASS
+structure projectile_reactions_are_conservative PASS
+angular_pose x_axis=(0.825335615,0,0.564642473) angle=0.6 manifolds=1
+angular_sweep substeps=1 omega=144rad/s sweep=.6rad target_impulse=0 dP=0 dL=0 energyGain=0
+structure rotating_thin_blade_contacts_between_endposes FAIL
+structure angular_contact_conservation PASS
+angular_pose x_axis=(0.82522719,1.84526865e-11,0.564800925) angle=0.600191997 manifolds=1
+angular_sweep substeps=20 omega=144rad/s sweep=.6rad target_impulse=0 dP=0 dL=7.78558736e-09 energyGain=1.27329258e-10
+structure rotating_thin_blade_contacts_between_endposes FAIL
+structure angular_contact_conservation PASS
+angular_pose x_axis=(0.890192449,-5.48285169e-18,0.455584684) angle=0.47302891 manifolds=1
+angular_sweep substeps=100 omega=144rad/s sweep=.6rad target_impulse=100.354245 dP=0 dL=4.54759846e-13 energyGain=-9870.90408
+structure rotating_thin_blade_contacts_between_endposes PASS
+structure angular_contact_conservation PASS
+structure edge_fixture_has_two_physical_triangles PASS
+edge_cross self=0 minimum_mean_gap=-0.1 dP=0
+structure two_deformables_stop_between_node_edge_crossing FAIL
+structure edge_contact_preserves_momentum PASS
+structure edge_fixture_has_two_physical_triangles PASS
+edge_cross self=1 minimum_mean_gap=-0.1 dP=1.85080141e-24
+structure self_contact_stops_between_node_edge_crossing FAIL
+structure edge_contact_preserves_momentum PASS
+fragment_recontact fragments=2 intersection_frames=766 minimum_mean_gap=-0.458874165 velocity_change=1.56844161 dP=8.88496034e-15 dL=1.5869886e-14 energyGain=0
+structure severed_fragments_recontact FAIL
+structure recontact_conservation_and_current_surfaces PASS
+geometric contact gate: 42/50 passed
+exit=1
+
+--- benchmark ---
+benchmark structures=1 points=20 axial_members=94 initial_triangles=36 static_walls=1 native_constraints=0 rate=38400 steps=6144 simulated_s=.16 wall_s=0.019861 us_per_step=3.232585 seconds_per_simulated_second=0.124131 peak_contact_records=4 peak_fragments=2 rebuilds=23 rebuild_s=0.000659 peak_process_rss_bytes=10846208
+structure benchmark_retains_finite_current_geometry PASS
+structure benchmark_exercises_contact_and_fracture PASS
+benchmark structures=32 points=640 axial_members=3008 initial_triangles=1152 static_walls=32 native_constraints=0 rate=38400 steps=6144 simulated_s=.16 wall_s=3.217940 us_per_step=523.753309 seconds_per_simulated_second=20.112127 peak_contact_records=128 peak_fragments=64 rebuilds=742 rebuild_s=0.023405 peak_process_rss_bytes=16138240
+structure benchmark_retains_finite_current_geometry PASS
+structure benchmark_exercises_contact_and_fracture PASS
+exit=0
+
+--- Pristine BVH negative control ---
+disconnected-face-tree faces=0 actual_face_hits=0 phantom_gap_hits=0 PASS
+TIMEOUT after 2s; disconnected face tree construction did not finish.
+
+--- AddressSanitizer ---
+mechanics: structural matrix: 66/66 passed, exit=0; no AddressSanitizer errors reported
+geometry: geometric contact gate: 42/50 passed, exit=1; no AddressSanitizer errors reported
+benchmark: structure benchmark_exercises_contact_and_fracture PASS, exit=0; no AddressSanitizer errors reported
+
+--- Native scheduling regression ---
+Inventoried 14 vtables and 21 methods; UUID 02983a69-6bd0-33f7-b72b-2aca8bcb3c33.
+Static evidence only; runtime ownership and query synchronization remain separate gates.
+guarded: expected_exit=0; observed_exit=0
+native world stuck=0 handoff=0 owned_clean=1 native_intact=1 native_collisions=1 native_shifts=0 native_moves=1 PASS
+native world stuck=1 handoff=0 owned_clean=1 native_intact=1 native_collisions=6 native_shifts=2 native_moves=9 PASS
+native world stuck=1 handoff=1 owned_clean=1 native_intact=1 native_collisions=6 native_shifts=2 native_moves=9 PASS
+unguarded: expected_exit=1; observed_exit=1
+native world stuck=0 handoff=0 owned_clean=0 native_intact=1 native_collisions=1 native_shifts=0 native_moves=1 FAIL
+native world stuck=1 handoff=0 owned_clean=0 native_intact=1 native_collisions=6 native_shifts=2 native_moves=9 FAIL
+native world stuck=1 handoff=1 owned_clean=0 native_intact=1 native_collisions=6 native_shifts=2 native_moves=9 FAIL
+
+--- Project regression ---
+make test: exit=0
+
+--- Input record ---
+{
+  "revision": "d3afe76132fc76b0f9b2359cbaef47a3766e7fbb",
+  "source": "/Users/waliwalu/GitHub/vc-minimap/build/world-physics-evaluation/bullet-conservative-experiment",
+  "build": "/Users/waliwalu/GitHub/vc-minimap/build/world-physics-evaluation/bullet-conservative-build",
+  "patch_sha256": "1731e7f846cde53c78ac3973fb431d214272fb875ec7c7b1926ed4e0df5479b8",
+  "cmake_options": [
+    "-DCMAKE_BUILD_TYPE=Release",
+    "-DCMAKE_OSX_ARCHITECTURES=arm64",
+    "-DCMAKE_OSX_DEPLOYMENT_TARGET=15.0",
+    "-DCMAKE_CXX_STANDARD=17",
+    "-DCMAKE_POLICY_VERSION_MINIMUM=3.5",
+    "-DUSE_DOUBLE_PRECISION=ON",
+    "-DBUILD_CPU_DEMOS=OFF",
+    "-DBUILD_BULLET2_DEMOS=OFF",
+    "-DBUILD_OPENGL3_DEMOS=OFF",
+    "-DBUILD_EXTRAS=OFF",
+    "-DBUILD_UNIT_TESTS=OFF",
+    "-DBUILD_PYBULLET=OFF",
+    "-DINSTALL_LIBS=OFF"
+  ],
+  "explicit_forces": true,
+  "structure": true,
+  "runner_sha256": "f24690dd50cceba834dc5266494b296aa1b24fc9b2f93847433a4bc3ad6d9690",
+  "fixtures_sha256": {
+    "world-physics-contact-probe.cpp": "548313ced19a7abd5a3c4c359d415ff6dafd28dc253fc277690092dd6ac963e0",
+    "world-physics-structure.h": "e176e3e703c09533089e7b0bfe3aad4cd1fee6129a9b29aa8fc80f993090c3b0",
+    "world-physics-probe.cpp": "3e66cf9fececb6aa7ddc72a3c7038a7b3bbbe5272a8f853bb0f68c924e3eeb23",
+    "world-physics-conservation-probe.cpp": "97faad3c67a281c983e489a9e6f667aeb92ade78aa65589bad7d145ceb734bfc",
+    "world-physics-face-tree-probe.cpp": "ae68419ec7bd2e436bda0179c2a8a78ea41ac3a847e4bcac9a62d41be9148d57",
+    "world-physics-native-probe.cpp": "69764dce373db38f2e1d55529cd82a9c7058ae218e914d63f5ccc16ef125e8fa",
+    "world-physics-material.h": "55548fbba4778a3def37ab17ac38b2754c1b884a7c4a9833af2609eb167538b0",
+    "world-physics-explicit-policy.h": "5a881abdb90ce38947b95b9e643cd68d5aa272eabc12cd8c8c54d20dd4ce7ac3",
+    "world-physics-structure-probe.cpp": "911ce1f7b3406867d544cab8974d31944af72f297bcdb5a2735661b032b0da19",
+    "world-physics-material-probe.cpp": "662bc6c01d9668c4714206883dab4119853c7308622dc5da9ba9d3ff43dfc09a",
+    "world-physics-step-probe.cpp": "84ad4e6de0ec4326392cd224a876b6b9990d744ee6dac98d394e0143a1032cab"
+  },
+  "compiler": "Apple clang version 21.0.0 (clang-2100.3.34.2)\nTarget: arm64-apple-darwin27.0.0\nThread model: posix\nInstalledDir: /Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin\n",
+  "exit_codes": {
+    "initial": 0,
+    "conservation": 0,
+    "step": 0,
+    "material": 0,
+    "face-tree": 0,
+    "structure": 0,
+    "geometry": 1,
+    "benchmark": 0
+  },
+  "elapsed_seconds": 10.26642233307939
+}

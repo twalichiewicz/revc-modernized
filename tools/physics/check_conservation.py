@@ -24,6 +24,7 @@ def main():
     parser.add_argument("--output-dir", type=Path, required=True)
     parser.add_argument("--explicit-forces", action="store_true",
                         help="Evaluate the explicit spring/damping policy instead of the original soft-only momentum phase")
+    parser.add_argument("--structure", action="store_true", help="Also evaluate material, structural and geometric-contact gates; failed gates return 1")
     args = parser.parse_args()
     source, build, output = (p.resolve() for p in (args.source, args.build_dir, args.output_dir))
     output.mkdir(parents=True, exist_ok=True)
@@ -46,7 +47,7 @@ def main():
     libraries = ["BulletSoftBody", "BulletDynamics", "BulletCollision", "LinearMath"]
     provenance = {"revision": head, "source": str(source), "build": str(build),
                   "patch_sha256": hashlib.sha256(patch).hexdigest(), "cmake_options": options,
-                  "explicit_forces": args.explicit_forces,
+                  "explicit_forces": args.explicit_forces, "structure": args.structure,
                   "runner_sha256": hashlib.sha256(Path(__file__).read_bytes()).hexdigest(),
                   "fixtures_sha256": {p.name: hashlib.sha256(p.read_bytes()).hexdigest()
                        for p in (ROOT / "docs" / "research").glob("world-physics-*")
@@ -61,7 +62,8 @@ def main():
         subprocess.run(["cmake", "--build", str(build), "--target", *libraries, "--parallel", "4"],
                        stdout=log, stderr=subprocess.STDOUT, check=True)
         statuses = {}
-        for name in ("initial", "conservation", "step"):
+        cases = ["initial", "conservation", "step"] + (["material", "face-tree", "structure"] if args.structure else [])
+        for name in cases:
             filename = ROOT / "docs" / "research" / ("world-physics-probe.cpp" if name == "initial"
                                                     else f"world-physics-{name}-probe.cpp")
             executable = output / f"probe-{name}"
@@ -73,9 +75,15 @@ def main():
             flags = (["explicit-forces"] if name == "initial" else ["--explicit-forces"])
             result = subprocess.run([str(executable),
                                      *(flags if args.explicit_forces and name in ("initial", "step") else [])],
-                                    capture_output=True, text=True)
+                                    capture_output=True, text=True, timeout=60)
             (output / f"{name}.txt").write_text(result.stdout + result.stderr + f"exit={result.returncode}\n")
             statuses[name] = result.returncode
+            if name == "structure":
+                for label, mode in (("geometry", "--contact-gate"), ("benchmark", "--benchmark")):
+                    gate = subprocess.run([str(executable), mode], capture_output=True, text=True, timeout=60)
+                    (output / f"{label}.txt").write_text(gate.stdout + gate.stderr + f"exit={gate.returncode}\n")
+                    statuses[label] = gate.returncode
+                    print(f"{label}: exit={gate.returncode}; {gate.stdout.splitlines()[-1] if gate.stdout.splitlines() else 'no standard output'}", flush=True)
             summary = result.stdout.splitlines()[-1] if result.stdout.splitlines() else "no standard output"
             print(f"{name}: exit={result.returncode}; {summary}", flush=True)
     provenance["exit_codes"] = statuses

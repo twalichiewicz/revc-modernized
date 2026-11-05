@@ -1,0 +1,31 @@
+diff --git a/src/BulletSoftBody/btDeformableBodySolver.cpp b/src/BulletSoftBody/btDeformableBodySolver.cpp
+index 4e9df5f..8948ee4 100644
+--- a/src/BulletSoftBody/btDeformableBodySolver.cpp
++++ b/src/BulletSoftBody/btDeformableBodySolver.cpp
+@@ -223,0 +224,7 @@ void btDeformableBodySolver::reinitialize(const btAlignedObjectArray<btSoftBody*
++	// Experimental lifecycle correction: equal total particle counts do not
++	// imply equal body layout after splits/removals. Refresh body-indexed
++	// constraints and node IDs on explicit topology invalidation as well.
++	bool layoutChanged = dt < 0 || m_softBodies.size() != softBodies.size();
++	if (!layoutChanged)
++		for (int i = 0; i < softBodies.size(); ++i)
++			layoutChanged |= m_softBodies[i] != softBodies[i];
+@@ -225,0 +233 @@ void btDeformableBodySolver::reinitialize(const btAlignedObjectArray<btSoftBody*
++	nodeUpdated |= layoutChanged;
+diff --git a/src/BulletSoftBody/btSoftBody.cpp b/src/BulletSoftBody/btSoftBody.cpp
+index c873099..16a8212 100644
+--- a/src/BulletSoftBody/btSoftBody.cpp
++++ b/src/BulletSoftBody/btSoftBody.cpp
+@@ -37,0 +38,12 @@ static inline btDbvtNode* buildTreeBottomUp(btAlignedObjectArray<btDbvtNode*>& l
++		// Experimental correction: disconnected surface components eventually
++		// leave roots with no adjacency. Pair those BVH roots so construction
++		// makes progress; this creates no physical link or collision surface.
++		bool hasNeighbor = false;
++		for (int i = 0; i < N; ++i)
++			hasNeighbor |= adj[i].size() != 0;
++		if (!hasNeighbor)
++			for (int i = 0; i + 1 < N; i += 2)
++			{
++				adj[i].push_back(i + 1);
++				adj[i + 1].push_back(i);
++			}
