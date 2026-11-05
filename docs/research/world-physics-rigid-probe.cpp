@@ -80,9 +80,9 @@ void RotatingStrike(double omega,bool miss){
     persistent::RigidBox blade(w,{1,.01,.01},4,{0,0,0},{0,0,0},{0,0,omega},Eigen::Quaterniond(Eigen::AngleAxisd(-.3,Eigen::Vector3d::UnitZ())));
     persistent::Stepper stepper(w,{&target},{{&target,0}}, {}, {&blade});bool ran=false;int revision=target.revision;auto original=blade.body->getCenterOfMassTransform();
     try{
-        auto stats=stepper.Advance(.6/omega,Eigen::MatrixXd::Zero(9,3));ran=true;
+        auto began=std::chrono::steady_clock::now();auto stats=stepper.Advance(.6/omega,Eigen::MatrixXd::Zero(9,3));double elapsed=std::chrono::duration<double>(std::chrono::steady_clock::now()-began).count();ran=true;
         auto local=blade.body->getCenterOfMassTransform().invXform(target.nodes[0].x);bool inside=std::abs(local.x())<1&&std::abs(local.y())<.01&&std::abs(local.z())<.01;
-        std::printf("rotating box omega=%.6g miss=%d contacts=%d substeps=%d retries=%d gap=%.9g final_spin=%.9g\n",omega,miss,stats.peakContacts,stats.substeps,stats.retries,PointGap(target,blade),blade.body->getAngularVelocity().z());
+        std::printf("rotating box omega=%.6g miss=%d contacts=%d substeps=%d retries=%d gap=%.9g final_spin=%.9g newton=%d wall_s=%.6f\n",omega,miss,stats.peakContacts,stats.substeps,stats.retries,PointGap(target,blade),blade.body->getAngularVelocity().z(),stats.newton,elapsed);
         Check(miss?"curved_rigid_miss_stays_clear":"curved_rigid_strike_cannot_skip_fixed_target",!inside&&PointGap(target,blade)>.002-1e-7&&(miss?stats.peakContacts==0:stats.peakContacts>0));
         Check("angular_interval_is_resolved_before_publication",stats.substeps>=4&&blade.Valid());
         if(!miss)Check("rotor_strike_transmits_support_impulse",stats.supportLinear.norm()>.01&&blade.body->getAngularVelocity().z()<omega-.1);
@@ -182,12 +182,26 @@ double SpinError(double dt){
     auto l0=Angular(box);double projection=0,loss=0;for(int i=0;i<int(std::lround(.2/dt));++i){auto s=stepper.Advance(dt,Eigen::MatrixXd::Zero(8,3));projection+=s.rigidProjectionLoss;loss+=s.numericalLoss;}
     double error=(Angular(box)-l0).norm();std::printf("rigid free spin dt=%.6g angular_error=%.9g projection_loss=%.9g total_loss=%.9g\n",dt,error,projection,loss);return error;
 }
+double FastStrikeRefinement(int intervals){
+    World w(SettingsFor());structure::Force f;structure::Asset target(w,f);target.Node({.75,0,0},1);target.Build();
+    persistent::RigidBox blade(w,{1,.01,.01},4,{0,0,0},{0,0,0},{0,0,144},Eigen::Quaterniond(Eigen::AngleAxisd(-.3,Eigen::Vector3d::UnitZ())));
+    auto kinetic=[&](){Eigen::Vector3d spin=Vec(blade.body->getAngularVelocity());auto rotation=persistent::RigidBox::Rotation(blade.body->getCenterOfMassTransform());return .5*blade.mass*blade.body->getLinearVelocity().length2()+.5*spin.dot(rotation*blade.inertia.asDiagonal()*rotation.transpose()*spin);};
+    persistent::Stepper stepper(w,{&target},{{&target,0}}, {}, {&blade});Eigen::Vector3d l0=Angular(blade),reaction=Eigen::Vector3d::Zero(),angularReaction=reaction;
+    double initial=kinetic(),loss=0,contact=0,gap=1e100;int substeps=0,retries=0;bool resolved=false;
+    try{for(int i=0;i<intervals;++i){auto s=stepper.Advance(.6/(144*intervals),Eigen::MatrixXd::Zero(9,3));reaction+=s.supportLinear;angularReaction+=s.supportAngular;loss+=s.numericalLoss;contact=s.contactEnergy+s.contactRelease;gap=std::min(gap,PointGap(target,blade));substeps+=s.substeps;retries+=s.retries;}resolved=true;}
+    catch(const std::exception&e){std::printf("fast refinement rejection intervals=%d %s\n",intervals,e.what());}
+    double pError=(blade.mass*Vec(blade.body->getLinearVelocity())+reaction).norm(),lError=(Angular(blade)+angularReaction-l0).norm(),energyError=std::abs(initial-kinetic()-contact-loss);
+    std::printf("fast strike intervals=%d substeps=%d retries=%d gap_min=%.12g p_error=%.9g angular_error=%.9g energy_error=%.9g numerical_loss=%.9g final_spin=%.9g\n",intervals,substeps,retries,gap,pError,lError,energyError,loss,blade.body->getAngularVelocity().z());
+    Check("refined_fast_strike_resolves_with_balanced_reaction_and_work",resolved&&gap>.002-1e-10&&pError<1e-6&&energyError<1e-5&&std::abs(stepper.time-.6/144)<1e-12);
+    return resolved?lError:std::numeric_limits<double>::infinity();
+}
 int main(int argc,char **argv){std::setvbuf(stdout,nullptr,_IONBF,0);
     if(argc>1&&std::string(argv[1])=="--limits"){RotatingStrike(144,false);std::printf("coupled fast-rotation gate: %d/%d passed\n",checks-failures,checks);return failures?1:0;}
     if(argc>1&&std::string(argv[1])=="--benchmark"){Benchmark(1);Benchmark(4);return 0;}
     if(argc>1)return 2;
     FreeBox();FreeSpin();EccentricForce();PointContact(0);PointContact(.25);PointContact(0,true);PointContact(.25,false,true);
-    RotatingStrike(6,false);RotatingStrike(144,true);TwoBoxes(false);TwoBoxes(true);MountedPanel();MountedPanel(true);BoundaryChecks();CurvedLoadReceipt();
+    RotatingStrike(6,false);RotatingStrike(144,false);RotatingStrike(144,true);TwoBoxes(false);TwoBoxes(true);MountedPanel();MountedPanel(true);BoundaryChecks();CurvedLoadReceipt();
     double coarse=SpinError(.02),fine=SpinError(.01),finer=SpinError(.005);Check("asymmetric_rigid_spin_error_converges",fine<.7*coarse&&finer<.7*fine&&finer>0);
     InitialSolidGeometry();NonfiniteSdkGeometry();
+    double fastCoarse=FastStrikeRefinement(4),fastFine=FastStrikeRefinement(8),fastFiner=FastStrikeRefinement(16);Check("fast_contact_angular_error_decreases_with_refinement",fastFine<fastCoarse&&fastFiner<fastFine);
     std::printf("coupled matrix: %d/%d passed\n",checks-failures,checks);return failures?1:0;}

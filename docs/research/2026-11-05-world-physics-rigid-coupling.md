@@ -2,6 +2,8 @@
 
 2026-11-05. Continues the [persistent-contact experiment](2026-11-05-world-physics-persistent-contact.md), baseline `449c427`. Isolated research; no game installation or native physics transfer.
 
+Follow-up: [directed advancement](2026-11-05-world-physics-directed-advancement.md) supersedes this milestone's fast-strike rejection. The failure/results below describe the `ad8eb1a`–`27d11bf` baseline; current bounded reproduction now resolves that fixture. General Task3/native acceptance remains open.
+
 ## Result and remaining rejection
 
 The shared coordinator now advances explicitly authored rigid boxes and axial deformable assets in one implicit optimization. **55 bounded coupling checks pass**, alongside the existing **34 persistent**, **12 incremental-material**, **167 first-event** and **63 prescribed-geometry** checks. An off-center impact spins the actual registered rigid body. A supported panel carries contact load into its mount, deforms and tears; after the actual face is removed, the rigid body falls through the opening and the face query misses.

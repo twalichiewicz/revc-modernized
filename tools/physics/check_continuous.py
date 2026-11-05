@@ -98,7 +98,7 @@ def main():
         parser.add_argument(f"--{name}", required=True, type=Path)
     parser.add_argument("--asan", action="store_true", help="Instrument this separate IPC/probe build with AddressSanitizer")
     parser.add_argument("--persistent", action="store_true", help="Also evaluate the experimental implicit node-island coordinator")
-    parser.add_argument("--rigid", action="store_true", help="Include persistent and coupled rigid-box probes, retaining the rejected fast-rotation gate")
+    parser.add_argument("--rigid", action="store_true", help="Include persistent and coupled rigid-box probes and the fast-rotation regression")
     args = parser.parse_args()
     if args.rigid:
         args.persistent = True

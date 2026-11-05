@@ -1,0 +1,607 @@
+Directed near-contact advancement. Both release/ASAN bounded suites including fast strike exit0.
+
+=== projected-final ===
+
+geometry.txt
+ccd rotating_path_actual_midpoint PASS
+ccd rotation_envelope_bounds_known_deviation PASS
+ccd full_turn_envelope_is_not_zero PASS
+ccd exhausted_budget_rejects_unresolved_motion PASS
+shot speed=1000 moving=0 miss=0 hit=1 time=0.235199975916 gap=0.010000050176 refinements=11
+ccd fast_shot_matches_actual_surface PASS
+ccd first_contact_time_matches_literal_geometry PASS
+shot speed=1000 moving=0 miss=1 hit=0 time=1 gap=2.55087131084 refinements=1
+ccd fast_shot_matches_actual_surface PASS
+shot speed=1000 moving=1 miss=0 hit=1 time=0.235199975916 gap=0.010000050176 refinements=11
+ccd fast_shot_matches_actual_surface PASS
+ccd first_contact_time_matches_literal_geometry PASS
+shot speed=1000 moving=1 miss=1 hit=0 time=1 gap=2.55087131084 refinements=1
+ccd fast_shot_matches_actual_surface PASS
+shot speed=10000 moving=0 miss=0 hit=1 time=0.0235199975916 gap=0.010000050176 refinements=11
+ccd fast_shot_matches_actual_surface PASS
+ccd first_contact_time_matches_literal_geometry PASS
+shot speed=10000 moving=0 miss=1 hit=0 time=1 gap=20.4314572276 refinements=2
+ccd fast_shot_matches_actual_surface PASS
+shot speed=10000 moving=1 miss=0 hit=1 time=0.0235199975916 gap=0.010000050176 refinements=11
+ccd fast_shot_matches_actual_surface PASS
+ccd first_contact_time_matches_literal_geometry PASS
+shot speed=10000 moving=1 miss=1 hit=0 time=1 gap=20.4314572276 refinements=2
+ccd fast_shot_matches_actual_surface PASS
+edge miss=0 hit=1 time=0.49949998977 gap=0.00100002045952
+ccd edge_crossing_between_nodes_is_detected PASS
+ccd edge_contact_time_and_gap PASS
+edge miss=1 hit=0 time=1 gap=2.2360679775
+ccd edge_crossing_between_nodes_is_detected PASS
+rotor angle=0.6 miss=0 hit=1 time=0.466664367104 gap=0.0300000692324 refinements=11
+ccd curved_rotor_sweep_matches_material_extent PASS
+ccd curved_rotor_first_contact_time PASS
+rotor angle=0.6 miss=1 hit=0 time=1 gap=1.23933939278 refinements=2
+ccd curved_rotor_sweep_matches_material_extent PASS
+rotor angle=6.28318530718 miss=0 hit=1 time=0.0445631644735 gap=0.0300000692337 refinements=11
+ccd curved_rotor_sweep_matches_material_extent PASS
+ccd curved_rotor_first_contact_time PASS
+rotor angle=6.28318530718 miss=1 hit=0 time=1 gap=1.23933939278 refinements=6
+ccd curved_rotor_sweep_matches_material_extent PASS
+rotor angle=15.7079632679 miss=0 hit=1 time=0.0178252657893 gap=0.0300000692359 refinements=11
+ccd curved_rotor_sweep_matches_material_extent PASS
+ccd curved_rotor_first_contact_time PASS
+rotor angle=15.7079632679 miss=1 hit=0 time=1 gap=1.23933939278 refinements=15
+ccd curved_rotor_sweep_matches_material_extent PASS
+rotor angle=-0.6 miss=0 hit=1 time=0.466664367104 gap=0.0300000692324 refinements=11
+ccd curved_rotor_sweep_matches_material_extent PASS
+ccd curved_rotor_first_contact_time PASS
+rotor angle=-0.6 miss=1 hit=0 time=1 gap=1.23933939278 refinements=2
+ccd curved_rotor_sweep_matches_material_extent PASS
+ccd closest_witness_covers_face_edges_and_vertices PASS
+ccd closest_witness_covers_face_edges_and_vertices PASS
+ccd closest_witness_covers_face_edges_and_vertices PASS
+ccd closest_witness_covers_face_edges_and_vertices PASS
+ccd closest_witness_covers_face_edges_and_vertices PASS
+ccd closest_witness_covers_face_edges_and_vertices PASS
+ccd closest_witness_covers_face_edges_and_vertices PASS
+near-initial margin=1e-05 angle=0.05 actual_time=0.000132293116299 want_time=0.000133360016898 gap=0.0300000800015 refinements=4
+ccd near_initial_contact_keeps_earliest_time_and_both_gap_bounds PASS
+near-initial margin=1e-05 angle=0.6 actual_time=1.10244262199e-05 want_time=1.11133347415e-05 gap=0.0300000800017 refinements=4
+ccd near_initial_contact_keeps_earliest_time_and_both_gap_bounds PASS
+near-initial margin=1e-05 angle=6.28318530718 actual_time=1.05275502004e-06 want_time=1.06124529501e-06 gap=0.030000080003 refinements=4
+ccd near_initial_contact_keeps_earliest_time_and_both_gap_bounds PASS
+near-initial margin=1e-05 angle=15.7079632679 actual_time=4.21101917438e-07 want_time=4.24498118002e-07 gap=0.0300000800051 refinements=4
+ccd near_initial_contact_keeps_earliest_time_and_both_gap_bounds PASS
+near-initial margin=2e-05 angle=0.05 actual_time=0.000266293282393 want_time=0.00026672005159 gap=0.0300000320013 refinements=5
+ccd near_initial_contact_keeps_earliest_time_and_both_gap_bounds PASS
+near-initial margin=2e-05 angle=0.6 actual_time=2.21911067268e-05 want_time=2.22266709658e-05 gap=0.0300000320014 refinements=5
+ccd near_initial_contact_keeps_earliest_time_and_both_gap_bounds PASS
+near-initial margin=2e-05 angle=6.28318530718 actual_time=2.11909445952e-06 want_time=2.12249073161e-06 gap=0.0300000320027 refinements=5
+ccd near_initial_contact_keeps_earliest_time_and_both_gap_bounds PASS
+near-initial margin=2e-05 angle=15.7079632679 actual_time=8.47637692646e-07 want_time=8.48996292646e-07 gap=0.0300000320049 refinements=5
+ccd near_initial_contact_keeps_earliest_time_and_both_gap_bounds PASS
+near-initial margin=0.0001 angle=0.05 actual_time=0.00133317414523 want_time=0.00133360097044 gap=0.0300000320055 refinements=6
+ccd near_initial_contact_keeps_earliest_time_and_both_gap_bounds PASS
+near-initial margin=0.0001 angle=0.6 actual_time=0.000111097845296 want_time=0.000111133414203 gap=0.0300000320056 refinements=6
+ccd near_initial_contact_keeps_earliest_time_and_both_gap_bounds PASS
+near-initial margin=0.0001 angle=6.28318530718 actual_time=1.06090626098e-05 want_time=1.06124593279e-05 gap=0.0300000320069 refinements=6
+ccd near_initial_contact_keeps_earliest_time_and_both_gap_bounds PASS
+near-initial margin=0.0001 angle=15.7079632679 actual_time=4.24362495266e-06 want_time=4.24498373115e-06 gap=0.0300000320091 refinements=6
+ccd near_initial_contact_keeps_earliest_time_and_both_gap_bounds PASS
+near-initial margin=0.001 angle=0.05 actual_time=0.013335235825 want_time=0.013336090732 gap=0.0300000641052 refinements=7
+ccd near_initial_contact_keeps_earliest_time_and_both_gap_bounds PASS
+near-initial margin=0.001 angle=0.6 actual_time=0.00111126965194 want_time=0.00111134089433 gap=0.0300000641053 refinements=7
+ccd near_initial_contact_keeps_earliest_time_and_both_gap_bounds PASS
+near-initial margin=0.001 angle=6.28318530718 actual_time=0.000106118434791 want_time=0.000106125238076 gap=0.0300000641066 refinements=7
+ccd near_initial_contact_keeps_earliest_time_and_both_gap_bounds PASS
+near-initial margin=0.001 angle=15.7079632679 actual_time=4.24473738251e-05 want_time=4.24500952303e-05 gap=0.0300000641088 refinements=7
+ccd near_initial_contact_keeps_earliest_time_and_both_gap_bounds PASS
+near-initial margin=0.01 angle=0.05 actual_time=0.133369544989 want_time=0.133369891978 gap=0.0300000260189 refinements=9
+ccd near_initial_contact_keeps_earliest_time_and_both_gap_bounds PASS
+near-initial margin=0.01 angle=0.6 actual_time=0.011114128749 want_time=0.0111141576648 gap=0.0300000260191 refinements=9
+ccd near_initial_contact_keeps_earliest_time_and_both_gap_bounds PASS
+near-initial margin=0.01 angle=6.28318530718 actual_time=0.001061321117 want_time=0.00106132387839 gap=0.0300000260204 refinements=9
+ccd near_initial_contact_keeps_earliest_time_and_both_gap_bounds PASS
+near-initial margin=0.01 angle=15.7079632679 actual_time=0.000424528446707 want_time=0.000424529551358 gap=0.0300000260225 refinements=9
+ccd near_initial_contact_keeps_earliest_time_and_both_gap_bounds PASS
+ccd deep_initial_overlap_requires_recovery_policy PASS
+ccd codimensional_point_contact_time PASS
+ccd codimensional_points_preserve_empty_space PASS
+ccd requested_precision_distinguishes_safe_near_contact PASS
+ccd requested_precision_resolves_near_contact_prefix PASS
+ccd near_tangent_slide_is_clear_within_budget PASS
+ccd near_tangent_inbound_keeps_first_contact PASS
+ccd near_rotating_tangent_plane_stays_clear PASS
+ccd near_rotating_tangent_plane_stays_clear PASS
+ccd near_rotating_tangent_plane_stays_clear PASS
+ccd near_tangent_point_edge_resolves PASS
+ccd near_parallel_sliding_edges_resolve PASS
+ccd common_translation_does_not_exhaust_point_query PASS
+ccd different_rigid_frames_keep_first_edge_contact PASS
+ccd unknown_trajectory_retains_bounded_fallback PASS
+ccd rotating_frame_derivative_includes_transport_terms PASS
+ccd recorded_newton_motion_has_independent_safe_prefix_and_later_hit PASS
+recorded Newton query sampled_min=0.00199998947314 prefix_lower=0.00200001669974 sampled_crossing=0.7577 toi=0.7554991 refinements=5 certificates=4
+ccd recorded_newton_motion_resolves_within_original_budget PASS
+ccd derived_linear_trajectory_cannot_use_base_formula PASS
+ccd derived_rigid_trajectory_cannot_use_base_formula PASS
+ccd changed_nonunit_rigid_axis_is_rejected PASS
+continuous geometry matrix: 79/79 passed
+exit=0
+elapsed_s=0.224739
+
+grazes.txt
+near-graze radius=2.031 hit=0 gap=0.600201539729 refinement=8
+ccd near_graze_resolves_actual_contact_or_miss PASS
+near-graze radius=2.03001 hit=0 gap=0.599908974725 refinement=13
+ccd near_graze_resolves_actual_contact_or_miss PASS
+near-graze radius=2.02999 hit=1 gap=0.0300000456271 refinement=14
+ccd near_graze_resolves_actual_contact_or_miss PASS
+near-graze matrix: 3/3 passed
+exit=0
+elapsed_s=0.007521
+
+events.txt
+contact event matrix: 167/167 passed
+exit=0
+elapsed_s=0.128567
+
+benchmark.txt
+query-benchmark shot calls=20 median_us=5.125000 max_us=12.125000 max_refinements=11 max_certificates=0 peak_process_rss_bytes=1933312
+ccd benchmark_retains_actual_hit_or_miss PASS
+query-benchmark rotor_angle_0.600_radius_1.500 calls=20 median_us=4.334000 max_us=5.791000 max_refinements=11 max_certificates=10 peak_process_rss_bytes=1933312
+ccd benchmark_retains_actual_hit_or_miss PASS
+query-benchmark rotor_angle_0.600_radius_3.000 calls=20 median_us=0.625000 max_us=0.875000 max_refinements=2 max_certificates=0 peak_process_rss_bytes=1933312
+ccd benchmark_retains_actual_hit_or_miss PASS
+query-benchmark rotor_angle_6.283_radius_1.500 calls=20 median_us=4.333000 max_us=4.542000 max_refinements=11 max_certificates=10 peak_process_rss_bytes=1933312
+ccd benchmark_retains_actual_hit_or_miss PASS
+query-benchmark rotor_angle_6.283_radius_3.000 calls=20 median_us=2.750000 max_us=3.334000 max_refinements=6 max_certificates=4 peak_process_rss_bytes=1933312
+ccd benchmark_retains_actual_hit_or_miss PASS
+query-benchmark near_tangent_plane calls=20 median_us=0.709000 max_us=1.208000 max_refinements=1 max_certificates=1 peak_process_rss_bytes=1933312
+ccd benchmark_retains_actual_hit_or_miss PASS
+query-benchmark near_inbound_plane calls=20 median_us=1.292000 max_us=1.334000 max_refinements=3 max_certificates=2 peak_process_rss_bytes=1933312
+ccd benchmark_retains_actual_hit_or_miss PASS
+query-benchmark near_rotating_plane calls=20 median_us=0.834000 max_us=1.125000 max_refinements=1 max_certificates=1 peak_process_rss_bytes=1933312
+ccd benchmark_retains_actual_hit_or_miss PASS
+query benchmark matrix: 8/8 passed
+exit=0
+elapsed_s=0.006339
+
+incremental-material.txt
+incremental-material elastic_potential_force_tangent PASS
+incremental-material plastic_reduced_potential PASS
+incremental-material trial_does_not_mutate_history PASS
+incremental-material accepted_plastic_state PASS
+incremental-material no_fixed_strain_projection_loss_double_count PASS
+incremental-material permanent_set_unloads_to_zero_force PASS
+incremental-material repeated_commit_does_not_spend_work PASS
+incremental-material hardening_potential_and_tangent PASS
+incremental-material fracture_cannot_spend_dissipated_work PASS
+incremental-material fracture_spends_once_after_commit PASS
+incremental-material broken_member_cannot_repeat_work PASS
+incremental-material invalid_trial_cannot_mutate_state PASS
+incremental material matrix: 12/12 passed
+exit=0
+elapsed_s=0.007498
+
+persistent.txt
+persistent matrix: 34/34 passed
+exit=0
+elapsed_s=0.336874
+
+coupled.txt
+coupled rigid_translation_matches_literal_force_solution PASS
+coupled rigid_translation_work_and_loss PASS
+coupled registered_rigid_has_one_authoritative_pose PASS
+coupled managed_rigid_box_can_advance PASS
+coupled free_spin_matches_constrained_implicit_solution PASS
+coupled free_spin_keeps_exact_shape_and_tracks_projection PASS
+coupled managed_rigid_rotation_can_advance PASS
+coupled eccentric_load_uses_rotated_full_inertia PASS
+coupled rigid_velocity_constraint_preserves_local_momentum PASS
+point-box offset=0 miss=0 gap_min=0.0131065159 p_error=4.6629367e-15 l_error=1.78525409e-20 spin_y=0
+coupled rigid_deformable_contact_has_two_dynamic_recipients PASS
+coupled coupled_momentum_and_internal_torque PASS
+coupled current_registered_box_geometry_matches_query PASS
+point-box offset=0.25 miss=0 gap_min=0.0101708315 p_error=3.51196056e-13 l_error=5.80299114e-06 spin_y=0.164380287
+coupled rigid_deformable_contact_has_two_dynamic_recipients PASS
+coupled coupled_momentum_and_internal_torque PASS
+coupled off_center_contact_spins_actual_rigid_body PASS
+coupled current_registered_box_geometry_matches_query PASS
+point-box offset=0 miss=1 gap_min=0.7 p_error=8.8817842e-16 l_error=1.11022302e-15 spin_y=0
+coupled coupled_clear_miss_has_no_phantom_force PASS
+coupled coupled_momentum_and_internal_torque PASS
+coupled current_registered_box_geometry_matches_query PASS
+point-box offset=0.25 miss=0 gap_min=0.00935987778 p_error=5.62330491e-09 l_error=1.44506054e-09 spin_y=0
+coupled anchored_box_contact_has_explicit_reaction PASS
+coupled coupled_momentum_and_internal_torque PASS
+coupled anchored_box_stays_fixed PASS
+coupled current_registered_box_geometry_matches_query PASS
+rotating box omega=6 miss=0 contacts=6 substeps=10 retries=9 gap=0.0323470274 final_spin=2.96970783 newton=168 wall_s=0.014430
+coupled curved_rigid_strike_cannot_skip_fixed_target PASS
+coupled angular_interval_is_resolved_before_publication PASS
+coupled rotor_strike_transmits_support_impulse PASS
+coupled force_driven_rotating_interval_resolves PASS
+rotating box omega=144 miss=0 contacts=6 substeps=7 retries=6 gap=0.00229093259 final_spin=89.2062198 newton=236 wall_s=0.024782
+coupled curved_rigid_strike_cannot_skip_fixed_target PASS
+coupled angular_interval_is_resolved_before_publication PASS
+coupled rotor_strike_transmits_support_impulse PASS
+coupled force_driven_rotating_interval_resolves PASS
+rotating box omega=144 miss=1 contacts=0 substeps=4 retries=3 gap=0.602923228 final_spin=137.926985 newton=28 wall_s=0.001572
+coupled curved_rigid_miss_stays_clear PASS
+coupled angular_interval_is_resolved_before_publication PASS
+coupled force_driven_rotating_interval_resolves PASS
+two boxes reverse=0 contacts=13 intersection_frames=0 p_error=2.13162821e-14
+coupled rigid_rigid_contact_keeps_local_surfaces_separate PASS
+coupled rigid_rigid_ordering_retains_momentum PASS
+two boxes reverse=1 contacts=13 intersection_frames=0 p_error=2.13162821e-14
+coupled rigid_rigid_contact_keeps_local_surfaces_separate PASS
+coupled rigid_rigid_ordering_retains_momentum PASS
+mounted panel contacts=11 intersection_frames=0 mount_force=4.45766253 deflection=0.133951804 p_error=3.92283398e-08
+coupled rigid_contact_loads_actual_deformable_mount PASS
+coupled mounted_coupled_reactions_and_geometry_agree PASS
+mounted panel contacts=4 intersection_frames=0 mount_force=2.89628135 deflection=0.0869111516 p_error=9.92071464e-08
+coupled rigid_contact_loads_actual_deformable_mount PASS
+coupled mounted_coupled_reactions_and_geometry_agree PASS
+coupled tear breaks=1 faces=1 final_z=-0.739348477 ray=0 plastic=0.00103457774
+coupled coupled_tear_removes_face_and_releases_rigid_body PASS
+coupled unsubmitted_sdk_force_rejected PASS
+coupled unsubmitted_sdk_torque_rejected PASS
+coupled unsupported_sdk_constraint_rejected PASS
+coupled external_rigid_velocity_edit_rejected PASS
+coupled external_rigid_shape_edit_rejected PASS
+coupled coupled_failure_rolls_back_both_recipients PASS
+coupled external_angular_receipt_follows_curved_material_point PASS
+rigid free spin dt=0.02 angular_error=0.0157625782 projection_loss=0.00730787938 total_loss=0.0292511663
+rigid free spin dt=0.01 angular_error=0.00792048904 projection_loss=0.00368050968 total_loss=0.0147245211
+rigid free spin dt=0.005 angular_error=0.00397012232 projection_loss=0.00184673046 total_loss=0.00738725166
+coupled asymmetric_rigid_spin_error_converges PASS
+coupled embedded_point_rejected_before_motion PASS
+coupled nested_solid_boxes_rejected_before_motion PASS
+coupled crossed_boxes_without_contained_corners_rejected PASS
+coupled soft_face_crossing_solid_box_rejected PASS
+coupled separate_soft_face_remains_clear PASS
+coupled separate_crossed_axes_boxes_remain_clear PASS
+coupled nan_sdk_scaling_before_construction_rejected PASS
+coupled nan_sdk_scaling_after_construction_rejected PASS
+fast strike intervals=4 substeps=7 retries=3 gap_min=0.00201072099976 p_error=3.75299219e-08 angular_error=14.3058157 energy_error=2.91038305e-11 numerical_loss=16230.6443 final_spin=89.2062198
+coupled refined_fast_strike_resolves_with_balanced_reaction_and_work PASS
+fast strike intervals=8 substeps=10 retries=2 gap_min=0.00200229376466 p_error=3.38340605e-08 angular_error=7.55459964 energy_error=3.45607987e-11 numerical_loss=15621.0299 final_spin=90.2517123
+coupled refined_fast_strike_resolves_with_balanced_reaction_and_work PASS
+fast strike intervals=16 substeps=17 retries=1 gap_min=0.00200013445089 p_error=2.74504748e-08 angular_error=3.82906854 energy_error=4.91127139e-11 numerical_loss=15281.176 final_spin=90.5240525
+coupled refined_fast_strike_resolves_with_balanced_reaction_and_work PASS
+coupled fast_contact_angular_error_decreases_with_refinement PASS
+coupled matrix: 63/63 passed
+exit=0
+elapsed_s=0.783889
+
+coupled-limits.txt
+rotating box omega=144 miss=0 contacts=6 substeps=8 retries=7 gap=0.00230888254 final_spin=89.1854182 newton=303 wall_s=0.053885
+coupled curved_rigid_strike_cannot_skip_fixed_target PASS
+coupled angular_interval_is_resolved_before_publication PASS
+coupled rotor_strike_transmits_support_impulse PASS
+coupled force_driven_rotating_interval_resolves PASS
+coupled fast-rotation gate: 4/4 passed
+exit=0
+elapsed_s=0.059065
+
+coupled-benchmark.txt
+coupled benchmark pairs=1 generalized_dof=9 quadrature_vertices=9 rigid_triangles=12 steps=120 simulated_s=.6 wall_s=0.027757 us_per_step=231.306250 newton=335 accepted_substeps=120 retries=0 peak_contacts=1 peak_rss_bytes=13303808
+coupled benchmark pairs=4 generalized_dof=36 quadrature_vertices=36 rigid_triangles=48 steps=120 simulated_s=.6 wall_s=0.279201 us_per_step=2326.678125 newton=335 accepted_substeps=120 retries=0 peak_contacts=4 peak_rss_bytes=14139392
+exit=0
+elapsed_s=0.311883
+
+Pinned sources
+{
+  "ipc": {
+    "source": "/Users/waliwalu/GitHub/vc-minimap/build/world-physics-evaluation/ipc-toolkit",
+    "revision": "54d58ebcf1f6dd0cf95bcc58afd79839ca603a99",
+    "patch_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "patch": "ipc.patch"
+  },
+  "bullet": {
+    "source": "/Users/waliwalu/GitHub/vc-minimap/build/world-physics-evaluation/bullet-conservative-experiment",
+    "revision": "d3afe76132fc76b0f9b2359cbaef47a3766e7fbb",
+    "patch_sha256": "1731e7f846cde53c78ac3973fb431d214272fb875ec7c7b1926ed4e0df5479b8",
+    "patch": "bullet.patch"
+  }
+}
+
+=== projected-asan ===
+
+geometry.txt
+ccd rotating_path_actual_midpoint PASS
+ccd rotation_envelope_bounds_known_deviation PASS
+ccd full_turn_envelope_is_not_zero PASS
+ccd exhausted_budget_rejects_unresolved_motion PASS
+shot speed=1000 moving=0 miss=0 hit=1 time=0.235199975916 gap=0.010000050176 refinements=11
+ccd fast_shot_matches_actual_surface PASS
+ccd first_contact_time_matches_literal_geometry PASS
+shot speed=1000 moving=0 miss=1 hit=0 time=1 gap=2.55087131084 refinements=1
+ccd fast_shot_matches_actual_surface PASS
+shot speed=1000 moving=1 miss=0 hit=1 time=0.235199975916 gap=0.010000050176 refinements=11
+ccd fast_shot_matches_actual_surface PASS
+ccd first_contact_time_matches_literal_geometry PASS
+shot speed=1000 moving=1 miss=1 hit=0 time=1 gap=2.55087131084 refinements=1
+ccd fast_shot_matches_actual_surface PASS
+shot speed=10000 moving=0 miss=0 hit=1 time=0.0235199975916 gap=0.010000050176 refinements=11
+ccd fast_shot_matches_actual_surface PASS
+ccd first_contact_time_matches_literal_geometry PASS
+shot speed=10000 moving=0 miss=1 hit=0 time=1 gap=20.4314572276 refinements=2
+ccd fast_shot_matches_actual_surface PASS
+shot speed=10000 moving=1 miss=0 hit=1 time=0.0235199975916 gap=0.010000050176 refinements=11
+ccd fast_shot_matches_actual_surface PASS
+ccd first_contact_time_matches_literal_geometry PASS
+shot speed=10000 moving=1 miss=1 hit=0 time=1 gap=20.4314572276 refinements=2
+ccd fast_shot_matches_actual_surface PASS
+edge miss=0 hit=1 time=0.49949998977 gap=0.00100002045952
+ccd edge_crossing_between_nodes_is_detected PASS
+ccd edge_contact_time_and_gap PASS
+edge miss=1 hit=0 time=1 gap=2.2360679775
+ccd edge_crossing_between_nodes_is_detected PASS
+rotor angle=0.6 miss=0 hit=1 time=0.466664367104 gap=0.0300000692324 refinements=11
+ccd curved_rotor_sweep_matches_material_extent PASS
+ccd curved_rotor_first_contact_time PASS
+rotor angle=0.6 miss=1 hit=0 time=1 gap=1.23933939278 refinements=2
+ccd curved_rotor_sweep_matches_material_extent PASS
+rotor angle=6.28318530718 miss=0 hit=1 time=0.0445631644735 gap=0.0300000692337 refinements=11
+ccd curved_rotor_sweep_matches_material_extent PASS
+ccd curved_rotor_first_contact_time PASS
+rotor angle=6.28318530718 miss=1 hit=0 time=1 gap=1.23933939278 refinements=6
+ccd curved_rotor_sweep_matches_material_extent PASS
+rotor angle=15.7079632679 miss=0 hit=1 time=0.0178252657893 gap=0.0300000692359 refinements=11
+ccd curved_rotor_sweep_matches_material_extent PASS
+ccd curved_rotor_first_contact_time PASS
+rotor angle=15.7079632679 miss=1 hit=0 time=1 gap=1.23933939278 refinements=15
+ccd curved_rotor_sweep_matches_material_extent PASS
+rotor angle=-0.6 miss=0 hit=1 time=0.466664367104 gap=0.0300000692324 refinements=11
+ccd curved_rotor_sweep_matches_material_extent PASS
+ccd curved_rotor_first_contact_time PASS
+rotor angle=-0.6 miss=1 hit=0 time=1 gap=1.23933939278 refinements=2
+ccd curved_rotor_sweep_matches_material_extent PASS
+ccd closest_witness_covers_face_edges_and_vertices PASS
+ccd closest_witness_covers_face_edges_and_vertices PASS
+ccd closest_witness_covers_face_edges_and_vertices PASS
+ccd closest_witness_covers_face_edges_and_vertices PASS
+ccd closest_witness_covers_face_edges_and_vertices PASS
+ccd closest_witness_covers_face_edges_and_vertices PASS
+ccd closest_witness_covers_face_edges_and_vertices PASS
+near-initial margin=1e-05 angle=0.05 actual_time=0.000132293116299 want_time=0.000133360016898 gap=0.0300000800015 refinements=4
+ccd near_initial_contact_keeps_earliest_time_and_both_gap_bounds PASS
+near-initial margin=1e-05 angle=0.6 actual_time=1.10244262199e-05 want_time=1.11133347415e-05 gap=0.0300000800017 refinements=4
+ccd near_initial_contact_keeps_earliest_time_and_both_gap_bounds PASS
+near-initial margin=1e-05 angle=6.28318530718 actual_time=1.05275502004e-06 want_time=1.06124529501e-06 gap=0.030000080003 refinements=4
+ccd near_initial_contact_keeps_earliest_time_and_both_gap_bounds PASS
+near-initial margin=1e-05 angle=15.7079632679 actual_time=4.21101917438e-07 want_time=4.24498118002e-07 gap=0.0300000800051 refinements=4
+ccd near_initial_contact_keeps_earliest_time_and_both_gap_bounds PASS
+near-initial margin=2e-05 angle=0.05 actual_time=0.000266293282393 want_time=0.00026672005159 gap=0.0300000320013 refinements=5
+ccd near_initial_contact_keeps_earliest_time_and_both_gap_bounds PASS
+near-initial margin=2e-05 angle=0.6 actual_time=2.21911067268e-05 want_time=2.22266709658e-05 gap=0.0300000320014 refinements=5
+ccd near_initial_contact_keeps_earliest_time_and_both_gap_bounds PASS
+near-initial margin=2e-05 angle=6.28318530718 actual_time=2.11909445952e-06 want_time=2.12249073161e-06 gap=0.0300000320027 refinements=5
+ccd near_initial_contact_keeps_earliest_time_and_both_gap_bounds PASS
+near-initial margin=2e-05 angle=15.7079632679 actual_time=8.47637692646e-07 want_time=8.48996292646e-07 gap=0.0300000320049 refinements=5
+ccd near_initial_contact_keeps_earliest_time_and_both_gap_bounds PASS
+near-initial margin=0.0001 angle=0.05 actual_time=0.00133317414523 want_time=0.00133360097044 gap=0.0300000320055 refinements=6
+ccd near_initial_contact_keeps_earliest_time_and_both_gap_bounds PASS
+near-initial margin=0.0001 angle=0.6 actual_time=0.000111097845296 want_time=0.000111133414203 gap=0.0300000320056 refinements=6
+ccd near_initial_contact_keeps_earliest_time_and_both_gap_bounds PASS
+near-initial margin=0.0001 angle=6.28318530718 actual_time=1.06090626098e-05 want_time=1.06124593279e-05 gap=0.0300000320069 refinements=6
+ccd near_initial_contact_keeps_earliest_time_and_both_gap_bounds PASS
+near-initial margin=0.0001 angle=15.7079632679 actual_time=4.24362495266e-06 want_time=4.24498373115e-06 gap=0.0300000320091 refinements=6
+ccd near_initial_contact_keeps_earliest_time_and_both_gap_bounds PASS
+near-initial margin=0.001 angle=0.05 actual_time=0.013335235825 want_time=0.013336090732 gap=0.0300000641052 refinements=7
+ccd near_initial_contact_keeps_earliest_time_and_both_gap_bounds PASS
+near-initial margin=0.001 angle=0.6 actual_time=0.00111126965194 want_time=0.00111134089433 gap=0.0300000641053 refinements=7
+ccd near_initial_contact_keeps_earliest_time_and_both_gap_bounds PASS
+near-initial margin=0.001 angle=6.28318530718 actual_time=0.000106118434791 want_time=0.000106125238076 gap=0.0300000641066 refinements=7
+ccd near_initial_contact_keeps_earliest_time_and_both_gap_bounds PASS
+near-initial margin=0.001 angle=15.7079632679 actual_time=4.24473738251e-05 want_time=4.24500952303e-05 gap=0.0300000641088 refinements=7
+ccd near_initial_contact_keeps_earliest_time_and_both_gap_bounds PASS
+near-initial margin=0.01 angle=0.05 actual_time=0.133369544989 want_time=0.133369891978 gap=0.0300000260189 refinements=9
+ccd near_initial_contact_keeps_earliest_time_and_both_gap_bounds PASS
+near-initial margin=0.01 angle=0.6 actual_time=0.011114128749 want_time=0.0111141576648 gap=0.0300000260191 refinements=9
+ccd near_initial_contact_keeps_earliest_time_and_both_gap_bounds PASS
+near-initial margin=0.01 angle=6.28318530718 actual_time=0.001061321117 want_time=0.00106132387839 gap=0.0300000260204 refinements=9
+ccd near_initial_contact_keeps_earliest_time_and_both_gap_bounds PASS
+near-initial margin=0.01 angle=15.7079632679 actual_time=0.000424528446707 want_time=0.000424529551358 gap=0.0300000260225 refinements=9
+ccd near_initial_contact_keeps_earliest_time_and_both_gap_bounds PASS
+ccd deep_initial_overlap_requires_recovery_policy PASS
+ccd codimensional_point_contact_time PASS
+ccd codimensional_points_preserve_empty_space PASS
+ccd requested_precision_distinguishes_safe_near_contact PASS
+ccd requested_precision_resolves_near_contact_prefix PASS
+ccd near_tangent_slide_is_clear_within_budget PASS
+ccd near_tangent_inbound_keeps_first_contact PASS
+ccd near_rotating_tangent_plane_stays_clear PASS
+ccd near_rotating_tangent_plane_stays_clear PASS
+ccd near_rotating_tangent_plane_stays_clear PASS
+ccd near_tangent_point_edge_resolves PASS
+ccd near_parallel_sliding_edges_resolve PASS
+ccd common_translation_does_not_exhaust_point_query PASS
+ccd different_rigid_frames_keep_first_edge_contact PASS
+ccd unknown_trajectory_retains_bounded_fallback PASS
+ccd rotating_frame_derivative_includes_transport_terms PASS
+ccd recorded_newton_motion_has_independent_safe_prefix_and_later_hit PASS
+recorded Newton query sampled_min=0.00199998947314 prefix_lower=0.00200001669974 sampled_crossing=0.7577 toi=0.7554991 refinements=5 certificates=4
+ccd recorded_newton_motion_resolves_within_original_budget PASS
+ccd derived_linear_trajectory_cannot_use_base_formula PASS
+ccd derived_rigid_trajectory_cannot_use_base_formula PASS
+ccd changed_nonunit_rigid_axis_is_rejected PASS
+continuous geometry matrix: 79/79 passed
+exit=0
+elapsed_s=0.151498
+
+grazes.txt
+near-graze radius=2.031 hit=0 gap=0.600201539729 refinement=8
+ccd near_graze_resolves_actual_contact_or_miss PASS
+near-graze radius=2.03001 hit=0 gap=0.599908974725 refinement=13
+ccd near_graze_resolves_actual_contact_or_miss PASS
+near-graze radius=2.02999 hit=1 gap=0.0300000456271 refinement=14
+ccd near_graze_resolves_actual_contact_or_miss PASS
+near-graze matrix: 3/3 passed
+exit=0
+elapsed_s=0.010416
+
+events.txt
+contact event matrix: 167/167 passed
+exit=0
+elapsed_s=0.043241
+
+benchmark.txt
+query-benchmark shot calls=20 median_us=2.208000 max_us=9.042000 max_refinements=11 max_certificates=0 peak_process_rss_bytes=17170432
+ccd benchmark_retains_actual_hit_or_miss PASS
+query-benchmark rotor_angle_0.600_radius_1.500 calls=20 median_us=2.125000 max_us=5.917000 max_refinements=11 max_certificates=10 peak_process_rss_bytes=17268736
+ccd benchmark_retains_actual_hit_or_miss PASS
+query-benchmark rotor_angle_0.600_radius_3.000 calls=20 median_us=0.417000 max_us=0.750000 max_refinements=2 max_certificates=0 peak_process_rss_bytes=17285120
+ccd benchmark_retains_actual_hit_or_miss PASS
+query-benchmark rotor_angle_6.283_radius_1.500 calls=20 median_us=2.625000 max_us=2.916000 max_refinements=11 max_certificates=10 peak_process_rss_bytes=17285120
+ccd benchmark_retains_actual_hit_or_miss PASS
+query-benchmark rotor_angle_6.283_radius_3.000 calls=20 median_us=1.375000 max_us=2.417000 max_refinements=6 max_certificates=4 peak_process_rss_bytes=17285120
+ccd benchmark_retains_actual_hit_or_miss PASS
+query-benchmark near_tangent_plane calls=20 median_us=0.417000 max_us=0.833000 max_refinements=1 max_certificates=1 peak_process_rss_bytes=17317888
+ccd benchmark_retains_actual_hit_or_miss PASS
+query-benchmark near_inbound_plane calls=20 median_us=0.709000 max_us=0.875000 max_refinements=3 max_certificates=2 peak_process_rss_bytes=17350656
+ccd benchmark_retains_actual_hit_or_miss PASS
+query-benchmark near_rotating_plane calls=20 median_us=0.542000 max_us=1.042000 max_refinements=1 max_certificates=1 peak_process_rss_bytes=17367040
+ccd benchmark_retains_actual_hit_or_miss PASS
+query benchmark matrix: 8/8 passed
+exit=0
+elapsed_s=0.010895
+
+incremental-material.txt
+incremental-material elastic_potential_force_tangent PASS
+incremental-material plastic_reduced_potential PASS
+incremental-material trial_does_not_mutate_history PASS
+incremental-material accepted_plastic_state PASS
+incremental-material no_fixed_strain_projection_loss_double_count PASS
+incremental-material permanent_set_unloads_to_zero_force PASS
+incremental-material repeated_commit_does_not_spend_work PASS
+incremental-material hardening_potential_and_tangent PASS
+incremental-material fracture_cannot_spend_dissipated_work PASS
+incremental-material fracture_spends_once_after_commit PASS
+incremental-material broken_member_cannot_repeat_work PASS
+incremental-material invalid_trial_cannot_mutate_state PASS
+incremental material matrix: 12/12 passed
+exit=0
+elapsed_s=0.009895
+
+persistent.txt
+persistent matrix: 34/34 passed
+exit=0
+elapsed_s=0.715520
+
+coupled.txt
+coupled rigid_translation_matches_literal_force_solution PASS
+coupled rigid_translation_work_and_loss PASS
+coupled registered_rigid_has_one_authoritative_pose PASS
+coupled managed_rigid_box_can_advance PASS
+coupled free_spin_matches_constrained_implicit_solution PASS
+coupled free_spin_keeps_exact_shape_and_tracks_projection PASS
+coupled managed_rigid_rotation_can_advance PASS
+coupled eccentric_load_uses_rotated_full_inertia PASS
+coupled rigid_velocity_constraint_preserves_local_momentum PASS
+point-box offset=0 miss=0 gap_min=0.0131065159 p_error=4.6629367e-15 l_error=1.78525409e-20 spin_y=0
+coupled rigid_deformable_contact_has_two_dynamic_recipients PASS
+coupled coupled_momentum_and_internal_torque PASS
+coupled current_registered_box_geometry_matches_query PASS
+point-box offset=0.25 miss=0 gap_min=0.0101708315 p_error=3.51196056e-13 l_error=5.80299114e-06 spin_y=0.164380287
+coupled rigid_deformable_contact_has_two_dynamic_recipients PASS
+coupled coupled_momentum_and_internal_torque PASS
+coupled off_center_contact_spins_actual_rigid_body PASS
+coupled current_registered_box_geometry_matches_query PASS
+point-box offset=0 miss=1 gap_min=0.7 p_error=8.8817842e-16 l_error=1.11022302e-15 spin_y=0
+coupled coupled_clear_miss_has_no_phantom_force PASS
+coupled coupled_momentum_and_internal_torque PASS
+coupled current_registered_box_geometry_matches_query PASS
+point-box offset=0.25 miss=0 gap_min=0.00935987778 p_error=5.62330491e-09 l_error=1.44506054e-09 spin_y=0
+coupled anchored_box_contact_has_explicit_reaction PASS
+coupled coupled_momentum_and_internal_torque PASS
+coupled anchored_box_stays_fixed PASS
+coupled current_registered_box_geometry_matches_query PASS
+rotating box omega=6 miss=0 contacts=6 substeps=10 retries=9 gap=0.0323470275 final_spin=2.96970782 newton=167 wall_s=0.045078
+coupled curved_rigid_strike_cannot_skip_fixed_target PASS
+coupled angular_interval_is_resolved_before_publication PASS
+coupled rotor_strike_transmits_support_impulse PASS
+coupled force_driven_rotating_interval_resolves PASS
+rotating box omega=144 miss=0 contacts=6 substeps=7 retries=6 gap=0.00229093259 final_spin=89.2062198 newton=238 wall_s=0.063261
+coupled curved_rigid_strike_cannot_skip_fixed_target PASS
+coupled angular_interval_is_resolved_before_publication PASS
+coupled rotor_strike_transmits_support_impulse PASS
+coupled force_driven_rotating_interval_resolves PASS
+rotating box omega=144 miss=1 contacts=0 substeps=4 retries=3 gap=0.602923228 final_spin=137.926985 newton=28 wall_s=0.005256
+coupled curved_rigid_miss_stays_clear PASS
+coupled angular_interval_is_resolved_before_publication PASS
+coupled force_driven_rotating_interval_resolves PASS
+two boxes reverse=0 contacts=13 intersection_frames=0 p_error=2.13162821e-14
+coupled rigid_rigid_contact_keeps_local_surfaces_separate PASS
+coupled rigid_rigid_ordering_retains_momentum PASS
+two boxes reverse=1 contacts=13 intersection_frames=0 p_error=2.13162821e-14
+coupled rigid_rigid_contact_keeps_local_surfaces_separate PASS
+coupled rigid_rigid_ordering_retains_momentum PASS
+mounted panel contacts=11 intersection_frames=0 mount_force=4.45718964 deflection=0.133937708 p_error=3.40474428e-08
+coupled rigid_contact_loads_actual_deformable_mount PASS
+coupled mounted_coupled_reactions_and_geometry_agree PASS
+mounted panel contacts=4 intersection_frames=0 mount_force=2.89628135 deflection=0.0869111516 p_error=9.92071464e-08
+coupled rigid_contact_loads_actual_deformable_mount PASS
+coupled mounted_coupled_reactions_and_geometry_agree PASS
+coupled tear breaks=1 faces=1 final_z=-0.739348477 ray=0 plastic=0.00103457774
+coupled coupled_tear_removes_face_and_releases_rigid_body PASS
+coupled unsubmitted_sdk_force_rejected PASS
+coupled unsubmitted_sdk_torque_rejected PASS
+coupled unsupported_sdk_constraint_rejected PASS
+coupled external_rigid_velocity_edit_rejected PASS
+coupled external_rigid_shape_edit_rejected PASS
+coupled coupled_failure_rolls_back_both_recipients PASS
+coupled external_angular_receipt_follows_curved_material_point PASS
+rigid free spin dt=0.02 angular_error=0.0157625782 projection_loss=0.00730787938 total_loss=0.0292511663
+rigid free spin dt=0.01 angular_error=0.00792048904 projection_loss=0.00368050968 total_loss=0.0147245211
+rigid free spin dt=0.005 angular_error=0.00397012232 projection_loss=0.00184673046 total_loss=0.00738725166
+coupled asymmetric_rigid_spin_error_converges PASS
+coupled embedded_point_rejected_before_motion PASS
+coupled nested_solid_boxes_rejected_before_motion PASS
+coupled crossed_boxes_without_contained_corners_rejected PASS
+coupled soft_face_crossing_solid_box_rejected PASS
+coupled separate_soft_face_remains_clear PASS
+coupled separate_crossed_axes_boxes_remain_clear PASS
+coupled nan_sdk_scaling_before_construction_rejected PASS
+coupled nan_sdk_scaling_after_construction_rejected PASS
+fast strike intervals=4 substeps=7 retries=3 gap_min=0.00201072099976 p_error=3.69377877e-08 angular_error=14.3058157 energy_error=2.36468622e-11 numerical_loss=16230.6443 final_spin=89.2062198
+coupled refined_fast_strike_resolves_with_balanced_reaction_and_work PASS
+fast strike intervals=8 substeps=10 retries=2 gap_min=0.00200057031211 p_error=2.77323554e-08 angular_error=6.9827975 energy_error=7.09405867e-11 numerical_loss=15569.5264 final_spin=90.3347895
+coupled refined_fast_strike_resolves_with_balanced_reaction_and_work PASS
+fast strike intervals=16 substeps=17 retries=1 gap_min=0.00200013445089 p_error=3.23631252e-08 angular_error=3.82906854 energy_error=3.63797881e-12 numerical_loss=15281.176 final_spin=90.5240525
+coupled refined_fast_strike_resolves_with_balanced_reaction_and_work PASS
+coupled fast_contact_angular_error_decreases_with_refinement PASS
+coupled matrix: 63/63 passed
+exit=0
+elapsed_s=1.592880
+
+coupled-limits.txt
+rotating box omega=144 miss=0 contacts=6 substeps=7 retries=6 gap=0.00229093259 final_spin=89.2062198 newton=249 wall_s=0.070956
+coupled curved_rigid_strike_cannot_skip_fixed_target PASS
+coupled angular_interval_is_resolved_before_publication PASS
+coupled rotor_strike_transmits_support_impulse PASS
+coupled force_driven_rotating_interval_resolves PASS
+coupled fast-rotation gate: 4/4 passed
+exit=0
+elapsed_s=0.087080
+
+coupled-benchmark.txt
+coupled benchmark pairs=1 generalized_dof=9 quadrature_vertices=9 rigid_triangles=12 steps=120 simulated_s=.6 wall_s=0.073074 us_per_step=608.949650 newton=335 accepted_substeps=120 retries=0 peak_contacts=1 peak_rss_bytes=88342528
+coupled benchmark pairs=4 generalized_dof=36 quadrature_vertices=36 rigid_triangles=48 steps=120 simulated_s=.6 wall_s=0.515313 us_per_step=4294.273267 newton=335 accepted_substeps=120 retries=0 peak_contacts=4 peak_rss_bytes=232800256
+exit=0
+elapsed_s=0.607231
+
+Pinned sources
+{
+  "ipc": {
+    "source": "/Users/waliwalu/GitHub/vc-minimap/build/world-physics-evaluation/ipc-toolkit",
+    "revision": "54d58ebcf1f6dd0cf95bcc58afd79839ca603a99",
+    "patch_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "patch": "ipc.patch"
+  },
+  "bullet": {
+    "source": "/Users/waliwalu/GitHub/vc-minimap/build/world-physics-evaluation/bullet-conservative-experiment",
+    "revision": "d3afe76132fc76b0f9b2359cbaef47a3766e7fbb",
+    "patch_sha256": "1731e7f846cde53c78ac3973fb431d214272fb875ec7c7b1926ed4e0df5479b8",
+    "patch": "bullet.patch"
+  }
+}
+
+Separate repository make test exit0, provenance11/11, child-process exits5/5 pass.
