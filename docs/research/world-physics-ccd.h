@@ -49,7 +49,8 @@ struct RigidPath : Path {
 };
 enum class Primitive {PointTriangle,PointEdge,EdgeEdge,PointPoint};
 struct Result {bool hit;double time,gap;int refinements;};
-inline Result Sweep(Primitive type,std::array<const Path*,4> p,double separation,int maxRefinements=1024) {
+inline Result Sweep(Primitive type,std::array<const Path*,4> p,double separation,int maxRefinements=1024,double requestedTolerance=1e-7) {
+    if(!std::isfinite(requestedTolerance)||requestedTolerance<=0)throw std::invalid_argument("Invalid geometry tolerance");
     if(maxRefinements<=0)throw std::invalid_argument("Invalid refinement budget");
     if(!std::isfinite(separation)||separation<0)throw std::invalid_argument("Invalid separation");
     const int count=type==Primitive::PointPoint?2:type==Primitive::PointEdge?3:4;
@@ -65,7 +66,7 @@ inline Result Sweep(Primitive type,std::array<const Path*,4> p,double separation
         if(!std::isfinite(squared)||squared<0)throw std::runtime_error("Invalid primitive distance");
         return std::sqrt(squared);
     };
-    constexpr double contactTolerance=1e-7;
+    const double contactTolerance=requestedTolerance;
     double speed[4]={0,0,0,0};
     for(int i=0;i<count;++i) {
         speed[i]=p[i]->max_speed();

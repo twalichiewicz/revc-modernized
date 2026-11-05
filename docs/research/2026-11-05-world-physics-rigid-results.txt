@@ -1,0 +1,285 @@
+Rigid-box/deformable shared solve; retained fast-strike rejection is expected exit1.
+
+=== coupled-final ===
+
+geometry.txt
+continuous geometry matrix: 63/63 passed
+exit=0
+elapsed_s=0.003287
+
+grazes.txt
+near-graze radius=2.031 hit=0 gap=0.600201539729 refinement=36
+ccd near_graze_resolves_actual_contact_or_miss PASS
+near-graze radius=2.03001 hit=0 gap=0.599908974725 refinement=308
+ccd near_graze_resolves_actual_contact_or_miss PASS
+near-graze radius=2.02999 hit=1 gap=0.0300000999243 refinement=284
+ccd near_graze_resolves_actual_contact_or_miss PASS
+near-graze matrix: 3/3 passed
+exit=0
+elapsed_s=0.002758
+
+events.txt
+contact event matrix: 167/167 passed
+exit=0
+elapsed_s=0.007781
+
+incremental-material.txt
+incremental-material elastic_potential_force_tangent PASS
+incremental-material plastic_reduced_potential PASS
+incremental-material trial_does_not_mutate_history PASS
+incremental-material accepted_plastic_state PASS
+incremental-material no_fixed_strain_projection_loss_double_count PASS
+incremental-material permanent_set_unloads_to_zero_force PASS
+incremental-material repeated_commit_does_not_spend_work PASS
+incremental-material hardening_potential_and_tangent PASS
+incremental-material fracture_cannot_spend_dissipated_work PASS
+incremental-material fracture_spends_once_after_commit PASS
+incremental-material broken_member_cannot_repeat_work PASS
+incremental-material invalid_trial_cannot_mutate_state PASS
+incremental material matrix: 12/12 passed
+exit=0
+elapsed_s=0.002410
+
+persistent.txt
+persistent matrix: 34/34 passed
+exit=0
+elapsed_s=0.158757
+
+coupled.txt
+coupled rigid_translation_matches_literal_force_solution PASS
+coupled rigid_translation_work_and_loss PASS
+coupled registered_rigid_has_one_authoritative_pose PASS
+coupled managed_rigid_box_can_advance PASS
+coupled free_spin_matches_constrained_implicit_solution PASS
+coupled free_spin_keeps_exact_shape_and_tracks_projection PASS
+coupled managed_rigid_rotation_can_advance PASS
+coupled eccentric_load_uses_rotated_full_inertia PASS
+coupled rigid_velocity_constraint_preserves_local_momentum PASS
+point-box offset=0 miss=0 gap_min=0.0131065159 p_error=4.6629367e-15 l_error=1.78525409e-20 spin_y=0
+coupled rigid_deformable_contact_has_two_dynamic_recipients PASS
+coupled coupled_momentum_and_internal_torque PASS
+coupled current_registered_box_geometry_matches_query PASS
+point-box offset=0.25 miss=0 gap_min=0.0101708315 p_error=3.51196056e-13 l_error=5.80299114e-06 spin_y=0.164380287
+coupled rigid_deformable_contact_has_two_dynamic_recipients PASS
+coupled coupled_momentum_and_internal_torque PASS
+coupled off_center_contact_spins_actual_rigid_body PASS
+coupled current_registered_box_geometry_matches_query PASS
+point-box offset=0 miss=1 gap_min=0.7 p_error=8.8817842e-16 l_error=1.11022302e-15 spin_y=0
+coupled coupled_clear_miss_has_no_phantom_force PASS
+coupled coupled_momentum_and_internal_torque PASS
+coupled current_registered_box_geometry_matches_query PASS
+point-box offset=0.25 miss=0 gap_min=0.00935987778 p_error=5.62330491e-09 l_error=1.44506054e-09 spin_y=0
+coupled anchored_box_contact_has_explicit_reaction PASS
+coupled coupled_momentum_and_internal_torque PASS
+coupled anchored_box_stays_fixed PASS
+coupled current_registered_box_geometry_matches_query PASS
+rotating box omega=6 miss=0 contacts=5 substeps=10 retries=9 gap=0.0323470273 final_spin=2.96970783
+coupled curved_rigid_strike_cannot_skip_fixed_target PASS
+coupled angular_interval_is_resolved_before_publication PASS
+coupled rotor_strike_transmits_support_impulse PASS
+coupled force_driven_rotating_interval_resolves PASS
+rotating box omega=144 miss=1 contacts=0 substeps=4 retries=3 gap=0.602923228 final_spin=137.926985
+coupled curved_rigid_miss_stays_clear PASS
+coupled angular_interval_is_resolved_before_publication PASS
+coupled force_driven_rotating_interval_resolves PASS
+two boxes reverse=0 contacts=13 intersection_frames=0 p_error=2.13162821e-14
+coupled rigid_rigid_contact_keeps_local_surfaces_separate PASS
+coupled rigid_rigid_ordering_retains_momentum PASS
+two boxes reverse=1 contacts=13 intersection_frames=0 p_error=2.13162821e-14
+coupled rigid_rigid_contact_keeps_local_surfaces_separate PASS
+coupled rigid_rigid_ordering_retains_momentum PASS
+mounted panel contacts=11 intersection_frames=0 mount_force=4.45718963 deflection=0.133937708 p_error=4.41639936e-08
+coupled rigid_contact_loads_actual_deformable_mount PASS
+coupled mounted_coupled_reactions_and_geometry_agree PASS
+mounted panel contacts=4 intersection_frames=0 mount_force=2.89628135 deflection=0.0869111516 p_error=9.92071464e-08
+coupled rigid_contact_loads_actual_deformable_mount PASS
+coupled mounted_coupled_reactions_and_geometry_agree PASS
+coupled tear breaks=1 faces=1 final_z=-0.739348477 ray=0 plastic=0.00103457774
+coupled coupled_tear_removes_face_and_releases_rigid_body PASS
+coupled unsubmitted_sdk_force_rejected PASS
+coupled unsubmitted_sdk_torque_rejected PASS
+coupled unsupported_sdk_constraint_rejected PASS
+coupled external_rigid_velocity_edit_rejected PASS
+coupled external_rigid_shape_edit_rejected PASS
+coupled coupled_failure_rolls_back_both_recipients PASS
+coupled external_angular_receipt_follows_curved_material_point PASS
+rigid free spin dt=0.02 angular_error=0.0157625782 projection_loss=0.00730787938 total_loss=0.0292511663
+rigid free spin dt=0.01 angular_error=0.00792048904 projection_loss=0.00368050968 total_loss=0.0147245211
+rigid free spin dt=0.005 angular_error=0.00397012232 projection_loss=0.00184673046 total_loss=0.00738725166
+coupled asymmetric_rigid_spin_error_converges PASS
+coupled matrix: 47/47 passed
+exit=0
+elapsed_s=0.564978
+
+coupled-limits.txt
+rotating strike rejection: CCD refinement budget exhausted; motion is unresolved
+coupled rejected_rotating_interval_retains_both_states PASS
+coupled force_driven_rotating_interval_resolves FAIL
+coupled fast-rotation gate: 1/2 passed
+exit=1
+elapsed_s=0.016565
+
+coupled-benchmark.txt
+coupled benchmark pairs=1 generalized_dof=9 quadrature_vertices=9 rigid_triangles=12 steps=120 simulated_s=.6 wall_s=0.019212 us_per_step=160.097917 newton=335 accepted_substeps=120 retries=0 peak_contacts=1 peak_rss_bytes=13107200
+coupled benchmark pairs=4 generalized_dof=36 quadrature_vertices=36 rigid_triangles=48 steps=120 simulated_s=.6 wall_s=0.272880 us_per_step=2274.000000 newton=335 accepted_substeps=120 retries=0 peak_contacts=4 peak_rss_bytes=14024704
+exit=0
+elapsed_s=0.296999
+
+Pinned compiled sources
+{
+  "ipc": {
+    "source": "/Users/waliwalu/GitHub/vc-minimap/build/world-physics-evaluation/ipc-toolkit",
+    "revision": "54d58ebcf1f6dd0cf95bcc58afd79839ca603a99",
+    "patch_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "patch": "ipc.patch"
+  },
+  "bullet": {
+    "source": "/Users/waliwalu/GitHub/vc-minimap/build/world-physics-evaluation/bullet-conservative-experiment",
+    "revision": "d3afe76132fc76b0f9b2359cbaef47a3766e7fbb",
+    "patch_sha256": "1731e7f846cde53c78ac3973fb431d214272fb875ec7c7b1926ed4e0df5479b8",
+    "patch": "bullet.patch"
+  }
+}
+
+=== coupled-asan ===
+
+geometry.txt
+continuous geometry matrix: 63/63 passed
+exit=0
+elapsed_s=0.017528
+
+grazes.txt
+near-graze radius=2.031 hit=0 gap=0.600201539729 refinement=36
+ccd near_graze_resolves_actual_contact_or_miss PASS
+near-graze radius=2.03001 hit=0 gap=0.599908974725 refinement=308
+ccd near_graze_resolves_actual_contact_or_miss PASS
+near-graze radius=2.02999 hit=1 gap=0.0300000999243 refinement=284
+ccd near_graze_resolves_actual_contact_or_miss PASS
+near-graze matrix: 3/3 passed
+exit=0
+elapsed_s=0.011342
+
+events.txt
+contact event matrix: 167/167 passed
+exit=0
+elapsed_s=0.035846
+
+incremental-material.txt
+incremental-material elastic_potential_force_tangent PASS
+incremental-material plastic_reduced_potential PASS
+incremental-material trial_does_not_mutate_history PASS
+incremental-material accepted_plastic_state PASS
+incremental-material no_fixed_strain_projection_loss_double_count PASS
+incremental-material permanent_set_unloads_to_zero_force PASS
+incremental-material repeated_commit_does_not_spend_work PASS
+incremental-material hardening_potential_and_tangent PASS
+incremental-material fracture_cannot_spend_dissipated_work PASS
+incremental-material fracture_spends_once_after_commit PASS
+incremental-material broken_member_cannot_repeat_work PASS
+incremental-material invalid_trial_cannot_mutate_state PASS
+incremental material matrix: 12/12 passed
+exit=0
+elapsed_s=0.009942
+
+persistent.txt
+persistent matrix: 34/34 passed
+exit=0
+elapsed_s=0.577589
+
+coupled.txt
+coupled rigid_translation_matches_literal_force_solution PASS
+coupled rigid_translation_work_and_loss PASS
+coupled registered_rigid_has_one_authoritative_pose PASS
+coupled managed_rigid_box_can_advance PASS
+coupled free_spin_matches_constrained_implicit_solution PASS
+coupled free_spin_keeps_exact_shape_and_tracks_projection PASS
+coupled managed_rigid_rotation_can_advance PASS
+coupled eccentric_load_uses_rotated_full_inertia PASS
+coupled rigid_velocity_constraint_preserves_local_momentum PASS
+point-box offset=0 miss=0 gap_min=0.0131065159 p_error=4.6629367e-15 l_error=1.78525409e-20 spin_y=0
+coupled rigid_deformable_contact_has_two_dynamic_recipients PASS
+coupled coupled_momentum_and_internal_torque PASS
+coupled current_registered_box_geometry_matches_query PASS
+point-box offset=0.25 miss=0 gap_min=0.0101708315 p_error=3.51196056e-13 l_error=5.80299114e-06 spin_y=0.164380287
+coupled rigid_deformable_contact_has_two_dynamic_recipients PASS
+coupled coupled_momentum_and_internal_torque PASS
+coupled off_center_contact_spins_actual_rigid_body PASS
+coupled current_registered_box_geometry_matches_query PASS
+point-box offset=0 miss=1 gap_min=0.7 p_error=8.8817842e-16 l_error=1.11022302e-15 spin_y=0
+coupled coupled_clear_miss_has_no_phantom_force PASS
+coupled coupled_momentum_and_internal_torque PASS
+coupled current_registered_box_geometry_matches_query PASS
+point-box offset=0.25 miss=0 gap_min=0.00935987778 p_error=5.62330491e-09 l_error=1.44506054e-09 spin_y=0
+coupled anchored_box_contact_has_explicit_reaction PASS
+coupled coupled_momentum_and_internal_torque PASS
+coupled anchored_box_stays_fixed PASS
+coupled current_registered_box_geometry_matches_query PASS
+rotating box omega=6 miss=0 contacts=5 substeps=10 retries=9 gap=0.0323470273 final_spin=2.96970784
+coupled curved_rigid_strike_cannot_skip_fixed_target PASS
+coupled angular_interval_is_resolved_before_publication PASS
+coupled rotor_strike_transmits_support_impulse PASS
+coupled force_driven_rotating_interval_resolves PASS
+rotating box omega=144 miss=1 contacts=0 substeps=4 retries=3 gap=0.602923228 final_spin=137.926985
+coupled curved_rigid_miss_stays_clear PASS
+coupled angular_interval_is_resolved_before_publication PASS
+coupled force_driven_rotating_interval_resolves PASS
+two boxes reverse=0 contacts=13 intersection_frames=0 p_error=2.13162821e-14
+coupled rigid_rigid_contact_keeps_local_surfaces_separate PASS
+coupled rigid_rigid_ordering_retains_momentum PASS
+two boxes reverse=1 contacts=13 intersection_frames=0 p_error=2.13162821e-14
+coupled rigid_rigid_contact_keeps_local_surfaces_separate PASS
+coupled rigid_rigid_ordering_retains_momentum PASS
+mounted panel contacts=11 intersection_frames=0 mount_force=4.45718963 deflection=0.133937708 p_error=4.41639936e-08
+coupled rigid_contact_loads_actual_deformable_mount PASS
+coupled mounted_coupled_reactions_and_geometry_agree PASS
+mounted panel contacts=4 intersection_frames=0 mount_force=2.89628135 deflection=0.0869111516 p_error=9.92071464e-08
+coupled rigid_contact_loads_actual_deformable_mount PASS
+coupled mounted_coupled_reactions_and_geometry_agree PASS
+coupled tear breaks=1 faces=1 final_z=-0.739348477 ray=0 plastic=0.00103457774
+coupled coupled_tear_removes_face_and_releases_rigid_body PASS
+coupled unsubmitted_sdk_force_rejected PASS
+coupled unsubmitted_sdk_torque_rejected PASS
+coupled unsupported_sdk_constraint_rejected PASS
+coupled external_rigid_velocity_edit_rejected PASS
+coupled external_rigid_shape_edit_rejected PASS
+coupled coupled_failure_rolls_back_both_recipients PASS
+coupled external_angular_receipt_follows_curved_material_point PASS
+rigid free spin dt=0.02 angular_error=0.0157625782 projection_loss=0.00730787938 total_loss=0.0292511663
+rigid free spin dt=0.01 angular_error=0.00792048904 projection_loss=0.00368050968 total_loss=0.0147245211
+rigid free spin dt=0.005 angular_error=0.00397012232 projection_loss=0.00184673046 total_loss=0.00738725166
+coupled asymmetric_rigid_spin_error_converges PASS
+coupled matrix: 47/47 passed
+exit=0
+elapsed_s=1.256376
+
+coupled-limits.txt
+rotating strike rejection: CCD refinement budget exhausted; motion is unresolved
+coupled rejected_rotating_interval_retains_both_states PASS
+coupled force_driven_rotating_interval_resolves FAIL
+coupled fast-rotation gate: 1/2 passed
+exit=1
+elapsed_s=0.036164
+
+coupled-benchmark.txt
+coupled benchmark pairs=1 generalized_dof=9 quadrature_vertices=9 rigid_triangles=12 steps=120 simulated_s=.6 wall_s=0.066274 us_per_step=552.287150 newton=335 accepted_substeps=120 retries=0 peak_contacts=1 peak_rss_bytes=84426752
+coupled benchmark pairs=4 generalized_dof=36 quadrature_vertices=36 rigid_triangles=48 steps=120 simulated_s=.6 wall_s=0.492057 us_per_step=4100.470833 newton=335 accepted_substeps=120 retries=0 peak_contacts=4 peak_rss_bytes=222199808
+exit=0
+elapsed_s=0.576361
+
+Pinned compiled sources
+{
+  "ipc": {
+    "source": "/Users/waliwalu/GitHub/vc-minimap/build/world-physics-evaluation/ipc-toolkit",
+    "revision": "54d58ebcf1f6dd0cf95bcc58afd79839ca603a99",
+    "patch_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "patch": "ipc.patch"
+  },
+  "bullet": {
+    "source": "/Users/waliwalu/GitHub/vc-minimap/build/world-physics-evaluation/bullet-conservative-experiment",
+    "revision": "d3afe76132fc76b0f9b2359cbaef47a3766e7fbb",
+    "patch_sha256": "1731e7f846cde53c78ac3973fb431d214272fb875ec7c7b1926ed4e0df5479b8",
+    "patch": "bullet.patch"
+  }
+}
+
+Separate checks: make test exit0; provenance11/11 and physical child exits5/5 pass.

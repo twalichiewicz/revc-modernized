@@ -148,12 +148,19 @@ void QueryBenchmark() {
     std::printf("query benchmark matrix: %d/%d passed\n",checks-failed,checks);
 }
 
+void ExplicitAccuracy(){
+    continuous::LinearPath near({0,0,.01000001},{0,0,.01000001}),origin(Vec::Zero(),Vec::Zero()),inbound({0,0,.01000001},{0,0,.009999});
+    auto still=continuous::Sweep(continuous::Primitive::PointPoint,{&near,&origin,nullptr,nullptr},.01,1024,1e-10);
+    auto strike=continuous::Sweep(continuous::Primitive::PointPoint,{&inbound,&origin,nullptr,nullptr},.01,1024,1e-10);
+    Expect("requested_precision_distinguishes_safe_near_contact",!still.hit);
+    Expect("requested_precision_resolves_near_contact_prefix",strike.hit&&strike.time>0&&std::abs(strike.gap-.01)<=1e-10&&std::abs(strike.time-1./101)<1e-4);
+}
 int main(int argc,char **argv) {
     std::setvbuf(stdout,nullptr,_IONBF,0);
     if(argc>1&&std::strcmp(argv[1],"--benchmark")==0){QueryBenchmark();return failed?1:0;}
     if(argc>1&&std::strcmp(argv[1],"--stress")==0) {NearGrazes();std::printf("near-graze matrix: %d/%d passed\n",checks-failed,checks);return failed?1:0;}
     if(argc>1){std::fprintf(stderr,"Unknown probe mode\n");return 2;}
-    Paths();Shots();CrossedEdges();RotatingBlade();Witnesses();NearInitialContact();PointPairs();
+    Paths();Shots();CrossedEdges();RotatingBlade();Witnesses();NearInitialContact();PointPairs();ExplicitAccuracy();
     std::printf("continuous geometry matrix: %d/%d passed\n",checks-failed,checks);
     return failed?1:0;
 }

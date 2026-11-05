@@ -98,7 +98,10 @@ def main():
         parser.add_argument(f"--{name}", required=True, type=Path)
     parser.add_argument("--asan", action="store_true", help="Instrument this separate IPC/probe build with AddressSanitizer")
     parser.add_argument("--persistent", action="store_true", help="Also evaluate the experimental implicit node-island coordinator")
+    parser.add_argument("--rigid", action="store_true", help="Include persistent and coupled rigid-box probes, retaining the rejected fast-rotation gate")
     args = parser.parse_args()
+    if args.rigid:
+        args.persistent = True
     ipc, bullet, bullet_build, build, output = [p.resolve() for p in
         (args.ipc_source, args.bullet_source, args.bullet_build, args.build_dir, args.output_dir)]
     output.mkdir(parents=True, exist_ok=True)
@@ -122,7 +125,10 @@ def main():
     targets = ["world_physics_ccd", "world_physics_contact"]
     if args.persistent:
         targets += ["world_physics_incremental", "world_physics_persistent"]
+    if args.rigid:
+        targets += ["world_physics_rigid"]
     provenance = {"sources": records, "cmake_options": options, "asan": args.asan, "persistent": args.persistent,
+        "rigid": args.rigid,
         "runner_sha256": sha(Path(__file__).read_bytes()),
         "fixtures_sha256": {p.name: sha(p.read_bytes()) for p in (ROOT / "docs/research").glob("world-physics-*") if p.suffix in (".h", ".cpp", ".cmake")},
         "compiler": subprocess.check_output(["xcrun", "clang++", "--version"], text=True)}
@@ -150,6 +156,9 @@ def main():
     if args.persistent:
         runs += [("incremental-material", "world_physics_incremental", []), ("persistent", "world_physics_persistent", []),
                  ("persistent-benchmark", "world_physics_persistent", ["--benchmark"])]
+    if args.rigid:
+        runs += [("coupled", "world_physics_rigid", []), ("coupled-limits", "world_physics_rigid", ["--limits"]),
+                 ("coupled-benchmark", "world_physics_rigid", ["--benchmark"])]
     for name, executable, arguments in runs:
         run_started = time.monotonic()
         result = subprocess.run([str(build / executable), *arguments], capture_output=True, text=True, timeout=60)

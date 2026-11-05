@@ -1,7 +1,7 @@
 # Add the research target at the end of upstream configuration, without editing
 # or installing IPC Toolkit. Used via CMAKE_PROJECT_IPCToolkit_INCLUDE.
 function(world_physics_add_ccd_probe)
-  foreach(probe ccd contact persistent incremental)
+  foreach(probe ccd contact persistent incremental rigid)
   set(probe_file "${probe}")
   if(probe STREQUAL "contact")
     set(probe_file "contact-event")
