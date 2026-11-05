@@ -861,3 +861,8 @@ $(BUILD)/test_crashdamage_native: tests/test_crashdamage_native.cpp tests/test_c
 	$(CXX) $(CXXFLAGS) -Isrc -o $@ tests/test_crashdamage_native.cpp src/falldamage.cpp
 
 test-game-assets: $(BUILD)/test_crashdamage_native $(BUILD)/test_panelcollision
+
+.PHONY: test-physics-app
+test: test-physics-app
+test-physics-app:
+	python3 -m unittest discover -s tests -p test_physics_app_install.py
