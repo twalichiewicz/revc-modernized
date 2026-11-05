@@ -15,9 +15,10 @@ void Finish(Code &code,uint64_t pc){const auto at=size_t(static_cast<uint8_t *>(
 }
 int main(){if(ExistingShotChecks(1,nullptr))return 1;using namespace receiptfixture;
  Code code;code.Add(0x100288cc0,0x100288cf4);code.Add(0x100289c38,0x100289c58);code.Add(0x10027ea40,0x10027eabc);code.bindings={{0x10012c554,entry.at("_ZN6CWorld18ProcessLineOfSightERK7CVectorS2_R9CColPointRP7CEntitybbbbbbbb")},{0x10028ea70,entry.at("_ZN7CWeapon14DoBulletImpactEP7CEntityS1_P7CVectorS3_P9CColPoint9CVector2D")}};code.Finish();pthread_jit_write_protect_np(0);Finish(code,0x100288cf0);Finish(code,0x100289c54);sys_icache_invalidate(code.code,0x10000);pthread_jit_write_protect_np(1);query=code.Address(0x100288cc0);impact=code.Address(0x100289c38);shotcollision::gInstant=Instant;
- for(bool helicopter:{false,true}){
+ for(int aircraftModel:{0,199,180}){
   Setup();Panel(-.8f,255,"chassis_hi");*reinterpret_cast<void **>(cars.data()+0x218)=nullptr;
-  if(helicopter){*reinterpret_cast<int16_t *>(cars.data()+0x6a)=199;airframedamage::enabled=true;}else carmechanics::enabled=true;
+  const bool helicopter=aircraftModel!=0;
+  if(helicopter){*reinterpret_cast<int16_t *>(cars.data()+0x6a)=int16_t(aircraftModel);if(aircraftModel==180)*reinterpret_cast<int *>(cars.data()+0x348)=4;airframedamage::enabled=true;}else carmechanics::enabled=true;
   CVector muzzle=from;muzzle.y-=.2f;uint8_t w[32]{};std::memcpy(w,&weaponType,4);
   reinterpret_cast<Fire>(entry.at("_ZN7CWeapon14FireInstantHitEP7CEntityP7CVector"))(w,peds.data()+2*0x8d0,&muzzle);
   Check(helicopter?airframedamage::hits==1&&carglass::perforations==1&&*reinterpret_cast<float *>(cars.data()+0x2a0)==1000:carmechanics::deliveries==1,"actual native camera-ray/muzzle dispatch must deliver localized damage and helicopter skin perforation");

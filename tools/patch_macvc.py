@@ -266,6 +266,8 @@ DEFAULT_HOOKS = [
     "_ZN12CFireManager15FindNearestFireE7CVectorPf",
     "_ZN6CCarAI23TellOccupantsToLeaveCarEP8CVehicle",
     "_ZN13cAudioManager19ProcessEngineDamageER14cVehicleParams",
+    "_ZN13cAudioManager14ProcessCarHeliER14cVehicleParams",
+    "_ZN13cAudioManager23ProcessModelHeliVehicleER14cVehicleParams",
     "_ZN11CAutomobile16FireTruckControlEv",
     "_ZN12CFireManager33FindFurthestFire_NeverMindFireMenE7CVectorff",
 ]

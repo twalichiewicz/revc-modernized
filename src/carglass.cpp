@@ -198,7 +198,7 @@ void *CopySkin(const Mesh &m,const std::vector<skinmodel::Hole> &holes,size_t &b
  std::vector<Vertex> vertices;std::vector<Triangle> triangles;
  for(int i=0;i<m.nt;i++){
   const auto &t=m.t[i];std::vector<std::vector<skinmodel::Sample>> pieces{{{m.v[t.v[0]],{1,0,0}},{m.v[t.v[1]],{0,1,0}},{m.v[t.v[2]],{0,0,1}}}};
-  for(const auto &hole:holes){std::vector<std::vector<skinmodel::Sample>> next;for(const auto &piece:pieces)if(!skinmodel::Subtract(piece,hole,next))return nullptr;pieces=std::move(next);if(pieces.size()>512)return nullptr;}
+  for(const auto &hole:holes){std::vector<std::vector<skinmodel::Sample>> next;for(const auto &piece:pieces)if(!skinmodel::Subtract(piece,hole,next))return nullptr;pieces=std::move(next);if(pieces.size()>65535/3)return nullptr;}
   for(const auto &p:pieces)for(size_t j=1;j+1<p.size();j++){
    const auto cross=Cross(Sub(p[j].position,p[0].position),Sub(p[j+1].position,p[0].position));if(skinmodel::Dot(cross,cross)<1e-16f)continue;
    if(vertices.size()+3>65535||triangles.size()>=32768)return nullptr;
@@ -369,7 +369,7 @@ bool Perforate(uint8_t *v,const void *identity,Vec3 hit,Vec3 normal,float budget
   Objects objects;rw.atomics(car.clump,Gather,&objects);if(!objects.valid||std::find(objects.a.begin(),objects.a.begin()+objects.n,identity)==objects.a.begin()+objects.n)return false;
   void *atomic=const_cast<void *>(identity);if(!(rw.atomicFlags(atomic)&4))return false;
   auto old=std::find_if(car.parts.begin(),car.parts.end(),[&](const Part &p){return p.atomic==atomic;});const bool isNew=old==car.parts.end();if(!isNew&&rw.geometry(atomic)!=old->copy)return false;
-  if(isNew&&car.parts.size()>=kMaxParts)return false;size_t count=0;for(const auto &p:car.parts)count+=p.holes.size();if(count>=64)return false;
+  if(isNew&&car.parts.size()>=kMaxParts)return false;size_t count=0;for(const auto &p:car.parts)count+=p.holes.size();
   auto source=isNew?rw.geometry(atomic):rw.geometry(old->holder);Mesh m;if(!m.Read(source,atomic,rw.root(car.clump)))return false;
   Vec3 origin,basis[3];if(!InCar(m.frame,m.root,{0,0,0},origin))return false;float toCar[16]{};
   for(int a=0;a<3;a++){if(!InCar(m.frame,m.root,{float(a==0),float(a==1),float(a==2)},basis[a]))return false;auto b=Sub(basis[a],origin);toCar[4*a]=b.x;toCar[4*a+1]=b.y;toCar[4*a+2]=b.z;}toCar[12]=origin.x;toCar[13]=origin.y;toCar[14]=origin.z;
@@ -381,7 +381,7 @@ bool Perforate(uint8_t *v,const void *identity,Vec3 hit,Vec3 normal,float budget
   rw.setGeometry(atomic,pending.copy,0);
   if(isNew){car.parts.push_back({atomic,pending.holder,pending.copy,pending.bytes,{},std::move(holes)});pending.holder=nullptr;}else{gBytes-=old->bytes;old->copy=pending.copy;old->bytes=pending.bytes;old->holes=std::move(holes);}gBytes+=pending.bytes;
   if(found==gCars.end())gCars.push_back(std::move(fresh));
-  if(count==0||count==7||count==15||count==31||count==63)Log("airframe skin: ref %d model %d holes %zu",Ref(v),game::EntityModel(v),count+1);return true;
+  if(count==0||count==7||count==15||count==31||((count+1)%64==0))Log("airframe skin: ref %d model %d holes %zu",Ref(v),game::EntityModel(v),count+1);return true;
  }catch(const std::bad_alloc &){return false;}
 }
 bool Opening(uint8_t *v,Vec3 from,Vec3 to,float &fraction)

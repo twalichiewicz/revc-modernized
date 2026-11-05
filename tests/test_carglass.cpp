@@ -144,6 +144,9 @@ int main()
  float area=0;auto g=atoms[0][0].geo;for(const auto &t:g->triangles)if(t.material==1){const auto a=g->vertices[t.v[0]],b=g->vertices[t.v[1]],c=g->vertices[t.v[2]];area+=std::fabs((b.y-a.y)*(c.z-a.z)-(b.z-a.z)*(c.y-a.y))*.5f;}
  Check(area<.5f&&area>.45f&&g->triangles.size()>original->triangles.size(),"perforated coarse skin retains surrounding surface with real local missing area");
  float opening=1;Check(carglass::Opening(cars.data(),{-2,.5f,-.1f},{2,.5f,-.1f},opening)&&opening>0&&opening<1,"later rays see the actual private skin opening");
+ int accepted=0;for(int i=0;i<100;i++){const Vec3 at{-.8f,.03f+(i%10)*.095f,-.28f+(i/10)*.048f};accepted+=carglass::Perforate(cars.data(),&atoms[0][0],at,{1,0,0},20);}
+ std::printf("hole stress accepted=%d triangles=%zu bytes=%zu\n",accepted,atoms[0][0].geo->triangles.size(),carglass::gBytes);
+ Check(accepted>=90,"ongoing distinct bullet holes continue beyond64 within native topology and byte budget");
  carglass::Restore(cars.data());Check(atoms[0][0].geo==original,"airframe repair restores its original shared geometry");Reset();
  Bullet();
  Check(!(atoms[0][0].geo->flags&1)&&stripRebuilds==0&&base->flags==0x3f,"broken copies use triangle lists and retain the original strip geometry");

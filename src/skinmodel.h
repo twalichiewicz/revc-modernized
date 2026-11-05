@@ -22,6 +22,14 @@ inline bool Subtract(const std::vector<Sample> &polygon,const Hole &hole,std::ve
  for(auto p:polygon){const float d=Dot(Sub(p.position,hole.centre),n);lo=std::min(lo,d);hi=std::max(hi,d);near|=std::fabs(d)<.06f;}
  if(!near&&(lo>.06f||hi<-.06f)){out.push_back(polygon);return true;}
  const Vec3 axis=std::fabs(n.z)<.9f?Vec3{0,0,1}:Vec3{0,1,0};Vec3 u=Cross(n,axis);const float ul=std::sqrt(Dot(u,u));u={u.x/ul,u.y/ul,u.z/ul};const Vec3 v=Cross(n,u);
+ // Reject disjoint convex polygons before splitting. Without this, a hole
+ // outside a triangle still extends its clip lines across the whole sheet,
+ // generating unrelated slivers and exhausting the topology budget.
+ for(int edge=0;edge<8;edge++){
+  const float angle=float(edge)*.7853981634f;const Vec3 e{u.x*std::cos(angle)+v.x*std::sin(angle),u.y*std::cos(angle)+v.y*std::sin(angle),u.z*std::cos(angle)+v.z*std::sin(angle)};
+  bool outside=true;for(const auto &p:polygon)outside&=Dot(Sub(p.position,hole.centre),e)>=hole.radius*.9238795325f;
+  if(outside){out.push_back(polygon);return true;}
+ }
  std::vector<Sample> inside=polygon;
  for(int edge=0;edge<8&&!inside.empty();edge++){
   const float angle=float(edge)*.7853981634f;const Vec3 e{u.x*std::cos(angle)+v.x*std::sin(angle),u.y*std::cos(angle)+v.y*std::sin(angle),u.z*std::cos(angle)+v.z*std::sin(angle)};
@@ -32,7 +40,7 @@ inline bool Subtract(const std::vector<Sample> &polygon,const Hole &hole,std::ve
    if((da<0&&db>0)||(da>0&&db<0)){const float t=da/(da-db);Sample cut{Mix(a.position,b.position,t),Mix(a.weights,b.weights,t)};next.push_back(cut);outside.push_back(cut);}
   }
   if(outside.size()>=3)out.push_back(std::move(outside));inside=std::move(next);
-  if(out.size()>1024||inside.size()>32)return false;
+  if(out.size()>65535/3||inside.size()>32)return false;
  }
  return true;
 }

@@ -705,7 +705,7 @@ void Frame(uint32_t now){
  }
  if(!player){ReleasePins();return;}
  uint8_t *pad=api.GetPad(0);if(pad&&!PadControlsDisabled(pad)&&n.exit(pad)){if(PedInVehicle(player)){uint8_t *v=PedVehicle(player);if(Jet *jet=Find(v))if(now-jet->boarded>300)Leave(player,v);}else if(!CancelBoardingButton(player,now))for(auto &jet:gJets)if(uint8_t *v=Live(jet))if(Board(player,v,now))break;}
- if(!gConfig.planes||*gArea!=0||n.mission()||*gCutscene||Health(player)<=0||PedInVehicle(player)){ReleasePins();return;}
+ if(!gConfig.planes||*gArea!=0||n.mission()||*gCutscene||Health(player)<=0){ReleasePins();return;}
  bool near=false;for(size_t i=0;i<gAnchors.size();++i)if(!gJets[i].entity&&Source(gAnchors[i])&&Length(Sub(gAnchors[i].basis[3],EntityPos(player)))<120){near=true;break;}
  if(!near){ReleasePins();return;}if(!RegisterModel())return;
  if(Stream(gModel)[0x10]!=1||!*reinterpret_cast<void **>(gInfo+0x30)){Request();return;}

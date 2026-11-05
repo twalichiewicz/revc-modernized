@@ -14,6 +14,7 @@
 namespace airframedamage {namespace {
 constexpr size_t kSlots=256,kStride=0x6f0;void **gPool;bool gReady;uint64_t gSerial;
 void (*gAuto)(uint8_t *),(*gPlane)(uint8_t *),(*gHeli)(uint8_t *),(*gBoat)(uint8_t *),(*gFix)(uint8_t *),(*gDelete)(uint8_t *),(*gRestart)();
+bool (*gCarHeliAudio)(uint8_t *,uint8_t *);void (*gToyHeliAudio)(uint8_t *,uint8_t *);
 void (*gFlying)(uint8_t *,int),(*gMove)(uint8_t *,float,float,float),(*gTurn)(uint8_t *,float,float,float,float,float,float);
 struct Identity {uint8_t *v=nullptr;const void *base=nullptr,*flags=nullptr,*vtable=nullptr;int ref=-1,model=-1,kind=-1;};
 bool Same(const Identity &a,const Identity &b){return a.v==b.v&&a.base==b.base&&a.flags==b.flags&&a.vtable==b.vtable&&a.ref==b.ref&&a.model==b.model&&a.kind==b.kind;}
@@ -91,7 +92,18 @@ void Tick(uint8_t *v)
  if(std::isfinite(health)&&health>h->health+1){Repair(v);h=Record(id);if(!h)return;}h->health=health;
  const uint32_t now=game::api.timeMs?*game::api.timeMs:0;if(h->seen&&now>=h->clock)airframemodel::Tick(h->state,(now-h->clock)*.001f,(v[0x295]&16)!=0);h->seen=true;h->clock=now;SyncRotors(*h);
 }
-void Auto(uint8_t *v){Tick(v);gAuto(v);}void Routed(uint8_t *v,void (*native)(uint8_t *))
+bool MissingMainRotor(uint8_t *params)
+{
+ if(!params)return false;auto *v=*reinterpret_cast<uint8_t **>(params+0x10);const auto e=Read(v);return e.managed&&e.rotor<=0;
+}
+bool CarHeliAudio(uint8_t *manager,uint8_t *params){return MissingMainRotor(params)?true:gCarHeliAudio(manager,params);}
+void ToyHeliAudio(uint8_t *manager,uint8_t *params){if(!MissingMainRotor(params))gToyHeliAudio(manager,params);}
+void Auto(uint8_t *v)
+{
+ Tick(v);Identity before;const bool owned=Identify(v,before)&&Eligible(before)&&before.kind==0;gAuto(v);Identity after;
+ if(owned&&Identify(v,after)&&Same(before,after)&&Read(v).rotor<=0)*reinterpret_cast<float *>(v+0x5f0)=0;
+}
+void Routed(uint8_t *v,void (*native)(uint8_t *))
 {
  Tick(v);Identity id;History *h=nullptr;bool owned=Identify(v,id)&&(Eligible(id)||(game::Wrecked(v)&&gReady&&game::IsAircraft(v)&&(v[0x297]&0x40)));
  if(owned){h=Record(id);owned=h!=nullptr;}
@@ -153,8 +165,9 @@ bool Install()
 {
  if(gReady)return true;gPool=reinterpret_cast<void **>(dlsym(RTLD_MAIN_ONLY,"_ZN6CPools15ms_pVehiclePoolE"));gUpdateMatrix=reinterpret_cast<decltype(gUpdateMatrix)>(dlsym(RTLD_MAIN_ONLY,"_ZN7CMatrix8UpdateRWEv"));gUpdateFrame=reinterpret_cast<decltype(gUpdateFrame)>(dlsym(RTLD_MAIN_ONLY,"_ZN7CEntity13UpdateRwFrameEv"));gMove=reinterpret_cast<decltype(gMove)>(dlsym(RTLD_MAIN_ONLY,"_ZN9CPhysical14ApplyMoveForceEfff"));gTurn=reinterpret_cast<decltype(gTurn)>(dlsym(RTLD_MAIN_ONLY,"_ZN9CPhysical14ApplyTurnForceEffffff"));if(!gPool||!gUpdateMatrix||!gUpdateFrame||!gMove||!gTurn||!game::api.PoolsGetVehicle||!game::api.timeMs)return false;
 #define C(v,s,f) if(!v)v=reinterpret_cast<decltype(v)>(hooks::Chain(s,reinterpret_cast<void *>(f)))
+ C(gCarHeliAudio,"_ZN13cAudioManager14ProcessCarHeliER14cVehicleParams",CarHeliAudio);C(gToyHeliAudio,"_ZN13cAudioManager23ProcessModelHeliVehicleER14cVehicleParams",ToyHeliAudio);
  C(gFlying,"_ZN8CVehicle13FlyingControlE12eFlightModel",Flying);C(gAuto,"_ZN11CAutomobile14ProcessControlEv",Auto);C(gPlane,"_ZN6CPlane14ProcessControlEv",Plane);C(gHeli,"_ZN5CHeli14ProcessControlEv",Heli);C(gBoat,"_ZN5CBoat14ProcessControlEv",Boat);C(gFix,"_ZN11CAutomobile3FixEv",Fix);C(gDelete,"_ZN7CEntity14DeleteRwObjectEv",Delete);C(gRestart,"_ZN6CWorld15ClearForRestartEv",Restart);
 #undef C
- gReady=gFlying&&gAuto&&gPlane&&gHeli&&gBoat&&gFix&&gDelete&&gRestart;if(gReady){game::api.AirframeFlightUsed=FlightUsed;game::api.AirframeEffects=Read;game::api.AirframeFire=Fire;game::api.AirframeBurn=Burn;game::api.AirframeCollision=Collision;Log("airframes: independent propulsion, lifting/control surfaces, fuel, electrical and rotor components enabled");}return gReady;
+ gReady=gCarHeliAudio&&gToyHeliAudio&&gFlying&&gAuto&&gPlane&&gHeli&&gBoat&&gFix&&gDelete&&gRestart;if(gReady){game::api.AirframeFlightUsed=FlightUsed;game::api.AirframeEffects=Read;game::api.AirframeFire=Fire;game::api.AirframeBurn=Burn;game::api.AirframeCollision=Collision;Log("airframes: independent propulsion, lifting/control surfaces, fuel, electrical and rotor components enabled");}return gReady;
 }
 }

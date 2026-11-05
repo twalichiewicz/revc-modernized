@@ -38,6 +38,8 @@ int main(){
  JetFrame(100);AllSourcesHidden("timer rewind");MembershipCounts(2,1);
  restart();AllSourcesVisible();MembershipCounts(2,2);restart();MembershipCounts(2,2);shutdown();
 
+ // Approaching in a car must request and materialize the same nearby aircraft.
+ Fresh();gPlayer[0x4c0]=1;*reinterpret_cast<uint8_t **>(gPlayer+0x4b8)=jetVehicles[7];const int beforeDriving=allocated;lastRequest=-1;JetFrame(5500);const int drivingModel=lastRequest;Expect(drivingModel>=240&&drivingModel<=249,"Learjet requests its model while approaching in another vehicle");if(drivingModel>=240&&drivingModel<=249&&models[drivingModel]){*reinterpret_cast<void **>(models[drivingModel]+0x30)=&clumpMarker;streamInfo[drivingModel*32+0x10]=1;JetFrame(5600);}Expect(allocated==beforeDriving+1&&airportjets::Owns(jetVehicles[0]),"Learjet streams and spawns while player approaches in another vehicle");restart();shutdown();
  // Source hiding is independent of proximity, model slots, player existence,
  // interior, missions and donor readiness, so static RT capture sees none.
  for(int context=0;context<6;++context){Fresh();

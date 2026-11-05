@@ -130,12 +130,12 @@ void StockSkin(const char *file,int model)
  rw::Texture::setLoadTextures(false);rw::StreamMemory stream;stream.open(bytes.data(),uint32_t(bytes.size()));
  Check(rw::findChunk(&stream,rw::ID_CLUMP,nullptr,nullptr),"stock clump found");auto clump=rw::Clump::streamRead(&stream);Check(clump,"stock clump reads into real RenderWare");
  std::memset(vehicle,0,sizeof vehicle);*reinterpret_cast<void **>(pool)=vehicle;*reinterpret_cast<void **>(pool+8)=&allocation;*reinterpret_cast<int *>(pool+16)=1;
- *reinterpret_cast<void **>(vehicle+0x58)=clump;*reinterpret_cast<unsigned *>(vehicle+0x60)=2;*reinterpret_cast<int16_t *>(vehicle+0x6a)=int16_t(model);vehicle[0x297]=0x40;
+ *reinterpret_cast<void **>(vehicle+0x58)=clump;*reinterpret_cast<unsigned *>(vehicle+0x60)=2;*reinterpret_cast<int16_t *>(vehicle+0x6a)=int16_t(model);vehicle[0x297]=0x40;*reinterpret_cast<int *>(vehicle+0x348)=model==181?4:model==195?1:0;
  auto matrix=reinterpret_cast<float *>(vehicle+8);matrix[0]=matrix[5]=matrix[10]=matrix[15]=1;
  carglass::gPool=&poolAddress;carglass::gReady=true;gConfig.carDeformation=true;game::api.PoolsGetVehicle=GetVehicle;
  unsigned tested=0;
  for(auto link=clump->atomics.link.next;link!=&clump->atomics.link;link=link->next){
-  auto atomic=rw::Atomic::fromClump(link);auto source=atomic->geometry;auto original=std::vector<rw::Triangle>(source->triangles,source->triangles+source->numTriangles);
+  auto atomic=rw::Atomic::fromClump(link);if(!(atomic->getFlags()&4))continue;auto source=atomic->geometry;auto original=std::vector<rw::Triangle>(source->triangles,source->triangles+source->numTriangles);
   for(int t=0;t<source->numTriangles;t++){
    const auto tri=source->triangles[t];auto mat=source->matList.materials[tri.matId];if(mat->color.alpha!=255)continue;
    const auto verts=source->morphTargets[0].vertices;const Vec3 a{verts[tri.v[0]].x,verts[tri.v[0]].y,verts[tri.v[0]].z},b{verts[tri.v[1]].x,verts[tri.v[1]].y,verts[tri.v[1]].z},c{verts[tri.v[2]].x,verts[tri.v[2]].y,verts[tri.v[2]].z};
@@ -161,7 +161,7 @@ int main()
 {
  Check(rw::Engine::init()&&rw::Engine::open(nullptr)&&rw::Engine::start(),"NULL renderer initialized");Bind();
  for(bool strip:{false,true})for(bool glassOnly:{false,true})for(bool broken:{false,true})for(bool dented:{false,true})Copy(strip,broken,glassOnly,dented);
- StockSkin("sparrow.dff",199);StockSkin("maverick.dff",217);
+ StockSkin("sparrow.dff",199);StockSkin("maverick.dff",217);StockSkin("deaddodo.dff",181);StockSkin("skimmer.dff",195);
  Check(rw::Geometry::numAllocated==0&&rw::Material::numAllocated==0,"all native geometry/material references released");
  rw::Engine::stop();rw::Engine::close();rw::Engine::term();std::puts("carglass real mesh builder: all passed");
 }
