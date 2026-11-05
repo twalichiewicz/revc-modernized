@@ -57,7 +57,7 @@ Capture Preview(uint8_t *v,uint8_t *other,const Point &p,bool secondary=false,bo
 void Save(Capture c,float force)
 {
  if(!c.hit.valid||!std::isfinite(force)||force<=0||!Current(c.id)||(!Eligible(c.id)&&!Airframe(c.id)))return;
- if(Airframe(c.id)){const float mass=*reinterpret_cast<const float *>(c.id.v+0xcc);if(std::isfinite(mass)&&mass>=100&&mass<=1000000)game::api.AirframeCollision(c.id.v,c.hit.point,force/mass*50);return;}
+ if(Airframe(c.id)){const float mass=*reinterpret_cast<const float *>(c.id.v+0xcc);if(std::isfinite(mass)&&mass>=100&&mass<=1000000)game::api.AirframeCollision(c.id.v,c.hit.point,c.hit.inward,force/mass*50);return;}
  auto &h=Record(c.id);const auto now=c.hit.when;
  // Native sector collision retains its first strongest record when forces tie.
  if(!h.hit.valid||now<h.hit.when||now-h.hit.when>200||force>h.hit.force){c.hit.force=force;h.hit=c.hit;}

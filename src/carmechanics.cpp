@@ -34,7 +34,7 @@ bool Identify(uint8_t *v,Identity &id)
 }
 bool Eligible(const Identity &id){return id.vtable&&id.model>=0&&id.model<6500&&id.model!=162&&id.model!=171&&
  *reinterpret_cast<const int *>(id.v+0x348)==0&&!game::IsAircraft(id.v)&&!game::Wrecked(id.v)&&game::EntityClump(id.v)&&
- (id.v[0x297]&0x40)&&!(game::EntityFlags(id.v)&(1u<<27));}
+ (id.v[0x297]&0x40);}
 struct History {
  Identity id;mechanicalmodel::State state;mechanicalmodel::Layout layout;uint64_t revision=0;
  std::array<partsmodel::Episode,mechanicalmodel::kModules> episodes{};
@@ -61,7 +61,7 @@ bool LayoutCurrent(const History &h,const Identity &id)
 }
 bool BulletCurrent(uint8_t *v,const BulletToken &token,Identity &id)
 {
- if(!gReady||!gConfig.carMechanics||!token.revision||!Identify(v,id)||!Eligible(id)||(game::EntityFlags(v)&(1u<<17)))return false;
+ if(!gReady||!gConfig.carMechanics||!token.revision||!Identify(v,id)||!Eligible(id)||(game::EntityFlags(v)&game::kEntityBulletProof))return false;
  const auto &h=gHistory[size_t(id.ref>>8)];
  return Same(h.id,id)&&h.revision==token.revision&&h.layoutValid&&game::EntityClump(v)==token.clump&&
   *reinterpret_cast<void **>(v+0x160)==token.handling&&h.info==token.info&&h.col==token.col&&h.source==token.source&&
@@ -144,25 +144,37 @@ void Restart(){++gEpoch;for(auto c=gController;c;c=c->previous)c->valid=false;gH
 bool Enabled(){return gReady&&gConfig.carMechanics;}
 BulletToken BeginBullet(uint8_t *v)
 {
- Identity id;if(!gReady||!gConfig.carMechanics||!Identify(v,id)||!Eligible(id)||(game::EntityFlags(v)&(1u<<17)))return {};
+ Identity id;if(!gReady||!gConfig.carMechanics||!Identify(v,id)||!Eligible(id)||(game::EntityFlags(v)&game::kEntityBulletProof))return {};
  auto &h=Record(id);BulletToken token;token.revision=h.revision;token.clump=game::EntityClump(v);token.handling=*reinterpret_cast<void **>(v+0x160);
  std::memcpy(token.transform.data(),v+8,sizeof token.transform);
  if(!token.handling||!Layout(h))return {};
  token.info=h.info;token.col=h.col;token.source=h.source;
  Identity current;if(!BulletCurrent(v,token,current))return {};return token;
 }
-void Projectile(uint8_t *v,const BulletToken &token,const projectilemodel::Ray &ray)
+bool ComponentHit(uint8_t *v,Vec3 from,Vec3 to,float entry,float &closest,Vec3 &normal)
 {
- Identity id;if(!BulletCurrent(v,token,id))return;auto &h=gHistory[size_t(id.ref>>8)];
- const auto hit=projectilemodel::Doses(h.layout,ray);if(!hit.valid)return;
+ Identity id;if(!gReady||!gConfig.carMechanics||!Identify(v,id)||!Eligible(id)||!std::isfinite(entry)||entry<0||entry>=closest)return false;const auto &h=gHistory[size_t(id.ref>>8)];if(!Same(h.id,id)||!h.layoutValid||!LayoutCurrent(h,id))return false;
+ const Vec3 delta{to.x-from.x,to.y-from.y,to.z-from.z};const float a[]={from.x,from.y,from.z},d[]={delta.x,delta.y,delta.z};for(int j=0;j<3;j++)if(!std::isfinite(a[j])||!std::isfinite(d[j]))return false;bool hit=false;
+ for(const auto &box:h.layout.volumes){
+  const float lo[]={box.lo.x,box.lo.y,box.lo.z},hi[]={box.hi.x,box.hi.y,box.hi.z};float near=entry,far=closest;Vec3 n{};bool valid=true;
+  for(int axis=0;axis<3;axis++){if(std::fabs(d[axis])<1e-7f){if(a[axis]<lo[axis]||a[axis]>hi[axis])valid=false;continue;}float l=(lo[axis]-a[axis])/d[axis],r=(hi[axis]-a[axis])/d[axis],sign=-1;if(l>r){std::swap(l,r);sign=1;}if(l>near){near=l;n={float(axis==0)*sign,float(axis==1)*sign,float(axis==2)*sign};}far=std::min(far,r);if(near>=far)valid=false;}
+  if(valid&&near<closest){closest=near;normal=n;if(n.x*n.x+n.y*n.y+n.z*n.z<.1f){const float len=std::sqrt(delta.x*delta.x+delta.y*delta.y+delta.z*delta.z);if(len<1e-7f)return false;normal={-delta.x/len,-delta.y/len,-delta.z/len};}hit=true;}
+ }return hit;
+}
+bool Projectile(uint8_t *v,const BulletToken &token,const projectilemodel::Ray &ray,std::array<float,projectilemodel::kLayers> *passed)
+{
+ Identity id;if(!BulletCurrent(v,token,id))return false;auto &h=gHistory[size_t(id.ref>>8)];
+ const auto hit=projectilemodel::Doses(h.layout,ray);if(!hit.valid)return false;if(passed)*passed=hit.layerRemaining;
  const auto before=h.state.damage;mechanicalmodel::Apply(h.state,hit.doses);
  for(int i=0;i<mechanicalmodel::kModules;i++)if(h.state.damage[i]>before[i])
   Log("car projectiles: model %d %s integrity %.0f%%",id.model,mechanicalmodel::Name(i),100*(1-h.state.damage[i]));
  Report(h);
+ if(h.state.damage!=before&&game::api.RearmVehicleFire)game::api.RearmVehicleFire(v);
  for(int i=0;i<4;i++)if(hit.doses[mechanicalmodel::kWheelLF+i]>0&&h.state.damage[mechanicalmodel::kWheelLF+i]>=.75f){
-  Identity now;if(!BulletCurrent(v,token,now))return;const int status=gWheelStatus(v+0x34c,i);
+  Identity now;if(!BulletCurrent(v,token,now))return true;const int status=gWheelStatus(v+0x34c,i);
   if(status==0&&BulletCurrent(v,token,now))gBurst(v,uint8_t(i),false);
  }
+ return true;
 }
 firemodel::Input FireInput(const uint8_t *v)
 {
@@ -190,7 +202,7 @@ float LightingPower(const uint8_t *v)
 }
 void Collision(uint8_t *v,const carimpact::Collision &hit)
 {
- auto c=gController;if(!Current(c)||c->id.v!=v||!game::api.timeMs)return;
+ auto c=gController;if(!Current(c)||c->id.v!=v||!game::api.timeMs||(game::EntityFlags(v)&game::kEntityCollisionProof))return;
  auto &h=*c->history;const auto before=h.state.damage;auto dose=mechanicalmodel::Doses(h.layout,{hit.point,hit.inward,hit.severity,hit.piece});
  const uint32_t now=*game::api.timeMs;
  for(int i=0;i<mechanicalmodel::kModules;i++)if(dose[i]>0){if(partsmodel::Contact(h.episodes[i],now))partsmodel::Commit(h.episodes[i]);else dose[i]=0;}

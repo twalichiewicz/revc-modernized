@@ -7,6 +7,7 @@
 namespace receiptfixture {
 using namespace fixture;using namespace nativejetshadowtest;
 void *query,*impact;
+uintptr_t Ignore(...){return 0;}int Random(){return 127;}float Progress(){return 0;}
 __attribute__((naked)) void Exit(){__asm__ volatile("br x28\n");}
 __attribute__((naked)) void Dispatch(void *,void *,uint8_t *,uint8_t *,CVector *,CVector *,CVector *){__asm__ volatile(
  "stp x29,x30,[sp,#-0x60]!\n stp x19,x20,[sp,#0x10]\n stp x21,x22,[sp,#0x20]\n stp x23,x24,[sp,#0x30]\n stp x27,x28,[sp,#0x40]\n sub sp,sp,#0x200\n add x29,sp,#0x140\n mov x23,x0\n mov x24,x1\n mov x21,x2\n mov x20,x3\n mov x19,x4\n ldr d0,[x5]\n ldr s1,[x5,#8]\n stur d0,[x29,#-0x8c]\n stur s1,[x29,#-0x84]\n ldr d0,[x6]\n ldr s1,[x6,#8]\n stur d0,[x29,#-0x98]\n stur s1,[x29,#-0x90]\n str xzr,[sp,#0x78]\n adr x28,1f\n blr x23\n 1: adr x28,2f\n blr x24\n 2: add sp,sp,#0x200\n ldp x27,x28,[sp,#0x40]\n ldp x23,x24,[sp,#0x30]\n ldp x21,x22,[sp,#0x20]\n ldp x19,x20,[sp,#0x10]\n ldp x29,x30,[sp],#0x60\n ret\n");}
@@ -22,13 +23,22 @@ int main(){if(ExistingShotChecks(1,nullptr))return 1;using namespace receiptfixt
   CVector muzzle=from;muzzle.y-=.2f;uint8_t w[32]{};std::memcpy(w,&weaponType,4);
   reinterpret_cast<Fire>(entry.at("_ZN7CWeapon14FireInstantHitEP7CEntityP7CVector"))(w,peds.data()+2*0x8d0,&muzzle);
   Check(helicopter?airframedamage::hits==1&&carglass::perforations==1&&*reinterpret_cast<float *>(cars.data()+0x2a0)==1000:carmechanics::deliveries==1,"actual native camera-ray/muzzle dispatch must deliver localized damage and helicopter skin perforation");
-  if(helicopter){
+  {
    for(int i=0;i<100;i++)reinterpret_cast<Fire>(entry.at("_ZN7CWeapon14FireInstantHitEP7CEntityP7CVector"))(w,peds.data()+2*0x8d0,&muzzle);
    auto canEnter=reinterpret_cast<bool (*)(uint8_t *)>(code.Address(0x10027ea40));
    Check(*reinterpret_cast<float *>(cars.data()+0x2a0)==1000&&canEnter(cars.data()),"repeated certified skin shots keep native stationary helicopter entry available");
    *reinterpret_cast<float *>(cars.data()+0x84)=.3f;Check(!canEnter(cars.data()),"native moving vehicle entry rejection remains in force");
   }
 
+ }
+ Code damage;damage.Add(0x10027d608,0x10027dc40);
+ for(uint64_t pc=0x10027d608;pc<0x10027dc40;pc+=4){const auto w=damage.image.Word(pc);if((w&0xfc000000)==0x94000000){const auto target=uint64_t(int64_t(pc)+(int64_t(int32_t(w<<6))>>4));if(!damage.Address(target))damage.bindings[target]=reinterpret_cast<void *>(Ignore);}}
+ damage.bindings[0x100143f28]=reinterpret_cast<void *>(Random);damage.bindings[0x1001194ec]=reinterpret_cast<void *>(Progress);damage.Finish();
+ shotcollision::gVehicleDamage=reinterpret_cast<decltype(shotcollision::gVehicleDamage)>(damage.Address(0x10027d608));
+ for(unsigned proof:{0u,1u<<17,1u<<25}){
+  Setup();Panel(-.8f);noPeds=true;*reinterpret_cast<void **>(cars.data()+0x218)=nullptr;carmechanics::enabled=doDamage=true;*reinterpret_cast<unsigned *>(cars.data()+0x60)|=proof;cars[0x297]=64;cars[0x2dc]=31;
+  const bool bulletProof=proof==(1u<<25);FireShot();Check(carmechanics::deliveries==(bulletProof?0:1)&&*reinterpret_cast<float *>(cars.data()+0x2a0)==1000,"actual native bullet permission differs from explosion proof and preserves hull health");
+  if(bulletProof)Check(cars[0x2dc]==31,"native rejection restores the untouched last-damage metadata");
  }
  printf("native shot receipt: %d failures\n",fail);return fail?1:0;
 }

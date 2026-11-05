@@ -1,18 +1,10 @@
 #include "mechanicalmodel.h"
+#include "materialmodel.h"
 #include <algorithm>
 #include <cmath>
 namespace mechanicalmodel {namespace {
 bool Finite(Vec3 p){return std::isfinite(p.x)&&std::isfinite(p.y)&&std::isfinite(p.z);}
 Box Around(Vec3 p,Vec3 half){return {{p.x-half.x,p.y-half.y,p.z-half.z},{p.x+half.x,p.y+half.y,p.z+half.z}};}
-float Entry(const Box &box,Vec3 p,Vec3 d)
-{
- float near=0,far=1;const float a[]={p.x,p.y,p.z},v[]={d.x,d.y,d.z},lo[]={box.lo.x-.25f,box.lo.y-.25f,box.lo.z-.25f},hi[]={box.hi.x+.25f,box.hi.y+.25f,box.hi.z+.25f};
- for(int i=0;i<3;i++){
-  if(std::fabs(v[i])<1e-7f){if(a[i]<lo[i]||a[i]>hi[i])return -1;continue;}
-  float l=(lo[i]-a[i])/v[i],h=(hi[i]-a[i])/v[i];if(l>h)std::swap(l,h);near=std::max(near,l);far=std::min(far,h);if(near>far)return -1;
- }
- return near;
-}
 float Unit(float x){return std::clamp(x,0.0f,1.0f);}
 }
 bool Build(int model,Vec3 lo,Vec3 hi,const std::array<Vec3,4> &w,Layout &out)
@@ -37,16 +29,7 @@ bool Build(int model,Vec3 lo,Vec3 hi,const std::array<Vec3,4> &w,Layout &out)
  out.volumes[kElectrical]=Around({width*.45f,engineY,z+.15f},{.22f,.3f,.25f});
  return true;
 }
-std::array<float,kModules> Doses(const Layout &layout,const Hit &hit)
-{
- std::array<float,kModules> doses{};
- if(!Finite(hit.point)||!Finite(hit.inward)||!std::isfinite(hit.severity)||hit.severity<=4.5f)return doses;
- const float len=std::sqrt(hit.inward.x*hit.inward.x+hit.inward.y*hit.inward.y+hit.inward.z*hit.inward.z);if(!std::isfinite(len)||len<1e-6f)return doses;
- const float reach=std::min(1.0f,.08f+hit.severity*.035f),dose=std::min(.55f,(hit.severity-4.5f)/26);
- const Vec3 d{hit.inward.x/len*reach,hit.inward.y/len*reach,hit.inward.z/len*reach};
- for(int i=0;i<kModules;i++){const float t=Entry(layout.volumes[i],hit.point,d);if(t>=0)doses[i]=dose*(1-.55f*t)*(i==1?1.35f:1);}
- return doses;
-}
+std::array<float,kModules> Doses(const Layout &layout,const Hit &hit){return materialmodel::Contact(layout,hit.point,hit.inward,hit.severity).doses;}
 void Apply(State &s,const std::array<float,kModules> &dose)
 {
  for(int i=0;i<kModules;i++)if(std::isfinite(dose[i])&&dose[i]>0)s.damage[i]=Unit(s.damage[i]+dose[i]);

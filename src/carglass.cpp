@@ -192,20 +192,23 @@ void *Copy(const Mesh &m,uint8_t mask,size_t &bytes,size_t available,const std::
  if(ok)ok=rw.unlock(g)!=nullptr;
  if(!ok){rw.destroyGeometry(g);return nullptr;}return g;
 }
-void *CopySkin(const Mesh &m,const std::vector<skinmodel::Hole> &holes,size_t &bytes,size_t available,const std::vector<skinmodel::Cut> *cuts=nullptr,bool keepEmpty=false,bool *hasSkin=nullptr)
+void *CopySkin(const Mesh &m,const std::vector<skinmodel::Hole> &holes,size_t &bytes,size_t available,const std::vector<skinmodel::Cut> *cuts=nullptr,bool keepEmpty=false,bool *hasSkin=nullptr,uint8_t mask=0,const std::vector<Vec3> *offsets=nullptr)
 {
  if(hasSkin)*hasSkin=true;
  const unsigned flags=rw.flags(m.geometry);const int uvs=rw.uvCount(m.geometry);if(uvs<0||uvs>8)return nullptr;
  struct Vertex {skinmodel::Sample sample;std::array<uint16_t,3> source;};
  std::vector<Vertex> vertices;std::vector<Triangle> triangles;
  for(int i=0;i<m.nt;i++){
-  const auto &t=m.t[i];std::vector<std::vector<skinmodel::Sample>> pieces{{{m.v[t.v[0]],{1,0,0}},{m.v[t.v[1]],{0,1,0}},{m.v[t.v[2]],{0,0,1}}}};
+  const auto &t=m.t[i];if(mask&glassmodel::Bit(m.Face(i)))continue;std::vector<std::vector<skinmodel::Sample>> pieces{{{m.v[t.v[0]],{1,0,0}},{m.v[t.v[1]],{0,1,0}},{m.v[t.v[2]],{0,0,1}}}};
   for(const auto &hole:holes){std::vector<std::vector<skinmodel::Sample>> next;for(const auto &piece:pieces)if(!skinmodel::Subtract(piece,hole,next))return nullptr;pieces=std::move(next);if(pieces.size()>65535/3)return nullptr;}
   if(cuts)for(const auto &cut:*cuts)for(auto &piece:pieces)piece=skinmodel::Slice(piece,cut);
   for(const auto &p:pieces)for(size_t j=1;j+1<p.size();j++){
    const auto cross=Cross(Sub(p[j].position,p[0].position),Sub(p[j+1].position,p[0].position));if(skinmodel::Dot(cross,cross)<1e-16f)continue;
    if(vertices.size()+3>65535||triangles.size()>=32768)return nullptr;
-   const auto at=uint16_t(vertices.size());for(auto sample:{p[0],p[j],p[j+1]})vertices.push_back({sample,{t.v[0],t.v[1],t.v[2]}});
+   const auto at=uint16_t(vertices.size());for(auto sample:{p[0],p[j],p[j+1]}){
+    if(offsets&&offsets->size()==size_t(m.nv)){const float w[]={sample.weights.x,sample.weights.y,sample.weights.z};for(int k=0;k<3;k++){const auto d=(*offsets)[t.v[k]];sample.position={sample.position.x+w[k]*d.x,sample.position.y+w[k]*d.y,sample.position.z+w[k]*d.z};}}
+    vertices.push_back({sample,{t.v[0],t.v[1],t.v[2]}});
+   }
    triangles.push_back({{at,uint16_t(at+1),uint16_t(at+2)},t.material});
   }
  }
@@ -227,7 +230,9 @@ void *CopySkin(const Mesh &m,const std::vector<skinmodel::Hole> &holes,size_t &b
  }
  auto out=static_cast<Triangle *>(rw.triangles(g));ok=ok&&out;
  for(size_t i=0;ok&&i<triangles.size();i++){out[i]=triangles[i];auto material=rw.material(m.geometry,out[i].material);out[i].material=0xffff;ok=material&&rw.triangleMaterial(g,out+i,material);}
- auto sphere=source?rw.sphere(source):nullptr;if(ok&&sphere)rw.setSphere(morph,sphere);else ok=false;
+ auto sphere=source?static_cast<const float *>(rw.sphere(source)):nullptr;if(ok&&sphere){
+  float bounds[4];std::memcpy(bounds,sphere,sizeof bounds);if(offsets){float expansion=0;for(const auto &v:*offsets)expansion=std::max(expansion,std::sqrt(skinmodel::Dot(v,v)));bounds[3]+=expansion;}rw.setSphere(morph,bounds);
+ }else ok=false;
  if(ok)ok=rw.unlock(g)!=nullptr;if(!ok){rw.destroyGeometry(g);return nullptr;}return g;
 }
 void Break(uint8_t *v,Pane pane,Vec3 hit)
@@ -251,7 +256,7 @@ void Break(uint8_t *v,Pane pane,Vec3 hit)
   if(!changed)continue;
   if(pending.size()>=kMaxParts||car.parts.size()+newParts+(old==car.parts.end())>kMaxParts)return;
   pending.emplace_back();Pending &p=pending.back();p.atomic=atomic;p.was=old==car.parts.end()?nullptr:&*old;
-  p.copy=Copy(m,car.broken|bit,p.bytes,kBudget-gBytes-extra,old==car.parts.end()?nullptr:&old->offsets);if(!p.copy)return;
+  p.copy=old!=car.parts.end()&&(!old->holes.empty()||!old->cuts.empty())?CopySkin(m,old->holes,p.bytes,kBudget-gBytes-extra,&old->cuts,true,nullptr,car.broken|bit,&old->offsets):Copy(m,car.broken|bit,p.bytes,kBudget-gBytes-extra,old==car.parts.end()?nullptr:&old->offsets);if(!p.copy)return;
   extra+=p.bytes;if(gBytes+extra>kBudget)return;
   if(!p.was){p.holder=rw.createAtomic();if(!p.holder)return;rw.setGeometry(p.holder,source,0);++newParts;}
  }
@@ -315,7 +320,7 @@ bool Deform(uint8_t *v,const dentmodel::Impact &hit)
   if(!changed)continue;
   if(pending.size()>=kMaxParts||car.parts.size()+newParts+(old==car.parts.end())>kMaxParts)return false;
   pending.emplace_back();auto &p=pending.back();p.atomic=atomic;p.was=old==car.parts.end()?nullptr:&*old;p.offsets=std::move(offsets);
-  p.copy=Copy(m,car.broken,p.bytes,kBudget-gBytes-extra,&p.offsets);if(!p.copy)return false;extra+=p.bytes;
+  p.copy=old!=car.parts.end()&&(!old->holes.empty()||!old->cuts.empty())?CopySkin(m,old->holes,p.bytes,kBudget-gBytes-extra,&old->cuts,true,nullptr,car.broken,&p.offsets):Copy(m,car.broken,p.bytes,kBudget-gBytes-extra,&p.offsets);if(!p.copy)return false;extra+=p.bytes;
   if(!p.was){p.holder=rw.createAtomic();if(!p.holder)return false;rw.setGeometry(p.holder,source,0);++newParts;}
  }
  if(pending.empty())return false;
@@ -359,7 +364,7 @@ bool Dent(uint8_t *v,const dentmodel::Impact &hit)
 }
 void Bullet(uint8_t *v,const void *atomic,int triangle,Vec3 hit,Vec3 normal)
 {
- if(!gReady||!gConfig.carGlass||!Eligible(v)||(game::EntityFlags(v)&(1u<<17))||!Finite(hit)||!Finite(normal))return;
+ if(!gReady||!gConfig.carGlass||!Eligible(v)||(game::EntityFlags(v)&game::kEntityBulletProof)||!Finite(hit)||!Finite(normal))return;
  Objects objects;rw.atomics(game::EntityClump(v),Gather,&objects);
  // Check identity against the live clump before touching the supplied atomic.
  if(!objects.valid||std::find(objects.a.begin(),objects.a.begin()+objects.n,atomic)==objects.a.begin()+objects.n||!(rw.atomicFlags(atomic)&4))return;
@@ -368,7 +373,7 @@ void Bullet(uint8_t *v,const void *atomic,int triangle,Vec3 hit,Vec3 normal)
 }
 bool SeverSection(uint8_t *v,Vec3 normal,float offset,bool debris)
 {
- if(!gReady||!gConfig.carDeformation||Ref(v)<0||(game::EntityFlags(v)&7)!=2||!game::IsAircraft(v)||!game::EntityClump(v)||!(v[0x297]&0x40)||(game::EntityFlags(v)&((1u<<17)|(1u<<25)))||!Finite(normal)||!std::isfinite(offset)||!std::isfinite(skinmodel::Dot(normal,normal))||skinmodel::Dot(normal,normal)<.5f)return false;
+ if(!gReady||!gConfig.carDeformation||Ref(v)<0||(game::EntityFlags(v)&7)!=2||!game::IsAircraft(v)||!game::EntityClump(v)||!(v[0x297]&0x40)||!Finite(normal)||!std::isfinite(offset)||!std::isfinite(skinmodel::Dot(normal,normal))||skinmodel::Dot(normal,normal)<.5f)return false;
  try{
   Collect();auto found=std::find_if(gCars.begin(),gCars.end(),[&](const Car &c){return c.car==v;});if(found==gCars.end()&&gCars.size()>=kMaxCars)return false;
   Car fresh{v,Ref(v),game::EntityModel(v),game::EntityClump(v),0,{}};Car &car=found==gCars.end()?fresh:*found;car.parts.reserve(kMaxParts);
@@ -405,9 +410,29 @@ bool SeverSection(uint8_t *v,Vec3 normal,float offset,bool debris)
   Log("airframe section: ref %d model %d pieces %zu debris %d",ref,model,fragments.size(),emitted);return true;
  }catch(const std::bad_alloc &){return false;}
 }
+namespace {
+bool RestPoint(const Mesh &m,const std::vector<Vec3> &offsets,Vec3 &point,Vec3 &normal)
+{
+ if(offsets.empty())return true;if(offsets.size()!=size_t(m.nv))return false;
+ float nearest=1e-4f;Vec3 rest{},axis{};bool found=false;
+ auto displaced=[&](unsigned i){const auto a=m.v[i],d=offsets[i];return Vec3{a.x+d.x,a.y+d.y,a.z+d.z};};
+ for(int i=0;i<m.nt;i++){
+  const auto t=m.t[i];const auto a=displaced(t.v[0]),e=Sub(displaced(t.v[1]),a),f=Sub(displaced(t.v[2]),a),p=Sub(point,a);
+  const float ee=skinmodel::Dot(e,e),ef=skinmodel::Dot(e,f),ff=skinmodel::Dot(f,f),pe=skinmodel::Dot(p,e),pf=skinmodel::Dot(p,f),den=ee*ff-ef*ef;if(den<1e-14f)continue;
+  const float u=(ff*pe-ef*pf)/den,v=(ee*pf-ef*pe)/den;if(u<-.0001f||v<-.0001f||u+v>1.0001f)continue;
+  const Vec3 error{p.x-u*e.x-v*f.x,p.y-u*e.y-v*f.y,p.z-u*e.z-v*f.z};const float distance=skinmodel::Dot(error,error);if(distance>=nearest)continue;
+  const auto original=m.v[t.v[0]],edge=Sub(m.v[t.v[1]],original),edge2=Sub(m.v[t.v[2]],original);rest={original.x+u*edge.x+v*edge2.x,original.y+u*edge.y+v*edge2.y,original.z+u*edge.z+v*edge2.z};axis=Cross(edge,edge2);nearest=distance;found=true;
+ }if(found){point=rest;normal=axis;}return found;
+}
+bool InHole(Vec3 point,const skinmodel::Hole &hole){
+ const float length=std::sqrt(skinmodel::Dot(hole.normal,hole.normal));if(length<1e-7f)return false;const Vec3 n{hole.normal.x/length,hole.normal.y/length,hole.normal.z/length},p=Sub(point,hole.centre);if(std::fabs(skinmodel::Dot(p,n))>.06f)return false;
+ auto u=Cross(n,std::fabs(n.z)<.9f?Vec3{0,0,1}:Vec3{0,1,0});const float ul=std::sqrt(skinmodel::Dot(u,u));u={u.x/ul,u.y/ul,u.z/ul};const auto v=Cross(n,u);
+ for(int i=0;i<8;i++){const float angle=i*.7853981634f;if(skinmodel::Dot(p,u)*std::cos(angle)+skinmodel::Dot(p,v)*std::sin(angle)>=hole.radius*.9238795325f)return false;}return true;
+}
+}
 bool Perforate(uint8_t *v,const void *identity,Vec3 hit,Vec3 normal,float budget)
 {
- if(!gReady||!gConfig.carDeformation||Ref(v)<0||(game::EntityFlags(v)&7)!=2||!game::IsAircraft(v)||!game::EntityClump(v)||!(v[0x297]&0x40)||!Finite(hit)||!Finite(normal)||!std::isfinite(budget)||budget<=3)return false;
+ if(!gReady||!gConfig.carDeformation||Ref(v)<0||(game::EntityFlags(v)&7)!=2||(!game::IsAircraft(v)&&!Eligible(v))||!game::EntityClump(v)||!(v[0x297]&0x40)||(game::EntityFlags(v)&game::kEntityBulletProof)||!Finite(hit)||!Finite(normal)||!std::isfinite(budget)||budget<=3)return false;
  try{
   Collect();auto found=std::find_if(gCars.begin(),gCars.end(),[&](const Car &c){return c.car==v;});if(found==gCars.end()&&gCars.size()>=kMaxCars)return false;
   Car fresh{v,Ref(v),game::EntityModel(v),game::EntityClump(v),0,{}};Car &car=found==gCars.end()?fresh:*found;
@@ -419,15 +444,16 @@ bool Perforate(uint8_t *v,const void *identity,Vec3 hit,Vec3 normal,float budget
   Vec3 origin,basis[3];if(!InCar(m.frame,m.root,{0,0,0},origin))return false;float toCar[16]{};
   for(int a=0;a<3;a++){if(!InCar(m.frame,m.root,{float(a==0),float(a==1),float(a==2)},basis[a]))return false;auto b=Sub(basis[a],origin);toCar[4*a]=b.x;toCar[4*a+1]=b.y;toCar[4*a+2]=b.z;}toCar[12]=origin.x;toCar[13]=origin.y;toCar[14]=origin.z;
   Vec3 p,n,local,localNormal;if(!dentmodel::Local(reinterpret_cast<float *>(v+8),hit,false,p)||!dentmodel::Local(reinterpret_cast<float *>(v+8),normal,true,n)||!dentmodel::Local(toCar,p,false,local)||!dentmodel::Local(toCar,n,true,localNormal))return false;
+  if(!isNew&&!RestPoint(m,old->offsets,local,localNormal))return false;
   auto holes=isNew?std::vector<skinmodel::Hole>{}:old->holes;const float radius=.015f+.0003f*std::min(budget,200.f);
   for(const auto &h:holes)if(skinmodel::Dot(Sub(h.centre,local),Sub(h.centre,local))<h.radius*h.radius*.25f)return false;
   if(!isNew)for(const auto &cut:old->cuts)if(skinmodel::Dot(local,cut.normal)>cut.offset+.00001f)return false;
-  holes.push_back({local,localNormal,radius});Pending pending;pending.atomic=atomic;pending.copy=CopySkin(m,holes,pending.bytes,kBudget-gBytes,isNew?nullptr:&old->cuts);if(!pending.copy)return false;
+  holes.push_back({local,localNormal,radius});Pending pending;pending.atomic=atomic;pending.copy=CopySkin(m,holes,pending.bytes,kBudget-gBytes,isNew?nullptr:&old->cuts,false,nullptr,car.broken,isNew?nullptr:&old->offsets);if(!pending.copy)return false;
   if(isNew){pending.holder=rw.createAtomic();if(!pending.holder)return false;rw.setGeometry(pending.holder,source,0);car.parts.reserve(kMaxParts);}
   rw.setGeometry(atomic,pending.copy,0);
   if(isNew){car.parts.push_back({atomic,pending.holder,pending.copy,pending.bytes,{},std::move(holes)});pending.holder=nullptr;}else{gBytes-=old->bytes;old->copy=pending.copy;old->bytes=pending.bytes;old->holes=std::move(holes);}gBytes+=pending.bytes;
   if(found==gCars.end())gCars.push_back(std::move(fresh));
-  if(count==0||count==7||count==15||count==31||((count+1)%64==0))Log("airframe skin: ref %d model %d holes %zu",Ref(v),game::EntityModel(v),count+1);return true;
+  if(count==0||count==7||count==15||count==31||((count+1)%64==0))Log("vehicle material: ref %d model %d holes %zu",Ref(v),game::EntityModel(v),count+1);return true;
  }catch(const std::bad_alloc &){return false;}
 }
 bool Opening(uint8_t *v,Vec3 from,Vec3 to,float &fraction)
@@ -436,21 +462,19 @@ bool Opening(uint8_t *v,Vec3 from,Vec3 to,float &fraction)
  const auto found=std::find_if(gCars.begin(),gCars.end(),[&](const Car &c){return c.car==v&&Same(c);});if(found==gCars.end())return false;
  Objects objects;rw.atomics(found->clump,Gather,&objects);if(!objects.valid)return false;Vec3 a,b;if(!dentmodel::Local(reinterpret_cast<float *>(v+8),from,false,a)||!dentmodel::Local(reinterpret_cast<float *>(v+8),to,false,b))return false;bool hit=false;
  for(const auto &part:found->parts){
-  if((part.holes.empty()&&part.cuts.empty())||std::find(objects.a.begin(),objects.a.begin()+objects.n,part.atomic)==objects.a.begin()+objects.n||rw.geometry(part.atomic)!=part.copy||!(rw.atomicFlags(part.atomic)&4))continue;
-  auto frame=rw.frame(part.atomic);auto root=rw.root(found->clump);Vec3 origin,axes[3];if(!InCar(frame,root,{0,0,0},origin))continue;float m[16]{};bool valid=true;
-  for(int i=0;i<3;i++){valid&=InCar(frame,root,{float(i==0),float(i==1),float(i==2)},axes[i]);auto d=Sub(axes[i],origin);m[4*i]=d.x;m[4*i+1]=d.y;m[4*i+2]=d.z;}m[12]=origin.x;m[13]=origin.y;m[14]=origin.z;
-  Vec3 localA,localB;if(!valid||!dentmodel::Local(m,a,false,localA)||!dentmodel::Local(m,b,false,localB))continue;const auto delta=Sub(localB,localA);
-  if(!part.cuts.empty()){
-   Mesh original;if(original.Read(rw.geometry(part.holder),part.atomic,root))for(int i=0;i<original.nt;i++){
-    const auto t=original.t[i];const auto p=original.v[t.v[0]],edge=Sub(original.v[t.v[1]],p),edge2=Sub(original.v[t.v[2]],p),h=Cross(delta,edge2);const float determinant=skinmodel::Dot(edge,h);if(std::fabs(determinant)<1e-8f)continue;
-    const auto s=Sub(localA,p);const float u=skinmodel::Dot(s,h)/determinant;if(u<0||u>1)continue;const auto q=Cross(s,edge);const float w=skinmodel::Dot(delta,q)/determinant;if(w<0||u+w>1)continue;const float at=skinmodel::Dot(edge2,q)/determinant;if(at<0||at>=fraction)continue;
-    const Vec3 point{localA.x+delta.x*at,localA.y+delta.y*at,localA.z+delta.z*at};for(const auto &cut:part.cuts)if(skinmodel::Dot(point,cut.normal)>cut.offset+.00001f){fraction=at;hit=true;break;}
-   }
-  }
-  for(const auto &hole:part.holes){using skinmodel::Dot;const float denominator=Dot(delta,hole.normal);if(std::fabs(denominator)<1e-7f)continue;const float t=Dot(Sub(hole.centre,localA),hole.normal)/denominator;if(t<0||t>=fraction)continue;
-   const Vec3 p{localA.x+delta.x*t-hole.centre.x,localA.y+delta.y*t-hole.centre.y,localA.z+delta.z*t-hole.centre.z};const float nl=std::sqrt(Dot(hole.normal,hole.normal));if(nl<1e-7f)continue;Vec3 n{hole.normal.x/nl,hole.normal.y/nl,hole.normal.z/nl};auto u=Cross(n,std::fabs(n.z)<.9f?Vec3{0,0,1}:Vec3{0,1,0});const float ul=std::sqrt(Dot(u,u));u={u.x/ul,u.y/ul,u.z/ul};const auto side=Cross(n,u);bool inside=true;
-   for(int i=0;i<8;i++){const float angle=i*.7853981634f;inside&=Dot(p,u)*std::cos(angle)+Dot(p,side)*std::sin(angle)<hole.radius*.9238795325f;}
-   if(inside){fraction=t;hit=true;}
+  if((part.holes.empty()&&part.cuts.empty()&&!found->broken)||std::find(objects.a.begin(),objects.a.begin()+objects.n,part.atomic)==objects.a.begin()+objects.n||rw.geometry(part.atomic)!=part.copy||!(rw.atomicFlags(part.atomic)&4))continue;
+  auto frame=rw.frame(part.atomic),root=rw.root(found->clump);Vec3 origin,axes[3];if(!InCar(frame,root,{},origin))continue;float matrix[16]{};bool valid=true;
+  for(int i=0;i<3;i++){valid&=InCar(frame,root,{float(i==0),float(i==1),float(i==2)},axes[i]);const auto d=Sub(axes[i],origin);matrix[4*i]=d.x;matrix[4*i+1]=d.y;matrix[4*i+2]=d.z;}matrix[12]=origin.x;matrix[13]=origin.y;matrix[14]=origin.z;
+  Vec3 localA,localB;if(!valid||!dentmodel::Local(matrix,a,false,localA)||!dentmodel::Local(matrix,b,false,localB))continue;const auto delta=Sub(localB,localA);
+  Mesh original;if(!original.Read(rw.geometry(part.holder),part.atomic,root))continue;
+  auto displaced=[&](unsigned i){const auto p=original.v[i],d=part.offsets.size()==size_t(original.nv)?part.offsets[i]:Vec3{};return Vec3{p.x+d.x,p.y+d.y,p.z+d.z};};
+  for(int i=0;i<original.nt;i++){
+   const auto t=original.t[i];const auto p=displaced(t.v[0]),e=Sub(displaced(t.v[1]),p),f=Sub(displaced(t.v[2]),p),h=Cross(delta,f);const float determinant=skinmodel::Dot(e,h);if(std::fabs(determinant)<1e-8f)continue;
+   const auto start=Sub(localA,p);const float u=skinmodel::Dot(start,h)/determinant;if(u<0||u>1)continue;const auto q=Cross(start,e);const float w=skinmodel::Dot(delta,q)/determinant;if(w<0||u+w>1)continue;const float at=skinmodel::Dot(f,q)/determinant;if(at<0||at>=fraction)continue;
+   const auto base=original.v[t.v[0]],edge=Sub(original.v[t.v[1]],base),edge2=Sub(original.v[t.v[2]],base);const Vec3 rest{base.x+u*edge.x+w*edge2.x,base.y+u*edge.y+w*edge2.y,base.z+u*edge.z+w*edge2.z};
+   bool removed=(found->broken&glassmodel::Bit(original.Face(i)))!=0;for(const auto &cut:part.cuts)removed|=skinmodel::Dot(rest,cut.normal)>cut.offset+.00001f;
+   for(const auto &hole:part.holes)removed|=InHole(rest,hole);
+   if(removed){fraction=at;hit=true;}
   }
  }return hit;
 }

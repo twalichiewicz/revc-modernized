@@ -31,8 +31,9 @@ namespace carmechanics {
 static bool enabled=false;static int deliveries=0;static uint64_t revision=1;
 static projectilemodel::Ray lastRay;static std::array<projectilemodel::Layer,64> lastLayers;
 bool Enabled(){return enabled;}
+bool ComponentHit(uint8_t *,Vec3,Vec3,float,float &fraction,Vec3 &normal){if(!enabled||!carglass::opening)return false;fraction=.4f;normal={-1,0,0};return true;}
 BulletToken BeginBullet(uint8_t *){BulletToken t;if(enabled)t.revision=revision;return t;}
-void Projectile(uint8_t *,const BulletToken &t,const projectilemodel::Ray &r){if(!enabled||t.revision!=revision)return;++deliveries;lastRay=r;std::copy(r.layers,r.layers+r.count,lastLayers.begin());lastRay.layers=lastLayers.data();}
+bool Projectile(uint8_t *,const BulletToken &t,const projectilemodel::Ray &r,std::array<float,projectilemodel::kLayers> *passed){if(!enabled||t.revision!=revision)return false;++deliveries;lastRay=r;std::copy(r.layers,r.layers+r.count,lastLayers.begin());lastRay.layers=lastLayers.data();if(passed)passed->fill(20);return true;}
 }
 namespace carparts {bool enabled=false;int hits=0,component=0;bool Enabled(){return enabled;}BulletToken BeginBullet(uint8_t *){return {enabled?1u:0u};}void Projectile(uint8_t *,const BulletToken &t,int c,float){if(t.revision){++hits;component=c;}}}
 namespace airframedamage {bool ComponentHit(uint8_t *,Vec3,Vec3,float,float &fraction,Vec3 &normal){if(!carglass::opening)return false;fraction=.4f;normal={-1,0,0};return true;}bool enabled=false;int hits=0,lastRotor=-1;bool Enabled(const uint8_t *){return enabled;}Token BeginBullet(uint8_t *){Token t;if(enabled)t.revision=1;return t;}bool Projectile(uint8_t *,const Token &t,const projectilemodel::Ray &,std::array<float,projectilemodel::kLayers> *passed,int rotor){lastRotor=rotor;if(!t.revision)return false;++hits;if(passed)passed->fill(20);return true;}void Perforated(uint8_t *,const Token &,float){}}
@@ -137,8 +138,8 @@ bool NativeFire(uint8_t *weapon,uint8_t *by,CVector *)
  if(doDamage&&victim==peds.data())reinterpret_cast<bool (*)(uint8_t *,uint8_t *,int,float,int,uint8_t)>(entry["_ZN4CPed13InflictDamageEP7CEntity11eWeaponTypef14ePedPieceTypesh"])(victim,by,weaponType,20,result.pieceB,0);
  return true;
 }
-void NativeVehicleDamage(uint8_t *v,uint8_t *,int,float damage,CVector){
- if(acceptDamage)*reinterpret_cast<float *>(v+0x2a0)-=damage;
+void NativeVehicleDamage(uint8_t *v,uint8_t *by,int weapon,float damage,CVector){
+ if(acceptDamage){*reinterpret_cast<float *>(v+0x2a0)-=damage;v[0x2dc]=uint8_t(weapon);*reinterpret_cast<uint8_t **>(v+0x2e0)=by;}
  if(damageMutation==1)++carFlags[0];if(damageMutation==2)*reinterpret_cast<void **>(v+0x58)=reinterpret_cast<void *>(0x1234);
  if(damageMutation==3)reinterpret_cast<float *>(v+8)[12]+=.1f;if(damageMutation==4)++carmechanics::revision;
 }
@@ -275,6 +276,7 @@ int main(int argc,char **argv){const bool assets=argc>1&&!std::strcmp(argv[1],"-
  Setup();Panel(-.8f,160,"toprotor");*reinterpret_cast<int16_t *>(cars.data()+0x6a)=199;*reinterpret_cast<void **>(cars.data()+0x218)=nullptr;airframedamage::enabled=nativeGlassGate=doDamage=true;FireShot();Check(airframedamage::hits==1&&airframedamage::lastRotor==airframemodel::MainRotor,"actual visible translucent rotor blade is a rotor contact, not glass");
  Setup();Panel(.8f,255,"door_rf_hi_ok");*reinterpret_cast<int16_t *>(cars.data()+0x6a)=199;*reinterpret_cast<void **>(cars.data()+0x218)=nullptr;airframedamage::enabled=carglass::opening=nativeGlassGate=doDamage=carparts::enabled=coverWall=true;FireShot();Check(airframedamage::hits==1&&result.p.x<0&&carparts::hits==0,"internal hit through existing hole cannot load farther door hinges when projectile stops before that door");
  Setup();Panel(.8f,255,"fuselage");*reinterpret_cast<int16_t *>(cars.data()+0x6a)=180;*reinterpret_cast<int *>(cars.data()+0x348)=4;*reinterpret_cast<void **>(cars.data()+0x218)=nullptr;airframedamage::enabled=carglass::opening=nativeGlassGate=doDamage=true;FireShot();Check(airframedamage::hits==1&&result.p.x<0,"a later round through an existing skin opening intersects the internal component before the opposite shell");
+ Setup();Panel(.8f);*reinterpret_cast<void **>(cars.data()+0x218)=nullptr;carmechanics::enabled=carglass::opening=nativeGlassGate=doDamage=true;FireShot();Check(carmechanics::deliveries==1&&result.p.x<0,"a car body opening exposes its internal material before the far shell");
  Setup();for(int i=0;i<65;i++)Panel(-.8f+i*.02f);*reinterpret_cast<int16_t *>(cars.data()+0x6a)=157;*reinterpret_cast<void **>(cars.data()+0x218)=nullptr;nativeGlassGate=doDamage=true;FireShot();Check(*reinterpret_cast<float *>(cars.data()+0x2a0)==1000,"bounded material overflow retains independent nearest-surface armor protection");
  Setup();Panel(-.8f);*reinterpret_cast<int16_t *>(cars.data()+0x6a)=180;*reinterpret_cast<int *>(cars.data()+0x348)=4;clumpType=1;airframedamage::enabled=nativeGlassGate=doDamage=true;FireShot();Check(narrowCalls>0&&airframedamage::hits==0,"native far-plane atomic LOD safely retains native collision rather than entering clump traversal");
  for(int model:{157,158}){
@@ -370,8 +372,10 @@ int main(int argc,char **argv){const bool assets=argc>1&&!std::strcmp(argv[1],"-
  // Native vehicle damage is position-zero in DoBulletImpact; only its certified impact scope authorizes it.
  Setup();Panel(-.8f);noPeds=true;*reinterpret_cast<void **>(cars.data()+0x218)=nullptr;carmechanics::enabled=doDamage=true;FireShot();
  Check(carmechanics::deliveries==1&&carmechanics::lastRay.count==1&&carmechanics::lastRay.layers[0].material==projectilemodel::Material::Body,"accepted native body impact delivers one material path with coincident triangles merged");
+ Check(*reinterpret_cast<float *>(cars.data()+0x2a0)==1000&&carglass::perforations>0,"car material work and internal injury do not consume global health or disable entry");
  Setup();Panel(-.8f);noPeds=true;*reinterpret_cast<void **>(cars.data()+0x218)=nullptr;carmechanics::enabled=doDamage=true;acceptDamage=false;FireShot();Check(carmechanics::deliveries==0,"native rejected damage cannot injure modules");
  Setup();Panel(-.8f);noPeds=true;*reinterpret_cast<void **>(cars.data()+0x218)=nullptr;carmechanics::enabled=doDamage=doubleDamage=true;FireShot();Check(carmechanics::deliveries==1,"native duplicate damage call cannot deliver the same pending ray twice");
+ Check(*reinterpret_cast<float *>(cars.data()+0x2a0)==1000,"duplicate native delivery cannot fall back to global hull damage");
  for(int mutation:{1,2,3,4}){Setup();Panel(-.8f);noPeds=true;*reinterpret_cast<void **>(cars.data()+0x218)=nullptr;carmechanics::enabled=doDamage=true;damageMutation=mutation;FireShot();Check(carmechanics::deliveries==0,"native callback recycling/clump/motion/repair retires pending projectile");}
  Setup();Panel(-.8f);noPeds=true;*reinterpret_cast<void **>(cars.data()+0x218)=nullptr;carmechanics::enabled=doDamage=repairBeforeImpact=true;FireShot();Check(carmechanics::deliveries==0,"repair between mesh query and native impact retires the pending round");
  Setup();Panel(-.8f);noPeds=true;*reinterpret_cast<void **>(cars.data()+0x218)=nullptr;carmechanics::enabled=doDamage=coverWall=true;FireShot();

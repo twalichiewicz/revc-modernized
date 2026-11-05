@@ -74,7 +74,7 @@ namespace hooks {void *Chain(const char *s,void *replacement){using namespace fi
  return nullptr;
 }}
 static void *Lookup(void *,const char *s){if(!strcmp(s,"_ZN6CPools15ms_pVehiclePoolE"))return &fixture::poolPointer;return nullptr;}
-static int airHits=0;static void AirCollision(uint8_t *,Vec3,float){++airHits;}
+static int airHits=0;static void AirCollision(uint8_t *,Vec3,Vec3,float){++airHits;}
 int main(int argc,char **argv){using namespace fixture;
  std::unique_ptr<nativejetshadowtest::Code> code;
  if(argc>1&&!strcmp(argv[1],"--native")){

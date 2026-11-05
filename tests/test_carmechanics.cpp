@@ -68,7 +68,7 @@ void Reset(int model=150){
  for(int w=0;w<4;w++){memset(frames[w].m,0,64);frames[w].m[0]=frames[w].m[5]=frames[w].m[10]=1;frames[w].m[12]=w<2?-1.f:1.f;frames[w].m[13]=w%2?-1.4f:1.4f;frames[w].m[14]=-.35f;}
 }
 void Run(uint32_t dt=20){now+=dt;control(cars[0]);}
-carimpact::Collision Nose(float severity=30){return {{0,2.4f,.1f},{0,-1,0},severity,3};}
+carimpact::Collision Nose(float severity=20){return {{0,2.4f,.1f},{0,-1,0},severity,3};}
 }
 namespace hooks {void *Chain(const char *s,void *r){using namespace fixture;
 #define H(n,v,T) if(!strcmp(s,n)){auto old=v;v=reinterpret_cast<T>(r);return reinterpret_cast<void *>(old);}
@@ -97,7 +97,7 @@ int main(){using namespace fixture;
  fix(cars[0]);hits={};Run();Check(torque[0]==.04f,"repair restores full engine output");
  Reset(211);hits[0]={Nose()};Run();Check(torque[0]==.04f,"Deluxo frontal hit preserves rear engine initially");hits[0]={{{0,-2.4f,.1f},{0,1,0},30,4}};Run(350);Check(torque[0]<.04f,"Deluxo rear-bay hit reduces power");
  Reset();hits[0]={{{-1,1.4f,-.35f},{1,0,0},30,13}};Run();Check(wheels[0][0].grip<.05f&&wheels[0][0].brake<.01f&&wheels[0][0].toe>0&&wheels[0][2].grip==.05f,"localized corner changes only that native wheel");
- Run(350);Run(350);Check(bursts==1&&Status(cars[0]+0x34c,0)==1,"severely crushed assembly requests native puncture once");fix(cars[0]);hits={};Run();Check(wheels[0][0].grip==.05f&&wheels[0][0].toe==0,"repair restores wheel performance and alignment");
+ Run(350);Run(350);Run(350);Check(bursts==1&&Status(cars[0]+0x34c,0)==1,"severely crushed assembly requests native puncture once");fix(cars[0]);hits={};Run();Check(wheels[0][0].grip==.05f&&wheels[0][0].toe==0,"repair restores wheel performance and alignment");
  Reset();cars[0][0x299]|=2;hits[0]={{{-1,1.4f,-.35f},{1,0,0},30,13}};Run();Run(350);Run(350);Check(Status(cars[0]+0x34c,0)==0,"native tyre proof remains authoritative");
  Reset();hits[0]={Nose()};Run();hits={};*reinterpret_cast<void **>(cars[0]+0x58)=reinterpret_cast<void *>(0x9000);Run();Check(torque[0]<.04f,"render-only clump replacement does not heal engine");
  deleteInside=true;Run();Check(torque[0]==.04f,"render deletion inside controller retires in-flight physics ownership");Run();Check(torque[0]<.04f,"next controller retains damage through actual render deletion");
@@ -145,7 +145,7 @@ int main(){using namespace fixture;
  removeRw(cars[0]);*reinterpret_cast<void **>(cars[0]+0x58)=reinterpret_cast<void *>(0x9000);
  Check(carmechanics::LightingPower(cars[0])==.6f,"render replacement retains electrical failure");
  gConfig.carMechanics=false;Check(carmechanics::LightingPower(cars[0])==1,"runtime off restores native lighting");gConfig.carMechanics=true;
- cars[0][0x63]|=8;Check(carmechanics::LightingPower(cars[0])==1,"native protected actor retains native lighting");cars[0][0x63]&=~8;
+ cars[0][0x63]|=8;Check(carmechanics::LightingPower(cars[0])==.6f,"collision proof does not repair existing material/electrical damage");cars[0][0x63]&=~8;
  ++flags[0];Check(carmechanics::LightingPower(cars[0])==1,"recycled actor cannot inherit electrical dimming");
  Run();{carmechanics::Controller scope(cars[0]);scope.history->state.damage[mechanicalmodel::kElectrical]=1;}
  Check(carmechanics::LightingPower(cars[0])==0,"failed supply remains visible outside native control");
@@ -160,7 +160,9 @@ int main(){using namespace fixture;
  token=carmechanics::BeginBullet(cars[0]);restart();carmechanics::Projectile(cars[0],token,bullet);Run();Check(torque[0]==.04f,"restart retires pending round even before first new controller");
  token=carmechanics::BeginBullet(cars[0]);removeRw(cars[0]);carmechanics::Projectile(cars[0],token,bullet);Run();Check(torque[0]==.04f,"render deletion retires a pending round even if its clump address is reused");token=carmechanics::BeginBullet(cars[0]);removeRw(cars[0]);*reinterpret_cast<void **>(cars[0]+0x58)=reinterpret_cast<void *>(0x9000);carmechanics::Projectile(cars[0],token,bullet);Run();Check(torque[0]==.04f,"changed render clump rejects old hit geometry");
  token=carmechanics::BeginBullet(cars[0]);F(cars[0],0x38)=1;carmechanics::Projectile(cars[0],token,bullet);Run();Check(torque[0]==.04f,"moved actor cannot receive a stale local ray");
- Reset();cars[0][0x62]|=2;Check(!carmechanics::BeginBullet(cars[0]).revision,"bulletproof actor rejects projectile lease");
+ Reset();cars[0][0x63]|=2;Check(!carmechanics::BeginBullet(cars[0]).revision,"bulletproof actor rejects projectile lease");
+ Reset();cars[0][0x63]|=8;Check(carmechanics::BeginBullet(cars[0]).revision,"collision proof does not veto bullet material damage");
+ Reset();cars[0][0x62]|=2;Check(carmechanics::BeginBullet(cars[0]).revision,"explosion proof does not veto bullet material damage");
  Reset();gConfig.carMechanics=false;Check(!carmechanics::BeginBullet(cars[0]).revision,"mechanics off cannot begin projectile effects");gConfig.carMechanics=true;
  Reset();projectilemodel::Layer tyrePanel{0,1,projectilemodel::Material::Rubber};projectilemodel::Ray wheelShot{{-1.5f,1.4f,-.35f},{0,1.4f,-.35f},0,1,40,&tyrePanel,1};
  for(int i=0;i<8;i++){token=carmechanics::BeginBullet(cars[0]);carmechanics::Projectile(cars[0],token,wheelShot);}Run();

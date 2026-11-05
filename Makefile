@@ -449,6 +449,7 @@ FEEDBACK_TESTS += test_handlingmodel test_handlinghook test_drivelog test_headba
 FEEDBACK_TESTS += test_glassmodel test_carglass
 FEEDBACK_TESTS += test_partsmodel test_carparts test_dentmodel test_cardeform test_mechanicalmodel test_projectilemodel test_carmechanics test_carsystem_lights
 FEEDBACK_TESTS += test_skinmodel test_airframemodel test_airframedamage
+FEEDBACK_TESTS += test_materialmodel
 FEEDBACK_TESTS += test_firemodel
 FEEDBACK_TESTS += test_carfire
 FEEDBACK_TESTS += test_carfire_awareness
@@ -761,7 +762,7 @@ $(BUILD)/test_dentmodel: tests/test_dentmodel.cpp src/dentmodel.cpp src/dentmode
 $(BUILD)/test_cardeform: tests/test_cardeform.cpp src/carimpact.cpp src/dentmodel.cpp src/partsmodel.cpp $(wildcard src/*.h) | $(BUILD)
 	$(CXX) $(CXXFLAGS) -Isrc -o $@ tests/test_cardeform.cpp src/dentmodel.cpp src/partsmodel.cpp
 
-$(BUILD)/test_mechanicalmodel: tests/test_mechanicalmodel.cpp src/mechanicalmodel.cpp src/mechanicalmodel.h | $(BUILD)
+$(BUILD)/test_mechanicalmodel: tests/test_mechanicalmodel.cpp src/mechanicalmodel.cpp src/mechanicalmodel.h src/materialmodel.h | $(BUILD)
 	$(CXX) $(CXXFLAGS) -Isrc -o $@ tests/test_mechanicalmodel.cpp src/mechanicalmodel.cpp
 
 $(BUILD)/test_carmechanics: tests/test_carmechanics.cpp src/carmechanics.cpp src/mechanicalmodel.cpp src/projectilemodel.cpp src/partsmodel.cpp $(wildcard src/*.h) | $(BUILD)
@@ -781,7 +782,7 @@ $(BUILD)/test_utility_native: tests/test_utility_native.cpp tests/test_handling_
 
 test-game-assets: $(BUILD)/test_utility_native
 
-$(BUILD)/test_projectilemodel: tests/test_projectilemodel.cpp src/projectilemodel.cpp src/mechanicalmodel.cpp src/projectilemodel.h src/mechanicalmodel.h | $(BUILD)
+$(BUILD)/test_projectilemodel: tests/test_projectilemodel.cpp src/projectilemodel.cpp src/mechanicalmodel.cpp src/projectilemodel.h src/mechanicalmodel.h src/materialmodel.h | $(BUILD)
 	$(CXX) $(CXXFLAGS) -Isrc -o $@ tests/test_projectilemodel.cpp src/projectilemodel.cpp src/mechanicalmodel.cpp
 
 $(BUILD)/test_firemodel: tests/test_firemodel.cpp src/firemodel.cpp src/firemodel.h | $(BUILD)
@@ -835,3 +836,6 @@ $(BUILD)/test_airportheli_assets: tests/test_airportheli_assets.cpp tools/bake/v
 	$(CXX) $(CXXFLAGS) -Isrc -o $@ tests/test_airportheli_assets.cpp tools/bake/visualmodel.cpp tools/bake/gamefiles.cpp src/mapdata.cpp -lz
 
 test-game-assets: $(BUILD)/test_airportheli_assets
+
+$(BUILD)/test_materialmodel: tests/test_materialmodel.cpp src/materialmodel.h src/mechanicalmodel.cpp src/projectilemodel.cpp $(wildcard src/*.h) | $(BUILD)
+	$(CXX) $(CXXFLAGS) -Isrc -o $@ tests/test_materialmodel.cpp src/mechanicalmodel.cpp src/projectilemodel.cpp

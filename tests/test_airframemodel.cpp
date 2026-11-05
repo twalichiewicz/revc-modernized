@@ -1,4 +1,5 @@
 #include "airframemodel.h"
+#include "materialmodel.h"
 #include <cstdio>
 #include <cmath>
 int main(){using namespace airframemodel;int bad=0;auto check=[&](bool b,const char *s){if(!b){printf("FAIL: %s\n",s);++bad;}};Layout jet;check(Build(180,4,{-10,-10,-2},{10,10,2},jet),"airframe layout from original bounds");
@@ -13,5 +14,8 @@ int main(){using namespace airframemodel;int bad=0;auto check=[&](bool b,const c
  wingBreak.separated|=1;projectilemodel::Ray missingWing{{-12,0,0},{-4,0,0},.25f,1,80,nullptr,0};const auto emptyPath=Projectile(wingBreak,jet,missingWing);check(emptyPath.deposited==0&&emptyPath.remaining==80,"a separated wing and engine pod cannot absorb bullets as phantom material");check(wingBreak.damage[EngineL]==1&&wingBreak.damage[EngineR]==0,"engine pod removed with its wing loses that engine's function only");
  State boom;projectilemodel::Layer boomSkin{.2f,1,projectilemodel::Material::Skin};projectilemodel::Ray boomHit{{0,-10,0},{0,5,0},.2f,1,80,&boomSkin,1};for(int i=0;i<12;i++)Projectile(boom,heli,boomHit);check(boom.structure[2]==1&&Read(boom,heli).antiTorque==0&&Read(boom,heli).rotor==1,"helicopter tail structure failure takes tail function while preserving main rotor");
  check(Read(boom,heli).pitch==1&&Read(boom,heli).roll==1,"tail separation preserves helicopter cyclic controls instead of inventing fixed-wing surface failures");
+ State contact,energy;const Vec3 contactPoint{-8,0,0},contactNormal{1,0,0};const auto work=materialmodel::ContactRay(contactPoint,contactNormal,20);
+ Impact(contact,jet,contactPoint,20,contactNormal);Projectile(energy,jet,work);
+ check(contact.damage==energy.damage&&contact.structure==energy.structure,"aircraft collision and projectile adapters use the same material work solver and integrity");
  printf("airframemodel: %s\n",bad?"FAILED":"all passed");return bad?1:0;
 }

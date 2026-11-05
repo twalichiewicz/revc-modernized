@@ -41,13 +41,14 @@ bool Identify(uint8_t *v,Identity &id)
  id={v,base,flags,ref,game::EntityModel(v),game::EntityClump(v)};return true;
 }
 bool Current(const Identity &id){Identity now;return Identify(id.vehicle,now)&&Same(id,now);}
-bool Eligible(const Identity &id)
+bool BaseEligible(const Identity &id)
 {
  uint8_t *v=id.vehicle;
  return id.clump&&id.model>=0&&id.model!=171&&id.model!=162&&
         *reinterpret_cast<const int *>(v+0x348)==0&&!game::IsAircraft(v)&&!game::Wrecked(v)&&
-        (v[0x297]&0x40)&&!(game::EntityFlags(v)&(1u<<27));
+        (v[0x297]&0x40);
 }
+bool Eligible(const Identity &id){return BaseEligible(id)&&!(game::EntityFlags(id.vehicle)&game::kEntityCollisionProof);}
 bool AutoHeli(const Identity &id)
 {
  if(*reinterpret_cast<const int *>(id.vehicle+0x348)!=0)return false;
@@ -55,7 +56,7 @@ bool AutoHeli(const Identity &id)
 }
 bool BallisticEligible(const Identity &id)
 {
- return Eligible(id)||(gConfig.heliDamage&&AutoHeli(id)&&id.clump&&!game::Wrecked(id.vehicle)&&(id.vehicle[0x297]&0x40)&&!(game::EntityFlags(id.vehicle)&(1u<<27)));
+ return BaseEligible(id)||(gConfig.heliDamage&&AutoHeli(id)&&id.clump&&!game::Wrecked(id.vehicle)&&(id.vehicle[0x297]&0x40));
 }
 struct History {Identity id;std::array<partsmodel::Episode,partsmodel::kParts> parts{};std::array<float,partsmodel::kParts> strain{};uint64_t revision=0;};
 std::array<History,kSlots> gHistory;
@@ -177,7 +178,7 @@ BulletToken BeginBullet(uint8_t *v){Identity id;if(!gReady||!gConfig.carParts||!
 void Projectile(uint8_t *v,const BulletToken &token,int component,float budget)
 {
  Identity id;const int slot=partsmodel::Slot(component);
- if(!token.revision||!gReady||!gConfig.carParts||slot<0||!std::isfinite(budget)||budget<=0||!Identify(v,id)||!BallisticEligible(id)||(AutoHeli(id)&&(component<7||component>10))||!(v[0x297]&0x40)||(game::EntityFlags(v)&((1u<<25)|(1u<<17))))return;
+ if(!token.revision||!gReady||!gConfig.carParts||slot<0||!std::isfinite(budget)||budget<=0||!Identify(v,id)||!BallisticEligible(id)||(AutoHeli(id)&&(component<7||component>10))||!(v[0x297]&0x40)||(game::EntityFlags(v)&game::kEntityBulletProof))return;
  auto &h=Record(id);if(h.revision!=token.revision)return;const int before=State(v,slot);if(before<0||before>=3)return;
  // Repeated rounds load the struck fastenings. Each accepted shot can advance
  // one native stage; the next stage needs a new independent localized round.
@@ -189,7 +190,7 @@ void Projectile(uint8_t *v,const BulletToken &token,int component,float budget)
 }
 bool SeverRotor(uint8_t *v,bool main)
 {
- Identity id;if(!gReady||!gConfig.carParts||!Identify(v,id)||!AutoHeli(id)||!BallisticEligible(id)||(game::EntityFlags(v)&((1u<<17)|(1u<<25))))return false;
+ Identity id;if(!gReady||!gConfig.carParts||!Identify(v,id)||!AutoHeli(id)||!BallisticEligible(id))return false;
  const int component=main?5:6,node=main?17:18,door=main?0:1;
  if(!*reinterpret_cast<void **>(v+0x440+node*8))return false;
  auto &history=Record(id);const auto revision=history.revision;const bool alreadyMissing=State(v,component-5)==3;

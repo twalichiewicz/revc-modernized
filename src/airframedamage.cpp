@@ -27,6 +27,18 @@ bool Identify(const uint8_t *v,Identity &id)
 }
 bool Eligible(const Identity &id){return gReady&&id.vtable&&id.model>=0&&id.model<6500&&game::IsAircraft(id.v)&&(((id.kind==0&&id.model!=194)||id.kind==3)?gConfig.heliDamage:gConfig.planes)&&!game::Wrecked(id.v)&&(id.v[0x297]&0x40);}
 void (*gUpdateMatrix)(void *),(*gUpdateFrame)(uint8_t *);
+void *(*gRoot)(const void *),*(*gParent)(const void *);float *(*gMatrix)(void *);
+bool HubBounds(const Identity &id,bool main,airframemodel::Box &out){
+ if(id.kind!=0||id.model==194)return false;auto frame=*reinterpret_cast<void **>(id.v+0x440+(main?17:18)*8);if(!frame)return false;
+ auto root=gRoot(game::EntityClump(id.v));if(!root)return false;
+ Vec3 lo{1e9f,1e9f,1e9f},hi{-1e9f,-1e9f,-1e9f};
+ for(int corner=0;corner<8;corner++){
+  Vec3 p{corner&1?.18f:-.18f,corner&2?.18f:-.18f,corner&4?.12f:(main?-.45f:-.18f)};auto f=frame;int depth=0;
+  for(;f&&f!=root&&depth<32;f=gParent(f),depth++){const auto m=gMatrix(f);if(!m)return false;p={m[12]+m[0]*p.x+m[4]*p.y+m[8]*p.z,m[13]+m[1]*p.x+m[5]*p.y+m[9]*p.z,m[14]+m[2]*p.x+m[6]*p.y+m[10]*p.z};}
+  if(f!=root||!std::isfinite(p.x)||!std::isfinite(p.y)||!std::isfinite(p.z))return false;
+  lo={std::min(lo.x,p.x),std::min(lo.y,p.y),std::min(lo.z,p.z)};hi={std::max(hi.x,p.x),std::max(hi.y,p.y),std::max(hi.z,p.z)};
+ }out={lo,hi};return true;
+}
 struct History {uint8_t lostRotors=0,lostSections=0;airframeroute::State route;Identity id;airframemodel::State state;airframemodel::Layout layout;uint64_t revision=0;void *clump=nullptr,*source=nullptr;uint8_t *info=nullptr,*col=nullptr;uint32_t clock=0;bool seen=false;float health=1000;std::array<partsmodel::Episode,6> contacts{};};
 std::array<History,kSlots> gHistory;uint32_t gClock;bool gSeen;
 uint64_t Serial(){if(++gSerial==0)++gSerial;return gSerial;}
@@ -36,11 +48,12 @@ History *Record(const Identity &id)
  if(!game::api.modelInfoPtrs)return nullptr;auto info=game::api.modelInfoPtrs[id.model];auto col=info?*reinterpret_cast<uint8_t **>(info+0x20):nullptr;auto source=info?*reinterpret_cast<void **>(info+0x30):nullptr;auto clump=game::EntityClump(id.v);if(!info||info[0x1d]!=6||!col||!source||!clump)return nullptr;
  auto &h=gHistory[size_t(id.ref>>8)];if(!Same(h.id,id)){h={};h.id=id;h.revision=Serial();h.health=game::VehicleHealth(id.v);}
  if(h.info!=info||h.col!=col||h.source!=source||h.clump!=clump){airframemodel::Layout layout;if(!airframemodel::Build(id.model,id.kind,*reinterpret_cast<const Vec3 *>(col+0x10),*reinterpret_cast<const Vec3 *>(col+0x1c),layout))return nullptr;h.layout=layout;h.info=info;h.col=col;h.source=source;h.clump=clump;h.lostRotors=h.lostSections=0;h.revision=Serial();}
+ if(h.layout.helicopter)for(int rotor=0;rotor<2;rotor++){airframemodel::Box hub;if(HubBounds(id,rotor==0,hub))h.layout.volumes[rotor?airframemodel::TailRotor:airframemodel::MainRotor]=hub;}
  return &h;
 }
 History *Current(uint8_t *v,const Token &token)
 {
- Identity id;if(!token.revision||!Identify(v,id)||!Eligible(id)||(game::EntityFlags(v)&((1u<<17)|(1u<<25)))||game::EntityClump(v)!=token.clump||std::memcmp(v+8,token.pose.data(),sizeof token.pose))return nullptr;
+ Identity id;if(!token.revision||!Identify(v,id)||!Eligible(id)||(game::EntityFlags(v)&game::kEntityBulletProof)||game::EntityClump(v)!=token.clump||std::memcmp(v+8,token.pose.data(),sizeof token.pose))return nullptr;
  auto *h=Record(id);return h&&h->revision==token.revision?h:nullptr;
 }
 void SyncRotors(History &h)
@@ -52,7 +65,7 @@ void SyncRotors(History &h)
   if(h.state.damage[module]<1||(h.lostRotors&bit))continue;
   if(game::api.AircraftRotorLoss(id.v,rotor==0)){
    Identity now;if(!Identify(id.v,now)||!Same(id,now)||h.revision!=revision||game::EntityClump(id.v)!=h.clump)return;
-   h.lostRotors|=bit;Log("airframe part loss: ref %d model %d %s rotor",id.ref,id.model,rotor?"tail":"main");
+   h.lostRotors|=bit;h.state.missingRotors|=bit;Log("airframe part loss: ref %d model %d %s rotor",id.ref,id.model,rotor?"tail":"main");
   }
  }
 }
@@ -71,11 +84,11 @@ void SyncSections(History &h)
 airframemodel::Effects Read(const uint8_t *v){Identity id;if(!Identify(v,id)||!Eligible(id))return {};const auto &h=gHistory[size_t(id.ref>>8)];if(Same(id,h.id))return airframemodel::Read(h.state,h.layout);airframemodel::Effects e;e.managed=true;return e;}
 firemodel::Input Fire(const uint8_t *v){Identity id;if(!Identify(v,id)||!Eligible(id))return {};const auto &h=gHistory[size_t(id.ref>>8)];return Same(id,h.id)?airframemodel::Fire(h.state,(v[0x295]&16)!=0):firemodel::Input{};}
 void Burn(uint8_t *v,float dt){Identity id;if(!std::isfinite(dt)||dt<=0||dt>1||!Identify(v,id)||!Eligible(id)||(game::EntityFlags(v)&(1u<<26)))return;if(auto *h=Record(id)){for(int i:{airframemodel::EngineL,airframemodel::EngineR,airframemodel::Electrical,airframemodel::FuelL,airframemodel::FuelR})h->state.damage[i]=std::min(1.f,h->state.damage[i]+.02f*dt);}}
-void Collision(uint8_t *v,Vec3 point,float severity)
+void Collision(uint8_t *v,Vec3 point,Vec3 inward,float severity)
 {
  Identity id;if(!std::isfinite(severity)||severity<=3||!game::api.timeMs||!Identify(v,id)||!Eligible(id)||(game::EntityFlags(v)&(1u<<27)))return;Observe();auto *h=Record(id);if(!h)return;
  const int region=point.x<h->layout.body.lo.x*.3f?0:point.x>h->layout.body.hi.x*.3f?1:point.y<0?2:3;
- if(!partsmodel::Contact(h->contacts[region],*game::api.timeMs))return;const auto before=h->state.damage;airframemodel::Impact(h->state,h->layout,point,severity-3);if(h->state.damage!=before&&game::api.RearmVehicleFire)game::api.RearmVehicleFire(v);partsmodel::Commit(h->contacts[region]);
+ if(!partsmodel::Contact(h->contacts[region],*game::api.timeMs))return;const auto before=h->state.damage;airframemodel::Impact(h->state,h->layout,point,severity,inward);if(h->state.damage!=before&&game::api.RearmVehicleFire)game::api.RearmVehicleFire(v);partsmodel::Commit(h->contacts[region]);
  Log("airframe collision: ref %d model %d local %.2f %.2f %.2f severity %.2f",id.ref,id.model,point.x,point.y,point.z,severity);
 }
 struct FlightScope {FlightScope *previous;uint8_t *v;bool used=false;};thread_local FlightScope *gFlightScope;
@@ -143,7 +156,7 @@ void Plane(uint8_t *v){Routed(v,gPlane);}void Heli(uint8_t *v){Routed(v,gHeli);}
 void Fix(uint8_t *v){Repair(v);gFix(v);}void Delete(uint8_t *v){Identity id;if(Identify(v,id)){auto &h=gHistory[size_t(id.ref>>8)];if(Same(h.id,id)){h.revision=Serial();h.clump=nullptr;}}gDelete(v);}void Restart(){gHistory={};gRestart();}
 }
 bool Enabled(const uint8_t *v){Identity id;return Identify(v,id)&&Eligible(id);}
-Token BeginBullet(uint8_t *v){Observe();Identity id;if(!Identify(v,id)||!Eligible(id)||(game::EntityFlags(v)&((1u<<17)|(1u<<25))))return {};auto *h=Record(id);if(!h)return {};Token t;t.revision=h->revision;t.clump=h->clump;std::memcpy(t.pose.data(),v+8,sizeof t.pose);return t;}
+Token BeginBullet(uint8_t *v){Observe();Identity id;if(!Identify(v,id)||!Eligible(id)||(game::EntityFlags(v)&game::kEntityBulletProof))return {};auto *h=Record(id);if(!h)return {};Token t;t.revision=h->revision;t.clump=h->clump;std::memcpy(t.pose.data(),v+8,sizeof t.pose);return t;}
 bool Projectile(uint8_t *v,const Token &token,const projectilemodel::Ray &ray,std::array<float,projectilemodel::kLayers> *passed,int exposedRotor)
 {
  Observe();auto *h=Current(v,token);if(!h)return false;const auto before=h->state.damage;
@@ -151,11 +164,14 @@ bool Projectile(uint8_t *v,const Token &token,const projectilemodel::Ray &ray,st
  // A certified rotating blade can extend outside the static body COL. Its
  // actual visible surface is the contact, rather than a guessed body volume.
  if(h->layout.helicopter&&(exposedRotor==airframemodel::MainRotor||exposedRotor==airframemodel::TailRotor)){
-  float energy=std::min(ray.budget,1000.f);bool contact=false;
+  float surfaceWork=0;bool contact=false;
   for(size_t i=0;i<ray.count;i++)if(std::fabs(ray.layers[i].fraction-ray.entry)<1e-5f){
-   energy=std::max(0.f,energy-projectilemodel::Cost(ray.layers[i].material,ray.layers[i].incidence));contact=true;break;
+   surfaceWork=std::min(result.surfaceLoss,projectilemodel::Cost(ray.layers[i].material,ray.layers[i].incidence));contact=true;break;
   }
-  if(contact)h->state.damage[exposedRotor]=std::min(1.f,std::max(h->state.damage[exposedRotor],before[exposedRotor]+energy/(exposedRotor==airframemodel::MainRotor?100.f:60.f)));
+  // Hub/internal absorption has already spent its share. Only the entry
+  // blade's surface work and otherwise unspent energy can load that rotor;
+  // never reuse the full bullet budget after other components absorbed it.
+  if(contact)h->state.damage[exposedRotor]=std::min(1.f,h->state.damage[exposedRotor]+(surfaceWork+result.remaining)/(exposedRotor==airframemodel::MainRotor?100.f:60.f));
  }
  for(int i=0;i<airframemodel::Count;i++)if(h->state.damage[i]>before[i])Log("airframe projectile: ref %d model %d component %d integrity %.0f%%",h->id.ref,h->id.model,i,100*(1-h->state.damage[i]));
  if(h->state.damage!=before&&game::api.RearmVehicleFire)game::api.RearmVehicleFire(v);
@@ -177,7 +193,7 @@ bool ComponentHit(uint8_t *v,Vec3 from,Vec3 to,float entry,float &closest,Vec3 &
 }
 bool Install()
 {
- if(gReady)return true;gPool=reinterpret_cast<void **>(dlsym(RTLD_MAIN_ONLY,"_ZN6CPools15ms_pVehiclePoolE"));gUpdateMatrix=reinterpret_cast<decltype(gUpdateMatrix)>(dlsym(RTLD_MAIN_ONLY,"_ZN7CMatrix8UpdateRWEv"));gUpdateFrame=reinterpret_cast<decltype(gUpdateFrame)>(dlsym(RTLD_MAIN_ONLY,"_ZN7CEntity13UpdateRwFrameEv"));gMove=reinterpret_cast<decltype(gMove)>(dlsym(RTLD_MAIN_ONLY,"_ZN9CPhysical14ApplyMoveForceEfff"));gTurn=reinterpret_cast<decltype(gTurn)>(dlsym(RTLD_MAIN_ONLY,"_ZN9CPhysical14ApplyTurnForceEffffff"));if(!gPool||!gUpdateMatrix||!gUpdateFrame||!gMove||!gTurn||!game::api.PoolsGetVehicle||!game::api.timeMs)return false;
+ if(gReady)return true;gRoot=reinterpret_cast<decltype(gRoot)>(dlsym(RTLD_MAIN_ONLY,"_Z15RpClumpGetFramePKN2rw5ClumpE"));gParent=reinterpret_cast<decltype(gParent)>(dlsym(RTLD_MAIN_ONLY,"_Z16RwFrameGetParentPKN2rw5FrameE"));gMatrix=reinterpret_cast<decltype(gMatrix)>(dlsym(RTLD_MAIN_ONLY,"_Z16RwFrameGetMatrixPN2rw5FrameE"));if(!gRoot||!gParent||!gMatrix)return false;gPool=reinterpret_cast<void **>(dlsym(RTLD_MAIN_ONLY,"_ZN6CPools15ms_pVehiclePoolE"));gUpdateMatrix=reinterpret_cast<decltype(gUpdateMatrix)>(dlsym(RTLD_MAIN_ONLY,"_ZN7CMatrix8UpdateRWEv"));gUpdateFrame=reinterpret_cast<decltype(gUpdateFrame)>(dlsym(RTLD_MAIN_ONLY,"_ZN7CEntity13UpdateRwFrameEv"));gMove=reinterpret_cast<decltype(gMove)>(dlsym(RTLD_MAIN_ONLY,"_ZN9CPhysical14ApplyMoveForceEfff"));gTurn=reinterpret_cast<decltype(gTurn)>(dlsym(RTLD_MAIN_ONLY,"_ZN9CPhysical14ApplyTurnForceEffffff"));if(!gPool||!gUpdateMatrix||!gUpdateFrame||!gMove||!gTurn||!game::api.PoolsGetVehicle||!game::api.timeMs)return false;
 #define C(v,s,f) if(!v)v=reinterpret_cast<decltype(v)>(hooks::Chain(s,reinterpret_cast<void *>(f)))
  C(gCarHeliAudio,"_ZN13cAudioManager14ProcessCarHeliER14cVehicleParams",CarHeliAudio);C(gToyHeliAudio,"_ZN13cAudioManager23ProcessModelHeliVehicleER14cVehicleParams",ToyHeliAudio);
  C(gFlying,"_ZN8CVehicle13FlyingControlE12eFlightModel",Flying);C(gAuto,"_ZN11CAutomobile14ProcessControlEv",Auto);C(gPlane,"_ZN6CPlane14ProcessControlEv",Plane);C(gHeli,"_ZN5CHeli14ProcessControlEv",Heli);C(gBoat,"_ZN5CBoat14ProcessControlEv",Boat);C(gFix,"_ZN11CAutomobile3FixEv",Fix);C(gDelete,"_ZN7CEntity14DeleteRwObjectEv",Delete);C(gRestart,"_ZN6CWorld15ClearForRestartEv",Restart);

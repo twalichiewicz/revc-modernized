@@ -19,6 +19,8 @@ Config gConfig;void Log(const char *,...){}
 static int swapClassOnSection=-1;
 namespace carglass {int restored=0,sections=0;bool lastDebris=false;void Restore(uint8_t *){++restored;}bool SeverSection(uint8_t *v,Vec3,float,bool debris){++sections;lastDebris=debris;if(swapClassOnSection>=0){*reinterpret_cast<int *>(v+0x348)=swapClassOnSection;*reinterpret_cast<int16_t *>(v+0x6a)=int16_t(swapClassOnSection==4?180:199);swapClassOnSection=-1;}return true;}}
 namespace fixture {
+struct RotorFrame {float matrix[16]{};RotorFrame *parent=nullptr;};RotorFrame rotorRoot,mainFrame;
+void *Root(const void *){return &rotorRoot;}void *Parent(const void *f){return static_cast<const RotorFrame *>(f)->parent;}float *Matrix(void *f){return static_cast<RotorFrame *>(f)->matrix;}
 alignas(16) uint8_t car[0x6f0]{},pool[24]{},info[0x80]{},col[0x40]{};uint8_t flags[1]{1};uint8_t *models[6500]{};void *poolPointer=pool;int fireRearms=0;int fireRepairs=0;bool teleport=false;float step=1;uint32_t now=1000;std::map<std::string,void *> entries;int bad=0;
 void Check(bool b,const char *s){if(!b){printf("FAIL: %s\n",s);++bad;}}
 int audioCalls=0;bool NativeAudio(uint8_t *,uint8_t *){++audioCalls;return true;}void NativeToyAudio(uint8_t *,uint8_t *){++audioCalls;}
@@ -29,7 +31,7 @@ void Turn(uint8_t *,float,float,float,float,float,float){}
 void Setup(){std::memset(car,0,sizeof car);*reinterpret_cast<void **>(car)=reinterpret_cast<void *>(1);*reinterpret_cast<void **>(car+0x58)=reinterpret_cast<void *>(2);*reinterpret_cast<unsigned *>(car+0x60)=2;*reinterpret_cast<int16_t *>(car+0x6a)=180;*reinterpret_cast<int *>(car+0x348)=4;*reinterpret_cast<float *>(car+0x2a0)=1000;*reinterpret_cast<float *>(car+0xcc)=1000;*reinterpret_cast<float *>(car+0xd0)=1000;car[0x297]=0x40;car[0x295]=0x10;car[0x294]=2;auto m=reinterpret_cast<float *>(car+8);m[0]=m[5]=m[10]=m[15]=1;}
 }
 namespace hooks {void *Chain(const char *s,void *p){auto old=std::strstr(s,"ProcessCarHeli")?reinterpret_cast<void *>(fixture::NativeAudio):std::strstr(s,"ProcessModelHeliVehicle")?reinterpret_cast<void *>(fixture::NativeToyAudio):std::strstr(s,"FlyingControl")?reinterpret_cast<void *>(fixture::NativeFlying):std::strstr(s,"Restart")?reinterpret_cast<void *>(fixture::Restart):reinterpret_cast<void *>(fixture::Native);fixture::entries[s]=p;return old;}}
-static void *Lookup(void *,const char *s){if(std::strstr(s,"UpdateRW")||std::strstr(s,"UpdateRwFrame"))return reinterpret_cast<void *>(fixture::Native);if(std::strstr(s,"ApplyMoveForce"))return reinterpret_cast<void *>(fixture::Move);if(std::strstr(s,"ApplyTurnForce"))return reinterpret_cast<void *>(fixture::Turn);return std::strstr(s,"VehiclePool")?&fixture::poolPointer:nullptr;}
+static void *Lookup(void *,const char *s){if(std::strstr(s,"RpClumpGetFrame"))return reinterpret_cast<void *>(fixture::Root);if(std::strstr(s,"RwFrameGetParent"))return reinterpret_cast<void *>(fixture::Parent);if(std::strstr(s,"RwFrameGetMatrix"))return reinterpret_cast<void *>(fixture::Matrix);if(std::strstr(s,"UpdateRW")||std::strstr(s,"UpdateRwFrame"))return reinterpret_cast<void *>(fixture::Native);if(std::strstr(s,"ApplyMoveForce"))return reinterpret_cast<void *>(fixture::Move);if(std::strstr(s,"ApplyTurnForce"))return reinterpret_cast<void *>(fixture::Turn);return std::strstr(s,"VehiclePool")?&fixture::poolPointer:nullptr;}
 int main(){using namespace fixture;Setup();game::api.PoolsGetVehicle=Get;game::api.timeMs=&now;game::api.timeStep=&step;game::api.modelInfoPtrs=models;models[180]=info;info[0x1d]=6;*reinterpret_cast<void **>(info+0x20)=col;*reinterpret_cast<void **>(info+0x30)=reinterpret_cast<void *>(3);*reinterpret_cast<Vec3 *>(col+0x10)={-10,-10,-2};*reinterpret_cast<Vec3 *>(col+0x1c)={10,10,2};*reinterpret_cast<void **>(pool)=car;*reinterpret_cast<void **>(pool+8)=flags;*reinterpret_cast<int *>(pool+16)=1;gConfig.planes=gConfig.heliDamage=true;game::api.RearmVehicleFire=+[](uint8_t *){++fireRearms;};game::api.RepairVehicleFire=+[](uint8_t *){++fireRepairs;};
  Check(airframedamage::Install(),"airframe owner installs native lifecycle bindings");
 #if __has_feature(address_sanitizer)
@@ -57,6 +59,12 @@ int main(){using namespace fixture;Setup();game::api.PoolsGetVehicle=Get;game::a
  for(size_t i=0x388;i<sizeof car;i++)Check(car[i]==0,"CPlane owner never touches automobile-only members");
  Setup();*reinterpret_cast<int16_t *>(car+0x6a)=199;*reinterpret_cast<int *>(car+0x348)=0;models[199]=info;
  int rotorLoss[2]{};static int *lossCounts;lossCounts=rotorLoss;game::api.AircraftRotorLoss=+[](uint8_t *,bool main){++lossCounts[main?0:1];return true;};
+ mainFrame={};mainFrame.matrix[0]=mainFrame.matrix[5]=mainFrame.matrix[10]=1;mainFrame.matrix[14]=5;mainFrame.parent=&rotorRoot;*reinterpret_cast<void **>(car+0x440+17*8)=&mainFrame;
+ auto hubToken=airframedamage::BeginBullet(car);float hubFraction=1;Vec3 hubNormal;
+ Check(airframedamage::ComponentHit(car,{-1,0,5},{1,0,5},.3f,hubFraction,hubNormal),"a skin opening still exposes the functional rotor hub outside static body COL");
+ projectilemodel::Ray hubRound{{-1,0,5},{1,0,5},.3f,1,80,nullptr,0};for(int i=0;i<12;i++)airframedamage::Projectile(car,hubToken,hubRound);
+ Check(game::api.AirframeEffects(car).rotor==0&&rotorLoss[0]==1,"continued material hits through the hub opening sever the rotor assembly");
+ airframedamage::Repair(car);rotorLoss[0]=0;*reinterpret_cast<void **>(car+0x440+17*8)=nullptr;
  auto rotorToken=airframedamage::BeginBullet(car);projectilemodel::Layer blade{.5f,1,projectilemodel::Material::Skin};projectilemodel::Ray exposed{{-20,0,5},{20,0,5},.5f,1,20,&blade,1};
  for(int i=0;i<10;i++)airframedamage::Projectile(car,rotorToken,exposed,nullptr,airframemodel::MainRotor);
  auto rotorEffect=game::api.AirframeEffects(car);Check(rotorEffect.rotor==0&&rotorEffect.antiTorque==1&&rotorLoss[0]==1&&rotorLoss[1]==0,"actual exposed blade outside COL fails only main rotor and detaches once");

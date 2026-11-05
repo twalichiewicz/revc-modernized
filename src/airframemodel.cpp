@@ -35,7 +35,7 @@ Section SectionCut(const Layout &l,int section)
 }
 bool Volume(const State &s,const Layout &l,int module,Box &box)
 {
- if(module<0||module>=Count+3)return false;box=module<Count?l.volumes[size_t(module)]:l.structure[size_t(module-Count)];
+ if(module<0||module>=Count+3||(module==MainRotor&&(s.missingRotors&1))||(module==TailRotor&&(s.missingRotors&2)))return false;box=module<Count?l.volumes[size_t(module)]:l.structure[size_t(module-Count)];
  for(int part=0;part<3;part++)if(s.separated&(1u<<part)){
   // Body/boom cuts do not slice the independently attached spinning disc.
   if(l.helicopter&&module==MainRotor)continue;const auto cut=SectionCut(l,part);
@@ -67,20 +67,21 @@ projectilemodel::Result Projectile(State &s,const Layout &l,const projectilemode
  auto physical=l.volumes;projectilemodel::Structure frame{l.structure,{80,80,65},{500,500,350}};
  for(int i=0;i<Count;i++)if(!Volume(s,l,i,physical[size_t(i)])){physical[size_t(i)]=l.body;resistance[i]=0;}
  for(int i=0;i<3;i++)if(!Volume(s,l,Count+i,frame.volumes[size_t(i)])){frame.volumes[size_t(i)]=l.body;frame.resistance[size_t(i)]=0;}
- const auto hit=projectilemodel::Absorb(l.body,physical,resistance,capacity,ray,&frame);if(!hit.valid)return hit;
+ auto body=l.body;if(l.helicopter)for(int rotor:{MainRotor,TailRotor})if(resistance[rotor]>0){const auto b=physical[size_t(rotor)];body.lo={std::min(body.lo.x,b.lo.x),std::min(body.lo.y,b.lo.y),std::min(body.lo.z,b.lo.z)};body.hi={std::max(body.hi.x,b.hi.x),std::max(body.hi.y,b.hi.y),std::max(body.hi.z,b.hi.z)};}
+ const auto hit=projectilemodel::Absorb(body,physical,resistance,capacity,ray,&frame);if(!hit.valid)return hit;
  for(int i=0;i<Count;i++)s.damage[i]=Clamp(s.damage[i]+hit.doses[i]);
  for(int part=0;part<3;part++){s.structure[size_t(part)]=Clamp(s.structure[size_t(part)]+hit.structuralDoses[size_t(part)]);if(s.structure[size_t(part)]>=1)BreakSystems(s,l,part);}
  if(l.single)s.damage[EngineR]=s.damage[EngineL];return hit;
 }
-void Impact(State &s,const Layout &l,Vec3 p,float severity)
+void Impact(State &s,const Layout &l,Vec3 p,float severity,Vec3 inward)
 {
  if(!Finite(p)||!std::isfinite(severity)||severity<=0)return;
- for(int i=0;i<Count;i++){
-  if((l.helicopter&&(i==WingL||i==WingR||i==Elevator||i==Rudder||i==AileronL||i==AileronR))||(!l.helicopter&&(i==MainRotor||i==TailRotor)))continue;
-  const auto &b=l.volumes[i];if(p.x>=b.lo.x&&p.x<=b.hi.x&&p.y>=b.lo.y&&p.y<=b.hi.y&&p.z>=b.lo.z&&p.z<=b.hi.z)s.damage[i]=Clamp(s.damage[i]+severity*.1f);
+ if(!Finite(inward))return;
+ if((inward.x*inward.x+inward.y*inward.y+inward.z*inward.z)<1e-8f){
+  const float distance[]={std::fabs(p.x-l.body.lo.x),std::fabs(p.x-l.body.hi.x),std::fabs(p.y-l.body.lo.y),std::fabs(p.y-l.body.hi.y),std::fabs(p.z-l.body.lo.z),std::fabs(p.z-l.body.hi.z)};
+  const int nearest=int(std::min_element(distance,distance+6)-distance);inward={float(nearest==0)-float(nearest==1),float(nearest==2)-float(nearest==3),float(nearest==4)-float(nearest==5)};
  }
- for(int part=0;part<3;part++){const auto &b=l.structure[size_t(part)];if(p.x>=b.lo.x&&p.x<=b.hi.x&&p.y>=b.lo.y&&p.y<=b.hi.y&&p.z>=b.lo.z&&p.z<=b.hi.z){s.structure[size_t(part)]=Clamp(s.structure[size_t(part)]+severity*.07f);if(s.structure[size_t(part)]>=1)BreakSystems(s,l,part);}}
- if(l.single)s.damage[EngineR]=s.damage[EngineL];
+ Projectile(s,l,materialmodel::ContactRay(p,inward,severity));
 }
 void Tick(State &s,float dt,bool running)
 {

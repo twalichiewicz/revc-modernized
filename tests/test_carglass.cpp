@@ -138,6 +138,15 @@ int main()
  entries["_ZN7CEntity14DeleteRwObjectEv"]=reinterpret_cast<void *>(Delete);
  game::api.PoolsGetVehicle=Car;gConfig.carGlass=gConfig.carDeformation=false;Check(carglass::Install()&&!carglass::gReady,"disabled startup installs no glass hooks");gConfig.carGlass=gConfig.carDeformation=true;
  Check(carglass::Install(),"installed native bindings");Reset();
+ auto metalArea=[](const Geo *g){float sum=0;for(const auto &t:g->triangles)if(t.material==1){const auto a=g->vertices[t.v[0]],b=g->vertices[t.v[1]],c=g->vertices[t.v[2]];sum+=std::fabs((b.y-a.y)*(c.z-a.z)-(b.z-a.z)*(c.y-a.y))*.5f;}return sum;};
+ Check(carglass::Perforate(cars.data(),&atoms[0][0],{-.8f,.5f,-.1f},{1,0,0},80),"ordinary car body accepts material perforation");
+ Check(metalArea(atoms[0][0].geo)<.5f&&atoms[1][0].geo==base,"car hole removes actual private material without changing shared cars");
+ Bullet();Check(metalArea(atoms[0][0].geo)<.5f,"breaking side glass preserves existing body material loss");
+ dentmodel::Impact carDent;Check(dentmodel::Make({-.8f,.5f,-.1f},{1,0,0},60,carDent)&&carglass::Dent(cars.data(),carDent),"impact can deform a previously shot panel");
+ Check(metalArea(atoms[0][0].geo)<.5f,"impact deformation preserves prior perforation and glass loss");
+ {const auto g=atoms[0][0].geo;float largest=0;Vec3 p{},n{};for(const auto &t:g->triangles)if(t.material==1){const auto a=g->vertices[t.v[0]],b=g->vertices[t.v[1]],c=g->vertices[t.v[2]];const auto cross=carglass::Cross({b.x-a.x,b.y-a.y,b.z-a.z},{c.x-a.x,c.y-a.y,c.z-a.z});const float area=skinmodel::Dot(cross,cross);if(area>largest){largest=area;p={(a.x+b.x+c.x)/3,(a.y+b.y+c.y)/3,(a.z+b.z+c.z)/3};n=cross;}}
+  const float before=metalArea(g);Check(carglass::Perforate(cars.data(),&atoms[0][0],p,n,20)&&metalArea(atoms[0][0].geo)<before-.0001f,"a later bullet removes material from the current deformed panel");}
+ Reset();
  *reinterpret_cast<int16_t *>(cars.data()+0x6a)=181;*reinterpret_cast<int *>(cars.data()+0x348)=4;
  const auto original=atoms[0][0].geo;Check(carglass::Perforate(cars.data(),&atoms[0][0],{-.8f,.5f,-.1f},{1,0,0},80),"aircraft skin accepts certified local perforation");
  Check(atoms[0][0].geo!=original&&atoms[1][0].geo==original,"perforation uses private geometry on only the struck airframe");
@@ -176,7 +185,8 @@ int main()
  Reset();{const size_t old=carglass::gBytes;const int count=created;carglass::gBytes=carglass::kBudget-1;Bullet();Check(atoms[0][0].geo==base&&!shards&&holders==0&&created==count,"geometry budget refuses before allocating a copy");carglass::gBytes=old;}
  Reset();gConfig.carGlass=false;Bullet();Check(atoms[0][0].geo==base&&!shards,"disabled retains native behavior");gConfig.carGlass=true;
  Reset();frames[0][0].name="windscreen_hi_ok";Bullet();Check(atoms[0][0].geo==base&&!shards,"windscreen remains native");
- Reset();cars[0x62]|=2;Bullet();Check(atoms[0][0].geo==base&&!shards,"native bullet-proof car");
+ Reset();cars[0x63]|=2;Bullet();Check(atoms[0][0].geo==base&&!shards,"native bullet-proof car");
+ Reset();cars[0x62]|=2;Bullet();Check(atoms[0][0].geo!=base&&shards==1,"explosion proof does not prevent bullet glass damage");
  Reset();cars[0x297]=0;Bullet();Check(atoms[0][0].geo==base&&!shards,"native no-damage car");
  Reset();*reinterpret_cast<int *>(cars.data()+0x348)=4;Bullet();Check(atoms[0][0].geo==base&&!shards,"aircraft excluded");
  Reset();carFlags[0]=0x81;Bullet();Check(atoms[0][0].geo==base&&!shards,"unallocated pool slot excluded");

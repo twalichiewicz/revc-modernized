@@ -309,7 +309,7 @@ struct Api {
  firemodel::Input (*AirframeFire)(const uint8_t *);
  void (*AirframeBurn)(uint8_t *,float);
  void (*AirframeFlightUsed)(uint8_t *);
- void (*AirframeCollision)(uint8_t *,Vec3,float);
+ void (*AirframeCollision)(uint8_t *,Vec3,Vec3,float);
  bool (*AircraftRotorLoss)(uint8_t *,bool main);
  bool (*AircraftDebris)(uint8_t *,const airframedebris::Piece *,size_t);
  bool (*VehicleFireManaged)(const uint8_t *);
@@ -464,6 +464,11 @@ constexpr uint64_t kPedStanding = 1ull << 0, kPedWasStanding = 1ull << 1, kPedIn
 inline CVector &EntitySpeed(uint8_t *entity) { return *reinterpret_cast<CVector *>(entity + 0x84); }
 inline uint32_t &EntityFlags(uint8_t *entity) { return *reinterpret_cast<uint32_t *>(entity + 0x60); }
 constexpr uint32_t kEntityUsesCollision = 1u << 8;
+// macVC5217 InflictDamage jump table: bullet types17..29/32/33/35/42
+// test bit25 at27d794; explosive types12/15/16/41 test bit17 at27d82c.
+constexpr uint32_t kEntityBulletProof = 1u << 25;
+constexpr uint32_t kEntityExplosionProof = 1u << 17;
+constexpr uint32_t kEntityCollisionProof = 1u << 27;
 inline bool IsVehicle(const uint8_t *entity) { return (*reinterpret_cast<const uint32_t *>(entity + 0x60) & 7) == 2; }
 // Headings as CPlaceable has them: forward is (-sin h, cos h).
 CVector HeadingForward(float heading);
