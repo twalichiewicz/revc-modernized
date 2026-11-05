@@ -1,5 +1,6 @@
 #include "carimpact.h"
 #include "carmechanics.h"
+#include "crashdamage.h"
 #include "carglass.h"
 #include "partsmodel.h"
 #include "config.h"
@@ -50,13 +51,17 @@ Capture Preview(uint8_t *v,uint8_t *other,const Point &p,bool secondary=false,bo
  Vec3 point,inward;if(!dentmodel::Local(matrix,{p.p.x,p.p.y,p.p.z},false,point)||
   !dentmodel::Local(matrix,{sign*p.n.x,sign*p.n.y,sign*p.n.z},true,inward))return c;
  const float len=std::sqrt(inward.x*inward.x+inward.y*inward.y+inward.z*inward.z);
- if(!std::isfinite(len)||len<.5f||len>2||inward.z/len>.7f)return c; // wheel/road support remains rigid
- inward={inward.x/len,inward.y/len,inward.z/len};
+ if(!std::isfinite(len)||len<.5f||len>2||(!Airframe(c.id)&&inward.z/len>.7f))return c; // ordinary car wheel/road support remains rigid
+ // CColPoint's normal is the outward reaction on A, reversed for B.
+ // Material compression travels into the struck body, against that reaction.
+ inward={-inward.x/len,-inward.y/len,-inward.z/len};
  c.hit={true,knownOther,other,piece,point,inward,p.n,0,*game::api.timeMs};return c;
 }
 void Save(Capture c,float force)
 {
  if(!c.hit.valid||!std::isfinite(force)||force<=0||!Current(c.id)||(!Eligible(c.id)&&!Airframe(c.id)))return;
+ const float contactMass=*reinterpret_cast<const float *>(c.id.v+0xcc);
+ if(std::isfinite(contactMass)&&contactMass>=100&&contactMass<=1000000)crashdamage::Contact(c.id.v,force/contactMass*50);
  if(Airframe(c.id)){const float mass=*reinterpret_cast<const float *>(c.id.v+0xcc);if(std::isfinite(mass)&&mass>=100&&mass<=1000000)game::api.AirframeCollision(c.id.v,c.hit.point,c.hit.inward,force/mass*50);return;}
  auto &h=Record(c.id);const auto now=c.hit.when;
  // Native sector collision retains its first strongest record when forces tie.

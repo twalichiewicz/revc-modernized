@@ -295,7 +295,9 @@ bool Deform(uint8_t *v,const dentmodel::Impact &hit)
   void *atomic=objects.a[i];auto old=std::find_if(car.parts.begin(),car.parts.end(),[&](const Part &p){return p.atomic==atomic;});
   if(old!=car.parts.end()&&rw.geometry(atomic)!=old->copy)return false;
   void *source=old==car.parts.end()?rw.geometry(atomic):rw.geometry(old->holder);
-  Mesh m;if(!m.Read(source,atomic,rw.root(car.clump))||!dentmodel::Body(m.name))continue;
+  Mesh m;if(!m.Read(source,atomic,rw.root(car.clump)))continue;
+  const bool aircraft=game::IsAircraft(v);
+  if(!dentmodel::Body(m.name)&&(!aircraft||!m.name||std::strstr(m.name,"rotor")||std::strstr(m.name,"wheel")||std::strstr(m.name,"prop")||std::strstr(m.name,"_lo")))continue;
   Vec3 origin,basis[3];if(!InCar(m.frame,m.root,{0,0,0},origin))continue;
   bool valid=true;for(int a=0;a<3;a++){Vec3 unit{float(a==0),float(a==1),float(a==2)};valid&=InCar(m.frame,m.root,unit,basis[a]);}
   if(!valid)continue;
@@ -359,7 +361,7 @@ void Delete(uint8_t *v){Forget(v,false);gDelete(v);}
 bool Dent(uint8_t *v,const dentmodel::Impact &hit)
 {
  dentmodel::Impact checked;
- if(!gReady||!gConfig.carDeformation||!Eligible(v)||game::EntityModel(v)==162||
+ if(!gReady||!gConfig.carDeformation||(!Eligible(v)&&!(Ref(v)>=0&&(game::EntityFlags(v)&7)==2&&game::IsAircraft(v)&&game::EntityClump(v)&&(v[0x297]&0x40)))||game::EntityModel(v)==162||
     (game::EntityFlags(v)&(1u<<27))||!dentmodel::Make(hit.point,hit.inward,3+hit.depth/.018f,checked))return false;
  try{return Deform(v,checked);}catch(const std::bad_alloc &){return false;}
 }

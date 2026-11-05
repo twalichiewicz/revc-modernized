@@ -118,6 +118,26 @@ uint8_t *Spawn(uint8_t *v,int node,unsigned type){
 }
 }
 void Apply(const Load &load,void (*progress)(void *),void *context){Context receipt(load);progress(context);receipt.Deliver();}
+namespace {
+struct SurfaceRead {Surface &out;void *branch,*root;bool valid=true;size_t first=0,seen=0;};
+void *ReadSurface(void *atomic,void *data){
+ auto &r=*static_cast<SurfaceRead *>(data);if(!(n.flags(atomic)&4))return atomic;auto frame=n.frame(atomic),f=frame;int depth=0;while(f&&f!=r.branch&&depth++<32)f=n.parent(f);if(f!=r.branch)return atomic;
+ auto g=n.geometry(atomic);if(!g||*reinterpret_cast<int *>(static_cast<uint8_t *>(g)+0x20)!=1){r.valid=false;return nullptr;}
+ const int nv=n.nv(g),nt=n.nt(g),nm=*reinterpret_cast<int *>(static_cast<uint8_t *>(g)+0x88);auto m=n.morph(g,0);auto vertices=m?n.vertices(m):nullptr;auto faces=n.triangles(g);
+ if(nv<3||nv>65535||nt<0||nt>32768||nm<1||nm>256||!vertices||!faces){r.valid=false;return nullptr;}
+ for(int i=0;i<nt;i++){const auto t=faces[i];if(t.material>=nm){r.valid=false;break;}auto material=n.material(g,t.material);auto colour=material?n.colour(material):nullptr;if(!colour){r.valid=false;break;}if(!colour[3])continue;
+  Vec3 p[3];for(int j=0;j<3;j++){if(t.v[j]>=nv){r.valid=false;break;}p[j]=vertices[t.v[j]];if(!Finite(p[j])||!InRoot(frame,r.root,p[j])){r.valid=false;break;}}if(!r.valid)break;
+  auto cross=Cross(Sub(p[1],p[0]),Sub(p[2],p[0]));if(Dot(cross,cross)<1e-12f)continue;
+  if(r.seen++<r.first)continue;if(r.out.count==r.out.faces.size()){r.out.more=true;return nullptr;}const auto at=uint16_t(r.out.count*3);for(int j=0;j<3;j++)r.out.vertices[at+j]=p[j];r.out.faces[r.out.count++]={{at,uint16_t(at+1),uint16_t(at+2)},uint8_t(colour[3]==255?6:7),0};
+ }return r.valid?atomic:nullptr;
+}
+}
+bool CollisionSurface(uint8_t *v,int door,Surface &out,size_t first){
+ out.count=0;out.more=false;if(first>131072)return false;Actor actor(v);if(!ready||!gConfig.carParts||!actor.Current()||door<0||door>=6||!actor.clump||n.doorStatus(v+0x34c,door)>=3)return false;
+ const auto angle=*reinterpret_cast<const float *>(v+0x368+door*0x24+0xc);if(!std::isfinite(angle)||std::fabs(angle)<.03f)return false;
+ const int nodes[]={17,18,15,11,16,12};auto branch=*reinterpret_cast<void **>(v+0x440+nodes[door]*8);if(!branch)return false;SurfaceRead read{out,branch,n.root(actor.clump),true,first,0};if(!read.root)return false;n.each(actor.clump,ReadSurface,&read);
+ if(!read.valid||!actor.Current()){out.count=0;return false;}return out.count>0;
+}
 bool Install(){if(ready||!gConfig.carParts)return true;
 #define B(v,s) v=reinterpret_cast<decltype(v)>(dlsym(RTLD_MAIN_ONLY,s));if(!v)return false
  B(n.vehicles,"_ZN6CPools15ms_pVehiclePoolE");B(n.objects,"_ZN6CPools14ms_pObjectPoolE");B(n.getObject,"_ZN6CPools9GetObjectEi");B(n.doorStatus,"_ZN14CDamageManager13GetDoorStatusEi");B(n.type,"_Z15RwObjectGetTypePKN2rw6ObjectE");

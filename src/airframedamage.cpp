@@ -25,7 +25,7 @@ bool Identify(const uint8_t *v,Identity &id)
  const int ref=int(index*256)|flags[index];if(game::api.PoolsGetVehicle(ref)!=v||(*reinterpret_cast<const uint32_t *>(v+0x60)&7)!=2)return false;
  id={const_cast<uint8_t *>(v),base,flags,*reinterpret_cast<void *const *>(v),ref,game::EntityModel(v),*reinterpret_cast<const int *>(v+0x348)};return true;
 }
-bool Eligible(const Identity &id){return gReady&&id.vtable&&id.model>=0&&id.model<6500&&game::IsAircraft(id.v)&&(((id.kind==0&&id.model!=194)||id.kind==3)?gConfig.heliDamage:gConfig.planes)&&!game::Wrecked(id.v)&&(id.v[0x297]&0x40);}
+bool Eligible(const Identity &id,bool presentation=false){return gReady&&id.vtable&&id.model>=0&&id.model<6500&&game::IsAircraft(id.v)&&(((id.kind==0&&id.model!=194)||id.kind==3)?gConfig.heliDamage:gConfig.planes)&&(presentation||!game::Wrecked(id.v))&&(id.v[0x297]&0x40);}
 void (*gUpdateMatrix)(void *),(*gUpdateFrame)(uint8_t *);
 void *(*gRoot)(const void *),*(*gParent)(const void *);float *(*gMatrix)(void *);
 bool HubBounds(const Identity &id,bool main,airframemodel::Box &out){
@@ -39,7 +39,7 @@ bool HubBounds(const Identity &id,bool main,airframemodel::Box &out){
   lo={std::min(lo.x,p.x),std::min(lo.y,p.y),std::min(lo.z,p.z)};hi={std::max(hi.x,p.x),std::max(hi.y,p.y),std::max(hi.z,p.z)};
  }out={lo,hi};return true;
 }
-struct History {uint8_t lostRotors=0,lostSections=0;airframeroute::State route;Identity id;airframemodel::State state;airframemodel::Layout layout;uint64_t revision=0;void *clump=nullptr,*source=nullptr;uint8_t *info=nullptr,*col=nullptr;uint32_t clock=0;bool seen=false;float health=1000;std::array<partsmodel::Episode,6> contacts{};};
+struct History {uint8_t lostRotors=0,lostSections=0;airframeroute::State route;Identity id;airframemodel::State state;airframemodel::Layout layout;uint64_t revision=0;void *clump=nullptr,*source=nullptr;uint8_t *info=nullptr,*col=nullptr;uint32_t clock=0;bool seen=false,pendingDent=false;float health=1000;dentmodel::Impact dent{};std::array<partsmodel::Episode,6> contacts{};std::array<float,6> contactWork{},contactDent{};};
 std::array<History,kSlots> gHistory;uint32_t gClock;bool gSeen;
 uint64_t Serial(){if(++gSerial==0)++gSerial;return gSerial;}
 void Observe(){if(game::api.timeMs){const auto now=*game::api.timeMs;if(gSeen&&now<gClock)gHistory={};gClock=now;gSeen=true;}}
@@ -74,7 +74,7 @@ void SyncSections(History &h)
  const auto id=h.id;const auto revision=h.revision;
  for(int section=0;section<3;section++){
   const uint8_t bit=uint8_t(1u<<section);if(h.state.structure[size_t(section)]<1||(h.lostSections&bit))continue;
-  Identity now;if(!Identify(id.v,now)||!Same(id,now)||!Eligible(now)||h.revision!=revision||game::EntityClump(id.v)!=h.clump)return;
+  Identity now;if(!Identify(id.v,now)||!Same(id,now)||!Eligible(now,true)||h.revision!=revision||game::EntityClump(id.v)!=h.clump)return;
   const auto cut=airframemodel::SectionCut(h.layout,section);
   if(!carglass::SeverSection(id.v,cut.normal,cut.offset,!(h.state.separated&bit)))continue;
   if(!Identify(id.v,now)||!Same(id,now)||h.revision!=revision||game::EntityClump(id.v)!=h.clump)return;
@@ -88,7 +88,20 @@ void Collision(uint8_t *v,Vec3 point,Vec3 inward,float severity)
 {
  Identity id;if(!std::isfinite(severity)||severity<=3||!game::api.timeMs||!Identify(v,id)||!Eligible(id)||(game::EntityFlags(v)&(1u<<27)))return;Observe();auto *h=Record(id);if(!h)return;
  const int region=point.x<h->layout.body.lo.x*.3f?0:point.x>h->layout.body.hi.x*.3f?1:point.y<0?2:3;
- if(!partsmodel::Contact(h->contacts[region],*game::api.timeMs))return;const auto before=h->state.damage;airframemodel::Impact(h->state,h->layout,point,severity,inward);if(h->state.damage!=before&&game::api.RearmVehicleFire)game::api.RearmVehicleFire(v);partsmodel::Commit(h->contacts[region]);
+ auto &contact=h->contacts[region];const auto now=*game::api.timeMs;
+ const bool fresh=!contact.seen||now<contact.last||now-contact.last>partsmodel::kQuietMs;partsmodel::Contact(contact,now);
+ if(fresh){h->contactWork[region]=0;h->contactDent[region]=0;}
+ auto load=materialmodel::ContactRay(point,inward,severity);const float work=load.budget;
+ if(work<=h->contactWork[region])return;load.budget-=h->contactWork[region];
+ const auto before=h->state.damage;const auto result=airframemodel::Projectile(h->state,h->layout,load);if(!result.valid)return;h->contactWork[region]=work;
+ // A manifold can start as a harmless graze and grow into a hard crash. Spend
+ // only the additional peak work, rather than suppressing the stronger load
+ // or charging every contact point as another complete impact.
+ dentmodel::Impact dent;if(dentmodel::Make(point,inward,severity,dent)){
+  const float depth=dent.depth;dent.depth=std::max(0.f,depth-h->contactDent[region]);h->contactDent[region]=depth;
+  if(dent.depth>0){if(h->pendingDent)dent.depth=std::min(.18f,dent.depth+h->dent.depth);h->dent=dent;h->pendingDent=true;}
+ }
+ if(h->state.damage!=before&&game::api.RearmVehicleFire)game::api.RearmVehicleFire(v);
  Log("airframe collision: ref %d model %d local %.2f %.2f %.2f severity %.2f",id.ref,id.model,point.x,point.y,point.z,severity);
 }
 struct FlightScope {FlightScope *previous;uint8_t *v;bool used=false;};thread_local FlightScope *gFlightScope;
@@ -113,9 +126,12 @@ void Flying(uint8_t *v,int model)
 void Repair(uint8_t *v){Identity id;if(Identify(v,id))gHistory[size_t(id.ref>>8)]={};carglass::Restore(v);if(game::api.RepairVehicleFire)game::api.RepairVehicleFire(v);}
 void Tick(uint8_t *v)
 {
- Identity id;if(!Identify(v,id)||!Eligible(id))return;Observe();auto *h=Record(id);if(!h)return;const float health=game::VehicleHealth(v);
+ Identity id;if(!Identify(v,id)||!Eligible(id,true))return;Observe();auto *h=Record(id);if(!h)return;const float health=game::VehicleHealth(v);
  if(std::isfinite(health)&&health>h->health+1){Repair(v);h=Record(id);if(!h)return;}h->health=health;
- const uint32_t now=game::api.timeMs?*game::api.timeMs:0;if(h->seen&&now>=h->clock)airframemodel::Tick(h->state,(now-h->clock)*.001f,(v[0x295]&16)!=0);h->seen=true;h->clock=now;SyncRotors(*h);SyncSections(*h);
+ const uint32_t now=game::api.timeMs?*game::api.timeMs:0;if(h->seen&&now>=h->clock)airframemodel::Tick(h->state,(now-h->clock)*.001f,(v[0x295]&16)!=0);h->seen=true;h->clock=now;
+ const auto revision=h->revision;auto current=[&](){Identity check;return Identify(v,check)&&Same(id,check)&&h->revision==revision&&game::EntityClump(v)==h->clump;};
+ if(h->pendingDent){const auto dent=h->dent;h->pendingDent=false;carglass::Dent(v,dent);if(!current())return;}
+ SyncRotors(*h);if(current())SyncSections(*h);
 }
 bool MissingMainRotor(uint8_t *params)
 {

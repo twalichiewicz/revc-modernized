@@ -186,6 +186,7 @@ void StockSkin(const char *file,int model)
    carglass::Restore(vehicle);Check(atomic->geometry==source,"stock repair restores shared original");++tested;break;
   }
  }
+ if(model==227){dentmodel::Impact impact;Check(dentmodel::Make({-.11f,3.48f,.13f},{0,-1,0},29.3f,impact)&&carglass::Dent(vehicle,impact),"recorded Police Maverick nose impact deforms actual stock fuselage geometry");carglass::Restore(vehicle);}
  const int beforeParts=physicalAdds;Check(carglass::SeverSection(vehicle,{0,-1,0},0),"stock aircraft whole tail skin splits across all source atomics");Check(physicalAdds==beforeParts+1&&temporaryPieces==1,"stock split produces one real RenderWare assembly on a native-shaped physical object");
  auto debris=*reinterpret_cast<rw::Clump **>(physicalPiece+0x58);Check(debris&&debris->countAtomics()>0,"physical detached section retains real source materials and triangles");
  Check(physicalPiece[0x1b5]==0x80&&physicalPiece[0x1b6]==0x5a,"debris flag byte preserves adjacent packed fields");
@@ -211,7 +212,7 @@ int main()
 {
  Check(rw::Engine::init(),"NULL renderer initialized");RegisterFrameNames();Check(rw::Engine::open(nullptr)&&rw::Engine::start(),"NULL renderer starts");Bind();BindDebris();
  for(bool strip:{false,true})for(bool glassOnly:{false,true})for(bool broken:{false,true})for(bool dented:{false,true})Copy(strip,broken,glassOnly,dented);
- StockSkin("sparrow.dff",199);StockSkin("maverick.dff",217);StockSkin("deaddodo.dff",181);StockSkin("skimmer.dff",195);
+ StockSkin("sparrow.dff",199);StockSkin("maverick.dff",217);StockSkin("polmav.dff",227);StockSkin("deaddodo.dff",181);StockSkin("skimmer.dff",195);
  StockCar("deluxo.dff",211);StockCar("hermes.dff",204);StockCar("benson.dff",229);
  Check(rw::Geometry::numAllocated==0&&rw::Material::numAllocated==0,"all native geometry/material references released");
  rw::Engine::stop();rw::Engine::close();rw::Engine::term();std::puts("carglass real mesh builder: all passed");

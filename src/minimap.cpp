@@ -1,5 +1,7 @@
 #include "airframedebris.h"
 #include "panelphysics.h"
+#include "panelcollision.h"
+#include "crashdamage.h"
 #include "airportheli.h"
 // GTA VI-style rectangular, tilted minimap with 3D buildings and GPS for macVC.
 //
@@ -817,6 +819,8 @@ __attribute__((constructor)) void Init()
 	rainvehicles::Install(); // (after flightmodel's flying hook: chained over it)
 	handling::Install();
 	if (!panelphysics::Install())Log("panel physics: native bindings incomplete");
+	if (!panelcollision::Install())Log("panel collision: native bindings incomplete");
+	if (!crashdamage::Install())Log("crash injury: native bindings incomplete");
 	if (!carparts::Install())
 		Log("car parts: native collision hook missing; re-run install.sh");
 	if (!carmechanics::Install())

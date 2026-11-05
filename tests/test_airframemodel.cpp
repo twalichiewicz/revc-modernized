@@ -8,6 +8,12 @@ int main(){using namespace airframemodel;int bad=0;auto check=[&](bool b,const c
  State engine;const auto box=jet.volumes[EngineL];Vec3 p{(box.lo.x+box.hi.x)*.5f,(box.lo.y+box.hi.y)*.5f,(box.lo.z+box.hi.z)*.5f};Impact(engine,jet,p,10);check(Read(engine,jet).power<1&&Read(engine,jet).rightLift==1,"engine collision independently affects propulsion");
  State tail;Impact(tail,jet,{0,-9,0},10);check(Read(tail,jet).pitch<1&&Read(tail,jet).power==1,"tail damage affects controls without converting hull health to engine damage");
  Layout heli;Build(217,0,{-3,-7,-2},{3,5,3},heli);State rotor;Impact(rotor,heli,{0,0,2.7f},10);check(Read(rotor,heli).rotor<1,"rotor volume is separate from fixed-wing components");
+ Layout maverick;Build(227,0,{-1.1647055f,-7.520007f,-.6669215f},{1.1580596f,3.580109f,2.1271734f},maverick);
+ State piercedBoom;projectilemodel::Ray acrossBoom{{-2,-6.5f,1.4f},{2,-6.5f,1.4f},.3f,1,80,nullptr,0};
+ for(int i=0;i<40;i++)Projectile(piercedBoom,maverick,acrossBoom);
+ check(piercedBoom.structure[2]>0&&Read(piercedBoom,maverick).antiTorque<1,"transverse shots through the actual Maverick tail boom damage its load-bearing material and tail function");
+ State crash;Impact(crash,maverick,{-.11f,3.48f,.13f},29.30f,{0,-1,0});Impact(crash,maverick,{-.61f,-7.12f,1.43f},13.43f,{0,1,0});
+ check(crash.structure[0]+crash.structure[1]+crash.structure[2]>0,"recorded Maverick nose and tail impacts load the airframe structure");
  State leaking;leaking.damage[FuelL]=.8f;leaking.damage[Electrical]=.9f;Tick(leaking,1,true);auto f=Fire(leaking,true);check(f.breach>.5f&&f.electrical>.5f&&leaking.fuel<1,"leak and short expose real progressive fire sources");
  State wingBreak;projectilemodel::Layer wingSkin{.25f,1,projectilemodel::Material::Skin};projectilemodel::Ray rootHit{{-2.4f,0,4},{-2.4f,0,-4},.25f,1,80,&wingSkin,1};for(int i=0;i<12;i++)Projectile(wingBreak,jet,rootHit);check(wingBreak.structure[0]==1&&wingBreak.structure[1]==0&&Read(wingBreak,jet).leftLift==0,"localized structural wing failure removes only that section's lift");
  State tip;projectilemodel::Ray tipHit{{-8,0,4},{-8,0,-4},.25f,1,80,&wingSkin,1};for(int i=0;i<12;i++)Projectile(tip,jet,tipHit);check(tip.structure[0]==0,"wing-tip skin damage cannot pretend to break an unstruck root spar");

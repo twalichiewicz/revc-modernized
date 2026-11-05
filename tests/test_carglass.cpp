@@ -159,6 +159,7 @@ int main()
  std::printf("hole stress accepted=%d triangles=%zu bytes=%zu\n",accepted,atoms[0][0].geo->triangles.size(),carglass::gBytes);
  Check(accepted>=90,"ongoing distinct bullet holes continue beyond64 within native topology and byte budget");
  carglass::Restore(cars.data());Check(atoms[0][0].geo==original,"airframe repair restores its original shared geometry");
+ dentmodel::Impact airDent;Check(dentmodel::Make({-.8f,.5f,-.1f},{1,0,0},29.3f,airDent)&&carglass::Dent(cars.data(),airDent),"exact CPlane accepts actual private skin deformation from a certified impact");carglass::Restore(cars.data());
  static int debrisCalls=0;game::api.AircraftDebris=+[](uint8_t *,const airframedebris::Piece *p,size_t count){++debrisCalls;for(size_t i=0;i<count;i++)Check(p[i].geometry!=nullptr,"native debris receives actual severed source geometry");return true;};
  *reinterpret_cast<int16_t *>(cars.data()+0x6a)=199;*reinterpret_cast<int *>(cars.data()+0x348)=0;frames[0][2].name="toprotor";
  Check(carglass::SeverSection(cars.data(),{0,1,0},.5f),"whole aircraft section splits across coarse shared source triangles");

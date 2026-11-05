@@ -17,7 +17,7 @@ static void *Lookup(void *,const char *);
 namespace game {Api api{};}
 Config gConfig;void Log(const char *,...){}
 static int swapClassOnSection=-1;
-namespace carglass {int restored=0,sections=0;bool lastDebris=false;void Restore(uint8_t *){++restored;}bool SeverSection(uint8_t *v,Vec3,float,bool debris){++sections;lastDebris=debris;if(swapClassOnSection>=0){*reinterpret_cast<int *>(v+0x348)=swapClassOnSection;*reinterpret_cast<int16_t *>(v+0x6a)=int16_t(swapClassOnSection==4?180:199);swapClassOnSection=-1;}return true;}}
+namespace carglass {int restored=0,sections=0;int dents=0;bool Dent(uint8_t *,const dentmodel::Impact &){++dents;return true;}bool lastDebris=false;void Restore(uint8_t *){++restored;}bool SeverSection(uint8_t *v,Vec3,float,bool debris){++sections;lastDebris=debris;if(swapClassOnSection>=0){*reinterpret_cast<int *>(v+0x348)=swapClassOnSection;*reinterpret_cast<int16_t *>(v+0x6a)=int16_t(swapClassOnSection==4?180:199);swapClassOnSection=-1;}return true;}}
 namespace fixture {
 struct RotorFrame {float matrix[16]{};RotorFrame *parent=nullptr;};RotorFrame rotorRoot,mainFrame;
 void *Root(const void *){return &rotorRoot;}void *Parent(const void *f){return static_cast<const RotorFrame *>(f)->parent;}float *Matrix(void *f){return static_cast<RotorFrame *>(f)->matrix;}
@@ -76,6 +76,16 @@ int main(){using namespace fixture;Setup();game::api.PoolsGetVehicle=Get;game::a
  airframedamage::Repair(car);airframedamage::Tick(car);Check(game::api.AirframeEffects(car).rotor==1&&rotorLoss[0]==2,"repair clears rotor presentation and function together");
  audioCalls=0;Check(rotorAudio(nullptr,params)&&audioCalls==1,"repair restores native rotor sound ownership");
  auto tail=airframedamage::BeginBullet(car);for(int i=0;i<10;i++)airframedamage::Projectile(car,tail,exposed,nullptr,airframemodel::TailRotor);Check(game::api.AirframeEffects(car).antiTorque==0&&game::api.AirframeEffects(car).rotor==1&&rotorLoss[1]==1,"tail rotor part loss owns yaw instead of killing main lift");
+ Setup();*reinterpret_cast<int16_t *>(car+0x6a)=227;*reinterpret_cast<int *>(car+0x348)=0;models[227]=info;*reinterpret_cast<Vec3 *>(col+0x10)={-1.1647055f,-7.520007f,-.6669215f};*reinterpret_cast<Vec3 *>(col+0x1c)={1.1580596f,3.580109f,2.1271734f};
+ airframedamage::BeginBullet(car);game::api.AirframeCollision(car,{-.11f,3.48f,.13f},{0,-1,0},3.1f);now+=20;game::api.AirframeCollision(car,{-.11f,3.48f,.13f},{0,-1,0},29.3f);
+ Check(airframedamage::gHistory[0].state.structure[0]>0,"initial low-speed graze cannot suppress the later hard impulse in one contact episode");airframedamage::Repair(car);now+=400;
+ auto crashToken=airframedamage::BeginBullet(car);const int dentBefore=carglass::dents,sectionBefore=carglass::sections;
+ for(int i=0;i<3;i++){now+=400;game::api.AirframeCollision(car,{-.11f,3.48f,.13f},{0,-1,0},29.30f);airframedamage::Tick(car);}
+ Check(carglass::dents>dentBefore,"accepted hard helicopter contacts deform the actual surface owner");
+ Check(carglass::sections>sectionBefore,"successive severe contacts separate physical helicopter body material");
+ (void)crashToken;
+ airframedamage::Repair(car);now+=400;const int wreckDent=carglass::dents;game::api.AirframeCollision(car,{-.11f,3.48f,.13f},{0,-1,0},40);car[0x60]=uint8_t(2|(5<<3));airframedamage::Tick(car);Check(carglass::dents>wreckDent,"native wreck status cannot erase already accepted crash surface work");
+
  static int staleNativeCalls=0;
  Setup();airframedamage::BeginBullet(car);airframedamage::gHistory[0].state.structure[0]=1;swapClassOnSection=0;airframedamage::gPlane=+[](uint8_t *){++staleNativeCalls;};airframedamage::Plane(car);Check(staleNativeCalls==0,"section callback cannot dispatch a stale native plane controller onto a replacement automobile");
  staleNativeCalls=0;Setup();*reinterpret_cast<int16_t *>(car+0x6a)=199;*reinterpret_cast<int *>(car+0x348)=0;airframedamage::BeginBullet(car);airframedamage::gHistory[0].state.structure[0]=1;swapClassOnSection=4;airframedamage::gAuto=+[](uint8_t *){++staleNativeCalls;};airframedamage::Auto(car);Check(staleNativeCalls==0,"section callback cannot dispatch automobile control onto a replacement CPlane");

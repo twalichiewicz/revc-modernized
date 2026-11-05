@@ -32,7 +32,7 @@ PLUGIN += src/jetshadow.cpp
 PLUGIN += src/jetboardingpose.cpp
 PLUGIN += src/handlingmodel.cpp src/handling.cpp src/drivelog.cpp src/headbalance.cpp
 PLUGIN += src/glassmodel.cpp src/carglass.cpp
-PLUGIN += src/partsmodel.cpp src/carparts.cpp src/panelphysics.cpp
+PLUGIN += src/partsmodel.cpp src/carparts.cpp src/panelphysics.cpp src/panelcollision.cpp src/crashdamage.cpp
 PLUGIN += src/dentmodel.cpp src/carimpact.cpp
 PLUGIN += src/mechanicalmodel.cpp src/carmechanics.cpp src/projectilemodel.cpp
 PLUGIN += src/firemodel.cpp src/carfire.cpp src/airframemodel.cpp src/airframedamage.cpp src/airframedebris.cpp
@@ -353,6 +353,8 @@ test-game-assets: $(BUILD)/test_glass_assets $(BUILD)/test_estateassets $(BUILD)
 	MACVC_NATIVE="$(MACVC_NATIVE)" $(BUILD)/test_carfire_audio_native
 	$(BUILD)/test_airportheli
 	MACVC_NATIVE="$(MACVC_NATIVE)" $(BUILD)/test_panelphysics_native
+	MACVC_NATIVE="$(MACVC_NATIVE)" $(BUILD)/test_crashdamage_native
+	MACVC_NATIVE="$(MACVC_NATIVE)" $(BUILD)/test_panelcollision --native
 	GAMEDATA="$(GAMEDATA)" $(BUILD)/test_airportheli_assets
 	GAMEDATA="$(GAMEDATA)" $(BUILD)/test_aircraftcontrols_assets
 	GAMEDATA="$(GAMEDATA)" $(BUILD)/test_shotcollision --assets
@@ -450,7 +452,7 @@ FEEDBACK_TESTS += test_handlingmodel test_handlinghook test_drivelog test_headba
 FEEDBACK_TESTS += test_glassmodel test_carglass
 FEEDBACK_TESTS += test_partsmodel test_carparts test_dentmodel test_cardeform test_mechanicalmodel test_projectilemodel test_carmechanics test_carsystem_lights
 FEEDBACK_TESTS += test_skinmodel test_airframemodel test_airframedamage
-FEEDBACK_TESTS += test_materialmodel test_panelphysics
+FEEDBACK_TESTS += test_materialmodel test_panelphysics test_panelcollision test_crashdamage
 FEEDBACK_TESTS += test_firemodel
 FEEDBACK_TESTS += test_carfire
 FEEDBACK_TESTS += test_carfire_awareness
@@ -804,15 +806,15 @@ $(BUILD)/test_skinmodel: tests/test_skinmodel.cpp src/skinmodel.h | $(BUILD)
 	$(CXX) $(CXXFLAGS) -Isrc -o $@ tests/test_skinmodel.cpp
 $(BUILD)/test_airframemodel: tests/test_airframemodel.cpp src/airframemodel.cpp src/projectilemodel.cpp src/mechanicalmodel.cpp $(wildcard src/*.h) | $(BUILD)
 	$(CXX) $(CXXFLAGS) -Isrc -o $@ tests/test_airframemodel.cpp src/airframemodel.cpp src/projectilemodel.cpp src/mechanicalmodel.cpp
-$(BUILD)/test_airframedamage: tests/test_airframedamage.cpp src/airframedamage.cpp src/airframemodel.cpp src/projectilemodel.cpp src/mechanicalmodel.cpp src/partsmodel.cpp $(wildcard src/*.h) | $(BUILD)
-	$(CXX) $(CXXFLAGS) -Isrc -o $@ tests/test_airframedamage.cpp src/airframemodel.cpp src/projectilemodel.cpp src/mechanicalmodel.cpp src/partsmodel.cpp
+$(BUILD)/test_airframedamage: tests/test_airframedamage.cpp src/airframedamage.cpp src/airframemodel.cpp src/projectilemodel.cpp src/mechanicalmodel.cpp src/partsmodel.cpp src/dentmodel.cpp $(wildcard src/*.h) | $(BUILD)
+	$(CXX) $(CXXFLAGS) -Isrc -o $@ tests/test_airframedamage.cpp src/airframemodel.cpp src/projectilemodel.cpp src/mechanicalmodel.cpp src/partsmodel.cpp src/dentmodel.cpp
 
 $(BUILD)/test_airframe_assets: tests/test_airframe_assets.cpp tests/test_mechanical_assets.cpp src/airframemodel.cpp src/projectilemodel.cpp src/mechanicalmodel.cpp tools/bake/gamefiles.cpp $(wildcard src/*.h) | $(BUILD)
 	$(CXX) $(CXXFLAGS) -Isrc -o $@ tests/test_airframe_assets.cpp src/airframemodel.cpp src/projectilemodel.cpp src/mechanicalmodel.cpp tools/bake/gamefiles.cpp -lz
 test-game-assets: $(BUILD)/test_airframe_assets
 
-$(BUILD)/test_airframeroute_native: tests/test_airframeroute_native.cpp tests/test_airframedamage.cpp src/airframedamage.cpp src/airframemodel.cpp src/projectilemodel.cpp src/mechanicalmodel.cpp src/partsmodel.cpp $(wildcard src/*.h) | $(BUILD)
-	$(CXX) $(CXXFLAGS) -Isrc -o $@ tests/test_airframeroute_native.cpp src/airframemodel.cpp src/projectilemodel.cpp src/mechanicalmodel.cpp src/partsmodel.cpp
+$(BUILD)/test_airframeroute_native: tests/test_airframeroute_native.cpp tests/test_airframedamage.cpp src/airframedamage.cpp src/airframemodel.cpp src/projectilemodel.cpp src/mechanicalmodel.cpp src/partsmodel.cpp src/dentmodel.cpp $(wildcard src/*.h) | $(BUILD)
+	$(CXX) $(CXXFLAGS) -Isrc -o $@ tests/test_airframeroute_native.cpp src/airframemodel.cpp src/projectilemodel.cpp src/mechanicalmodel.cpp src/partsmodel.cpp src/dentmodel.cpp
 test-game-assets: $(BUILD)/test_airframeroute_native
 
 $(BUILD)/test_shotreceipt_native: tests/test_shotreceipt_native.cpp tests/test_shotcollision.cpp tests/nativejetshadowarm.h src/shotcollision.cpp tools/bake/visualmodel.cpp tools/bake/gamefiles.cpp src/mapdata.cpp $(wildcard src/*.h tools/bake/*.h) | $(BUILD)
@@ -848,3 +850,14 @@ $(BUILD)/test_panelphysics_native: tests/test_panelphysics_native.cpp tests/test
 	$(CXX) $(CXXFLAGS) -Isrc -o $@ tests/test_panelphysics_native.cpp src/glassmodel.cpp src/dentmodel.cpp
 
 test-game-assets: $(BUILD)/test_panelphysics_native
+
+$(BUILD)/test_crashdamage: tests/test_crashdamage.cpp src/crashdamage.cpp src/falldamage.cpp $(wildcard src/*.h) | $(BUILD)
+	$(CXX) $(CXXFLAGS) -Isrc -o $@ tests/test_crashdamage.cpp src/falldamage.cpp
+
+$(BUILD)/test_panelcollision: tests/test_panelcollision.cpp tests/test_panelphysics.cpp tests/test_carglass.cpp src/panelcollision.cpp src/panelphysics.cpp src/carglass.cpp src/glassmodel.cpp src/dentmodel.cpp $(wildcard src/*.h) | $(BUILD)
+	$(CXX) $(CXXFLAGS) -Isrc -o $@ tests/test_panelcollision.cpp src/glassmodel.cpp src/dentmodel.cpp
+
+$(BUILD)/test_crashdamage_native: tests/test_crashdamage_native.cpp tests/test_crashdamage.cpp src/crashdamage.cpp src/falldamage.cpp tests/nativejetshadowarm.h $(wildcard src/*.h) | $(BUILD)
+	$(CXX) $(CXXFLAGS) -Isrc -o $@ tests/test_crashdamage_native.cpp src/falldamage.cpp
+
+test-game-assets: $(BUILD)/test_crashdamage_native $(BUILD)/test_panelcollision

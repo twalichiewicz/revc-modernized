@@ -23,6 +23,14 @@ bool Build(int model,int kind,Vec3 lo,Vec3 hi,Layout &l)
  l.structure[0]=box(-root-.06f,-root+.06f,l.helicopter?.55f:.32f,l.helicopter?.90f:.62f,.2f,.7f);
  l.structure[1]=box(root-.06f,root+.06f,l.helicopter?.55f:.32f,l.helicopter?.90f:.62f,.2f,.7f);
  l.structure[2]=box(-.35f,.35f,.20f,.30f,.3f,.85f);
+ if(l.helicopter){
+  // The cabin cage and the whole tail boom carry loads, including transverse
+  // rounds away from the attachment. Static COL bounds include the long boom;
+  // a tiny root-only slab leaves most visible skin mechanically disconnected.
+  l.structure[0]=box(-1,0,.30f,1,.08f,.88f);
+  l.structure[1]=box(0,1,.30f,1,.08f,.88f);
+  l.structure[2]=box(-.38f,.38f,0,.30f,.25f,1);
+ }
  return true;
 }
 Section SectionCut(const Layout &l,int section)
@@ -65,6 +73,7 @@ projectilemodel::Result Projectile(State &s,const Layout &l,const projectilemode
  if(l.helicopter)for(int i:{WingL,WingR,Elevator,Rudder,AileronL,AileronR})resistance[i]=0;
  else resistance[MainRotor]=resistance[TailRotor]=0;
  auto physical=l.volumes;projectilemodel::Structure frame{l.structure,{80,80,65},{500,500,350}};
+ if(l.helicopter)frame.capacity={180,180,150};
  for(int i=0;i<Count;i++)if(!Volume(s,l,i,physical[size_t(i)])){physical[size_t(i)]=l.body;resistance[i]=0;}
  for(int i=0;i<3;i++)if(!Volume(s,l,Count+i,frame.volumes[size_t(i)])){frame.volumes[size_t(i)]=l.body;frame.resistance[size_t(i)]=0;}
  auto body=l.body;if(l.helicopter)for(int rotor:{MainRotor,TailRotor})if(resistance[rotor]>0){const auto b=physical[size_t(rotor)];body.lo={std::min(body.lo.x,b.lo.x),std::min(body.lo.y,b.lo.y),std::min(body.lo.z,b.lo.z)};body.hi={std::max(body.hi.x,b.hi.x),std::max(body.hi.y,b.hi.y),std::max(body.hi.z,b.hi.z)};}
@@ -94,7 +103,7 @@ Effects Read(const State &s,const Layout &l)
  Effects e;e.managed=true;e.power=s.fuel>0?1-(s.damage[EngineL]+s.damage[EngineR])*.5f:0;
  e.leftLift=l.helicopter?1:(1-.85f*s.damage[WingL])*(1-s.structure[0]);e.rightLift=l.helicopter?1:(1-.85f*s.damage[WingR])*(1-s.structure[1]);const float hydraulic=1-.9f*s.damage[Hydraulics];
  e.pitch=(l.helicopter?1:1-s.damage[Elevator])*hydraulic;e.roll=(l.helicopter?1:1-(s.damage[AileronL]+s.damage[AileronR])*.5f)*hydraulic;e.yaw=(l.helicopter?1:1-s.damage[Rudder])*hydraulic;
- e.rotor=l.helicopter?1-s.damage[MainRotor]:1;e.antiTorque=l.helicopter?1-s.damage[TailRotor]:1;e.drag=std::min(1.f,s.holes*.1f+.2f*(s.structure[0]+s.structure[1]+s.structure[2])+.15f*(s.damage[WingL]+s.damage[WingR]));return e;
+ e.rotor=l.helicopter?1-s.damage[MainRotor]:1;e.antiTorque=l.helicopter?(1-s.damage[TailRotor])*(1-s.structure[2]):1;e.drag=std::min(1.f,s.holes*.1f+.2f*(s.structure[0]+s.structure[1]+s.structure[2])+.15f*(s.damage[WingL]+s.damage[WingR]));return e;
 }
 firemodel::Input Fire(const State &s,bool running){firemodel::Input f;f.heat=s.heat;f.fuel=s.fuel;f.engine=std::max(s.damage[EngineL],s.damage[EngineR]);f.electrical=s.damage[Electrical];f.breach=std::max(s.damage[FuelL],s.damage[FuelR]);f.running=running;return f;}
 }
