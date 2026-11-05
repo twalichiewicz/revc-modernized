@@ -44,6 +44,6 @@
 
 ### Task 3: Authorized install and installed verification
 
-- [ ] Verify the game is closed and target identity is still the packaged baseline. Rename the original app to a timestamped rollback path, install the staged app atomically, and restore the backup on installation failure.
-- [ ] Verify signatures, installed routing and installed experimental smoke test, including screenshot/metrics/logs from the installed path. Confirm normal game binary/plugin hashes and provide exact launch/rollback instructions.
-- [ ] Keep the broader controlled physics island open until motion ownership, solver/geometry/aero coupling and dynamic wing/building impact are accepted.
+- [x] Verify the game is closed and target identity is still the packaged baseline. Rename the original app to a timestamped rollback path, install the staged app atomically, and restore the backup on installation failure.
+- [x] Verify signatures, installed routing and installed experimental smoke test, including screenshot/metrics/logs from the installed path. Confirm normal game binary/plugin hashes and provide exact launch/rollback instructions.
+- [x] Keep the broader controlled physics island open until motion ownership, solver/geometry/aero coupling and dynamic wing/building impact are accepted.
