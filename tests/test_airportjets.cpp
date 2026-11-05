@@ -239,7 +239,12 @@ int main(){
  CHECK(*reinterpret_cast<int32_t *>(jetVehicles[0]+0x348)==4&&game::EntityModel(jetVehicles[0])==id);
  CHECK(!(jetVehicles[0][0x295]&16)); // parked constructors do not leave seven audible engines running
  CHECK(*reinterpret_cast<uint16_t *>(models[id]+0x2c)==1&&!(streamInfo[id*32+0x11]&1)); // real actor refs replace the async pin
- auto control=JetHook<void (*)(uint8_t *)>("CPlane14ProcessControl");CHECK(control);if(control){control(jetVehicles[0]);CHECK(physical>0&&nativeControls==0);}
+ auto control=JetHook<void (*)(uint8_t *)>("CPlane14ProcessControl");CHECK(control);if(control){
+  static int physicalClaims=0;game::api.AirframeFlightUsed=+[](uint8_t *){++physicalClaims;};
+  control(jetVehicles[0]);CHECK(physical>0&&nativeControls==0);
+  CHECK(physicalClaims==1); // Empty parked jets still own gravity/collision physics.
+  game::api.AirframeFlightUsed=nullptr;
+ }
  // Native entry must set driver/status/engine, then the real plane forces own it.
  auto enter=JetHook<void (*)(uint8_t *,uint8_t *,uint32_t)>("SetEnterCar");CHECK(enter);
  V(gPlayer,0x38)=V(jetVehicles[0],0x38);V(gPlayer,0x38).x-=1.6f;V(gPlayer,0x38).y+=4.5f;V(gPlayer,0x38).z=14.84f;

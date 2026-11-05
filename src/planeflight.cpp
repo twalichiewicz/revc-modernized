@@ -405,6 +405,7 @@ void Hook_Control(uint8_t *v)
 	}else gPlane.burning=0;
 	float water=0;
 	if(!Wrecked(v)&&api.GetWaterLevel&&api.GetWaterLevel(EntityPos(v).x,EntityPos(v).y,EntityPos(v).z,&water,true)&&EntityPos(v).z<water-.5f)Crash(v,nullptr);
+	if(api.AirframeFlightUsed)api.AirframeFlightUsed(v);
 	roster.physical(v);
 	if(!Wrecked(v))Apply(v,5);
 }

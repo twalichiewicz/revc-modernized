@@ -553,6 +553,7 @@ void Control(uint8_t *v){Jet *jet=Find(v);if(!jet)return originalControl(v);
  const uint32_t now=api.timeMs?*api.timeMs:gPrevious;
  if(!Wrecked(v)&&VehicleHealth(v)<250&&!(api.VehicleFireManaged&&api.VehicleFireManaged(v))){if(!jet->burning)jet->burning=now;else if(now-jet->burning>5000)Crash(v,nullptr);}else jet->burning=0;
  float water=0;if(!Wrecked(v)&&api.GetWaterLevel&&api.GetWaterLevel(EntityPos(v).x,EntityPos(v).y,EntityPos(v).z,&water,true)&&EntityPos(v).z<water-.5f)Crash(v,nullptr);
+ if(api.AirframeFlightUsed)api.AirframeFlightUsed(v);
  n.physical(v);if(!Wrecked(v))planeflight::Apply(v,5);
 }
 void PreRender(uint8_t *v){originalPreRender(v);Jet *jet=Find(v);if(!jet)return;
