@@ -39,7 +39,7 @@ bool HubBounds(const Identity &id,bool main,airframemodel::Box &out){
   lo={std::min(lo.x,p.x),std::min(lo.y,p.y),std::min(lo.z,p.z)};hi={std::max(hi.x,p.x),std::max(hi.y,p.y),std::max(hi.z,p.z)};
  }out={lo,hi};return true;
 }
-struct History {uint8_t lostRotors=0,lostSections=0;airframeroute::State route;Identity id;airframemodel::State state;airframemodel::Layout layout;uint64_t revision=0;void *clump=nullptr,*source=nullptr;uint8_t *info=nullptr,*col=nullptr;uint32_t clock=0;bool seen=false,pendingDent=false;float health=1000;dentmodel::Impact dent{};std::array<partsmodel::Episode,6> contacts{};std::array<float,6> contactWork{},contactDent{};};
+struct History {uint8_t lostRotors=0,lostSections=0;airframeroute::State route;Identity id;airframemodel::State state;airframemodel::Layout layout;uint64_t revision=0;void *clump=nullptr,*source=nullptr;uint8_t *info=nullptr,*col=nullptr;uint32_t clock=0;bool seen=false;uint8_t dentCount=0;float health=1000;std::array<dentmodel::Impact,16> dents{};std::array<partsmodel::Episode,6> contacts{};std::array<float,6> contactWork{},contactDent{};};
 std::array<History,kSlots> gHistory;uint32_t gClock;bool gSeen;
 uint64_t Serial(){if(++gSerial==0)++gSerial;return gSerial;}
 void Observe(){if(game::api.timeMs){const auto now=*game::api.timeMs;if(gSeen&&now<gClock)gHistory={};gClock=now;gSeen=true;}}
@@ -93,13 +93,13 @@ void Collision(uint8_t *v,Vec3 point,Vec3 inward,float severity)
  if(fresh){h->contactWork[region]=0;h->contactDent[region]=0;}
  auto load=materialmodel::ContactRay(point,inward,severity);const float work=load.budget;
  if(work<=h->contactWork[region])return;load.budget-=h->contactWork[region];
- const auto before=h->state.damage;const auto result=airframemodel::Projectile(h->state,h->layout,load);if(!result.valid)return;h->contactWork[region]=work;
+ const auto before=h->state.damage;const auto result=airframemodel::Contact(h->state,h->layout,load);if(!result.valid)return;h->contactWork[region]=work;
  // A manifold can start as a harmless graze and grow into a hard crash. Spend
  // only the additional peak work, rather than suppressing the stronger load
  // or charging every contact point as another complete impact.
  dentmodel::Impact dent;if(dentmodel::Make(point,inward,severity,dent)){
   const float depth=dent.depth;dent.depth=std::max(0.f,depth-h->contactDent[region]);h->contactDent[region]=depth;
-  if(dent.depth>0){if(h->pendingDent)dent.depth=std::min(.18f,dent.depth+h->dent.depth);h->dent=dent;h->pendingDent=true;}
+  if(dent.depth>0){bool merged=false;for(size_t i=0;i<h->dentCount;i++){auto &old=h->dents[i];const auto delta=skinmodel::Sub(old.point,dent.point);if(skinmodel::Dot(delta,delta)<.01f&&skinmodel::Dot(old.inward,dent.inward)>.95f){old.depth=std::min(.18f,old.depth+dent.depth);merged=true;break;}}if(!merged&&h->dentCount<h->dents.size())h->dents[h->dentCount++]=dent;}
  }
  if(h->state.damage!=before&&game::api.RearmVehicleFire)game::api.RearmVehicleFire(v);
  Log("airframe collision: ref %d model %d local %.2f %.2f %.2f severity %.2f",id.ref,id.model,point.x,point.y,point.z,severity);
@@ -130,7 +130,7 @@ void Tick(uint8_t *v)
  if(std::isfinite(health)&&health>h->health+1){Repair(v);h=Record(id);if(!h)return;}h->health=health;
  const uint32_t now=game::api.timeMs?*game::api.timeMs:0;if(h->seen&&now>=h->clock)airframemodel::Tick(h->state,(now-h->clock)*.001f,(v[0x295]&16)!=0);h->seen=true;h->clock=now;
  const auto revision=h->revision;auto current=[&](){Identity check;return Identify(v,check)&&Same(id,check)&&h->revision==revision&&game::EntityClump(v)==h->clump;};
- if(h->pendingDent){const auto dent=h->dent;h->pendingDent=false;carglass::Dent(v,dent);if(!current())return;}
+ const auto dents=h->dents;const auto count=h->dentCount;h->dentCount=0;for(size_t i=0;i<count;i++){carglass::Dent(v,dents[i]);if(!current())return;}
  SyncRotors(*h);if(current())SyncSections(*h);
 }
 bool MissingMainRotor(uint8_t *params)
@@ -176,7 +176,7 @@ Token BeginBullet(uint8_t *v){Observe();Identity id;if(!Identify(v,id)||!Eligibl
 bool Projectile(uint8_t *v,const Token &token,const projectilemodel::Ray &ray,std::array<float,projectilemodel::kLayers> *passed,int exposedRotor)
 {
  Observe();auto *h=Current(v,token);if(!h)return false;const auto before=h->state.damage;
- const auto result=airframemodel::Projectile(h->state,h->layout,ray);if(passed)*passed=result.layerRemaining;if(!result.valid)return false;
+ const auto result=airframemodel::Projectile(h->state,h->layout,ray,exposedRotor<0);if(passed)*passed=result.layerRemaining;if(!result.valid)return false;
  // A certified rotating blade can extend outside the static body COL. Its
  // actual visible surface is the contact, rather than a guessed body volume.
  if(h->layout.helicopter&&(exposedRotor==airframemodel::MainRotor||exposedRotor==airframemodel::TailRotor)){

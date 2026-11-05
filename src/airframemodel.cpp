@@ -24,12 +24,12 @@ bool Build(int model,int kind,Vec3 lo,Vec3 hi,Layout &l)
  l.structure[1]=box(root-.06f,root+.06f,l.helicopter?.55f:.32f,l.helicopter?.90f:.62f,.2f,.7f);
  l.structure[2]=box(-.35f,.35f,.20f,.30f,.3f,.85f);
  if(l.helicopter){
-  // The cabin cage and the whole tail boom carry loads, including transverse
-  // rounds away from the attachment. Static COL bounds include the long boom;
-  // a tiny root-only slab leaves most visible skin mechanically disconnected.
-  l.structure[0]=box(-1,0,.30f,1,.08f,.88f);
-  l.structure[1]=box(0,1,.30f,1,.08f,.88f);
-  l.structure[2]=box(-.38f,.38f,0,.30f,.25f,1);
+  // Bounded floor longerons and tail drive/support member. Cabin air is not
+  // structural material; the visible shell carries work only at certified
+  // sheet intersections, below.
+  l.structure[0]=box(-.82f,-.72f,.30f,1,.12f,.22f);
+  l.structure[1]=box(.72f,.82f,.30f,1,.12f,.22f);
+  l.structure[2]=box(-.08f,.08f,0,.30f,.68f,.80f);
  }
  return true;
 }
@@ -64,7 +64,7 @@ void BreakSystems(State &s,const Layout &l,int part)
  }
 }
 }
-projectilemodel::Result Projectile(State &s,const Layout &l,const projectilemodel::Ray &ray)
+projectilemodel::Result Projectile(State &s,const Layout &l,const projectilemodel::Ray &ray,bool structuralSkin)
 {
  static_assert(int(Count)==int(mechanicalmodel::kModules));
  float resistance[]={65,65,8,8,14,14,16,16,12,12,15,12,28,28};
@@ -79,8 +79,23 @@ projectilemodel::Result Projectile(State &s,const Layout &l,const projectilemode
  auto body=l.body;if(l.helicopter)for(int rotor:{MainRotor,TailRotor})if(resistance[rotor]>0){const auto b=physical[size_t(rotor)];body.lo={std::min(body.lo.x,b.lo.x),std::min(body.lo.y,b.lo.y),std::min(body.lo.z,b.lo.z)};body.hi={std::max(body.hi.x,b.hi.x),std::max(body.hi.y,b.hi.y),std::max(body.hi.z,b.hi.z)};}
  const auto hit=projectilemodel::Absorb(body,physical,resistance,capacity,ray,&frame);if(!hit.valid)return hit;
  for(int i=0;i<Count;i++)s.damage[i]=Clamp(s.damage[i]+hit.doses[i]);
- for(int part=0;part<3;part++){s.structure[size_t(part)]=Clamp(s.structure[size_t(part)]+hit.structuralDoses[size_t(part)]);if(s.structure[size_t(part)]>=1)BreakSystems(s,l,part);}
+ for(int part=0;part<3;part++)s.structure[size_t(part)]=Clamp(s.structure[size_t(part)]+hit.structuralDoses[size_t(part)]);
+ if(l.helicopter&&structuralSkin)for(size_t i=0;i<ray.count;i++){
+  if(hit.layerLoss[i]<=0||(ray.layers[i].material!=projectilemodel::Material::Skin&&ray.layers[i].material!=projectilemodel::Material::Body))continue;
+  const auto t=ray.layers[i].fraction;const Vec3 p{ray.from.x+(ray.to.x-ray.from.x)*t,ray.from.y+(ray.to.y-ray.from.y)*t,ray.from.z+(ray.to.z-ray.from.z)*t};
+  if(p.x<l.body.lo.x||p.x>l.body.hi.x||p.y<l.body.lo.y||p.y>l.body.hi.y||p.z<l.body.lo.z||p.z>l.body.hi.z)continue;
+  const int part=p.y< -SectionCut(l,2).offset?2:p.x<(l.body.lo.x+l.body.hi.x)*.5f?0:1;
+  if(!(s.separated&(1u<<part)))s.structure[size_t(part)]=Clamp(s.structure[size_t(part)]+hit.layerLoss[i]/frame.capacity[size_t(part)]);
+ }
+ for(int part=0;part<3;part++)if(s.structure[size_t(part)]>=1)BreakSystems(s,l,part);
  if(l.single)s.damage[EngineR]=s.damage[EngineL];return hit;
+}
+projectilemodel::Result Contact(State &s,const Layout &l,const projectilemodel::Ray &input){
+ if(!l.helicopter)return Projectile(s,l,input);
+ auto ray=input;projectilemodel::Layer patch{ray.entry,1,projectilemodel::Material::Skin};
+ // A certified collision compresses a broad skin patch. Charge its crushing
+ // work at that actual surface, then let the remainder reach real internals.
+ patch.resistanceScale=std::max(1.f,ray.budget*.6f/projectilemodel::Cost(patch.material,1));ray.layers=&patch;ray.count=1;return Projectile(s,l,ray);
 }
 void Impact(State &s,const Layout &l,Vec3 p,float severity,Vec3 inward)
 {
@@ -90,7 +105,7 @@ void Impact(State &s,const Layout &l,Vec3 p,float severity,Vec3 inward)
   const float distance[]={std::fabs(p.x-l.body.lo.x),std::fabs(p.x-l.body.hi.x),std::fabs(p.y-l.body.lo.y),std::fabs(p.y-l.body.hi.y),std::fabs(p.z-l.body.lo.z),std::fabs(p.z-l.body.hi.z)};
   const int nearest=int(std::min_element(distance,distance+6)-distance);inward={float(nearest==0)-float(nearest==1),float(nearest==2)-float(nearest==3),float(nearest==4)-float(nearest==5)};
  }
- Projectile(s,l,materialmodel::ContactRay(p,inward,severity));
+ Contact(s,l,materialmodel::ContactRay(p,inward,severity));
 }
 void Tick(State &s,float dt,bool running)
 {

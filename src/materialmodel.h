@@ -9,12 +9,12 @@ enum class Material {Body,Glass,Rubber,Armor,ArmoredGlass,Skin};
 inline bool Armored(int model){return model==157||model==158;}
 inline Material Surface(int model,Material m){return Armored(model)?m==Material::Body?Material::Armor:m==Material::Glass?Material::ArmoredGlass:m:m;}
 inline float Cost(Material m,float incidence){const float costs[]={12,4,6,100,65,3};const int i=int(m);return i>=0&&i<6?costs[i]/std::max(.05f,incidence):1000.f;}
-struct Layer {float fraction=0,incidence=1;Material material=Material::Body;};
+struct Layer {float fraction=0,incidence=1;Material material=Material::Body;float resistanceScale=1;};
 // Fractions refer to the original segment. Entry is the real accepted surface;
 // limit is nearer external cover. Budgets use calibrated native damage units.
 struct Ray {Vec3 from{},to{};float entry=0,limit=1,budget=0;const Layer *layers=nullptr;size_t count=0;float areaScale=1;};
 struct Structure {std::array<mechanicalmodel::Box,3> volumes{};std::array<float,3> resistance{},capacity{};};
-struct Result {std::array<float,3> structuralDoses{};std::array<float,mechanicalmodel::kModules> doses{};std::array<float,kLayers> layerRemaining{};float remaining=0,deposited=0,surfaceLoss=0;bool valid=false;};
+struct Result {std::array<float,3> structuralDoses{};std::array<float,mechanicalmodel::kModules> doses{};std::array<float,kLayers> layerRemaining{},layerLoss{};float remaining=0,deposited=0,surfaceLoss=0;bool valid=false;};
 namespace detail {
 inline bool Finite(Vec3 v){return std::isfinite(v.x)&&std::isfinite(v.y)&&std::isfinite(v.z);}
 inline bool BoxHit(const mechanicalmodel::Box &b,Vec3 p,Vec3 d,float &near,float &far)
@@ -41,11 +41,11 @@ inline Result Absorb(const mechanicalmodel::Box &body,const std::array<mechanica
  const Vec3 d{ray.to.x-ray.from.x,ray.to.y-ray.from.y,ray.to.z-ray.from.z};const float length=std::sqrt(d.x*d.x+d.y*d.y+d.z*d.z);
  if(!std::isfinite(length)||length<1e-6f)return out;
  std::array<Layer,kLayers> layers;size_t n=0;
- for(size_t i=0;i<ray.count;i++){const auto l=ray.layers[i];if(!std::isfinite(l.fraction)||l.fraction<0||l.fraction>1||!std::isfinite(l.incidence)||l.incidence<0||l.incidence>1||int(l.material)<0||int(l.material)>5)return out;layers[n++]=l;}
+ for(size_t i=0;i<ray.count;i++){const auto l=ray.layers[i];if(!std::isfinite(l.fraction)||l.fraction<0||l.fraction>1||!std::isfinite(l.incidence)||l.incidence<0||l.incidence>1||!std::isfinite(l.resistanceScale)||l.resistanceScale<=0||l.resistanceScale>1000||int(l.material)<0||int(l.material)>5)return out;layers[n++]=l;}
  std::sort(layers.begin(),layers.begin()+n,[](const Layer&a,const Layer&b){return a.fraction<b.fraction;});
  // Shared edges/double-sided faces can return the same sheet more than once.
  size_t unique=0;for(size_t i=0;i<n;i++){
-  bool same=false;for(size_t j=unique;j>0&&std::fabs(layers[i].fraction-layers[j-1].fraction)*length<=.001f;j--)if(layers[i].material==layers[j-1].material){layers[j-1].incidence=std::min(layers[j-1].incidence,layers[i].incidence);same=true;break;}
+  bool same=false;for(size_t j=unique;j>0&&std::fabs(layers[i].fraction-layers[j-1].fraction)*length<=.001f;j--)if(layers[i].material==layers[j-1].material){layers[j-1].incidence=std::min(layers[j-1].incidence,layers[i].incidence);layers[j-1].resistanceScale=std::max(layers[j-1].resistanceScale,layers[i].resistanceScale);same=true;break;}
   if(!same)layers[unique++]=layers[i];
  }n=unique;
  float near=ray.entry,far=ray.limit;out.valid=true;out.remaining=std::min(ray.budget,1000.f);if(near>=far)return out;
@@ -61,7 +61,7 @@ inline Result Absorb(const mechanicalmodel::Box &body,const std::array<mechanica
  std::sort(cuts.begin(),cuts.begin()+count);size_t layer=0;while(layer<n&&layers[layer].fraction<ray.entry-1e-6f)++layer;
  for(size_t k=0;k+1<count&&out.remaining>0;k++){
   const float t=cuts[k];while(layer<n&&layers[layer].fraction<=t+1e-6f){const auto &l=layers[layer++];
-   const float loss=std::min(out.remaining,Cost(l.material,l.incidence));out.surfaceLoss+=loss;out.remaining-=loss;for(size_t j=0;j<ray.count;j++)if(ray.layers[j].material==l.material&&std::fabs(ray.layers[j].fraction-l.fraction)*length<=.001f)out.layerRemaining[j]=out.remaining;}
+   const float loss=std::min(out.remaining,Cost(l.material,l.incidence)*l.resistanceScale);out.surfaceLoss+=loss;out.remaining-=loss;bool charged=false;for(size_t j=0;j<ray.count;j++)if(ray.layers[j].material==l.material&&std::fabs(ray.layers[j].fraction-l.fraction)*length<=.001f){out.layerRemaining[j]=out.remaining;if(!charged){out.layerLoss[j]+=loss;charged=true;}}}
   const float next=cuts[k+1],middle=(t+next)*.5f;float rate=0;
   for(size_t i=0;i<modules;i++)if(enter[i]<exit[i]&&middle>=enter[i]&&middle<exit[i])rate+=resistanceAt(i);
   if(!std::isfinite(rate))return {};
