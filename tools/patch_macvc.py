@@ -180,6 +180,7 @@ DEFAULT_HOOKS = [
     "_ZN9CPhysical14ApplyCollisionER9CColPointRf",
     "_ZN9CPhysical17ApplyCollisionAltEP7CEntityR9CColPointRfR7CVectorS6_",
     "_ZN11CAutomobile13SetDoorDamageEi6eDoorsb",
+    "_ZN11CAutomobile20SpawnFlyingComponentEij",
     "_ZN11CAutomobile15SetBumperDamageEi7ePanelsb",
     "_ZN7CEntity14DeleteRwObjectEv",
     "_ZN13cAudioManager14ProcessVehicleEP8CVehicle",

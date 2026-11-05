@@ -1,5 +1,6 @@
 #include "carparts.h"
 #include "partsmodel.h"
+#include "panelphysics.h"
 #include "config.h"
 #include "game.h"
 #include "hooks.h"
@@ -9,6 +10,7 @@
 #include <cstdint>
 #include <dlfcn.h>
 #include <cstring>
+#include <algorithm>
 
 namespace carparts {namespace {
 constexpr size_t kStride=0x6f0,kDamage=0x34c,kSlots=256;
@@ -58,11 +60,13 @@ bool BallisticEligible(const Identity &id)
 {
  return BaseEligible(id)||(gConfig.heliDamage&&AutoHeli(id)&&id.clump&&!game::Wrecked(id.vehicle)&&(id.vehicle[0x297]&0x40));
 }
-struct History {Identity id;std::array<partsmodel::Episode,partsmodel::kParts> parts{};std::array<float,partsmodel::kParts> strain{};uint64_t revision=0;};
+struct History {Identity id;std::array<partsmodel::Episode,partsmodel::kParts> parts{};std::array<float,partsmodel::kParts> strain{};std::array<int,partsmodel::kParts> stages{};uint64_t revision=0;};
 std::array<History,kSlots> gHistory;
+int State(uint8_t *,int);
 History &Record(const Identity &id)
 {
- auto &h=gHistory[size_t(id.ref>>8)];if(!Same(h.id,id)){h={};h.id=id;if(++gSerial==0)++gSerial;h.revision=gSerial;}return h;
+ auto &h=gHistory[size_t(id.ref>>8)];if(!Same(h.id,id)){h={};h.id=id;if(++gSerial==0)++gSerial;h.revision=gSerial;}
+ for(int i=0;i<partsmodel::kParts;i++){const int state=State(id.vehicle,i);if(h.stages[i]!=state){h.stages[i]=state;h.strain[i]=0;}}return h;
 }
 int State(uint8_t *v,int slot)
 {
@@ -142,9 +146,12 @@ bool ApplyDamage(uint8_t *manager,int component,float force,float multiplier)
  if(before==3)return false;
  const bool contact=partsmodel::Contact(c->history->parts[slot],c->now);
  const uint8_t bit=uint8_t(1u<<slot);if(!contact||(c->progressed&bit))return false;
- const float scaled=force*partsmodel::Scale(before);
+ // Bullet cuts reduce the remaining fastening section. The next physical
+ // load acts on that same connection instead of a separate collision counter.
+ const float remaining=std::max(.1f,1-c->history->strain[slot]/180);
+ const float scaled=force*partsmodel::Scale(before)/remaining;
  const bool result=gApply(manager,component,scaled,multiplier);
- if(result&&Current(c->id)&&State(c->id.vehicle,slot)>before)c->progressed|=bit;
+ if(result&&Current(c->id)&&State(c->id.vehicle,slot)>before){c->progressed|=bit;c->history->strain[slot]=0;}
  return result;
 }
 int RotorFrame(void *frame)
@@ -175,18 +182,21 @@ void Fix(uint8_t *v)
 }
 } // namespace
 BulletToken BeginBullet(uint8_t *v){Identity id;if(!gReady||!gConfig.carParts||!Identify(v,id)||!BallisticEligible(id))return {};return {Record(id).revision};}
-void Projectile(uint8_t *v,const BulletToken &token,int component,float budget)
+bool CurrentBullet(uint8_t *v,const BulletToken &token){Identity id;if(!token.revision||!gReady||!gConfig.carParts||!Identify(v,id)||!BallisticEligible(id)||(game::EntityFlags(v)&game::kEntityBulletProof))return false;const auto &h=gHistory[size_t(id.ref>>8)];return Same(h.id,id)&&h.revision==token.revision;}
+void Projectile(uint8_t *v,const BulletToken &token,int component,float budget,Vec3 point,Vec3 inward)
 {
  Identity id;const int slot=partsmodel::Slot(component);
  if(!token.revision||!gReady||!gConfig.carParts||slot<0||!std::isfinite(budget)||budget<=0||!Identify(v,id)||!BallisticEligible(id)||(AutoHeli(id)&&(component<7||component>10))||!(v[0x297]&0x40)||(game::EntityFlags(v)&game::kEntityBulletProof))return;
  auto &h=Record(id);if(h.revision!=token.revision)return;const int before=State(v,slot);if(before<0||before>=3)return;
+ const auto &p=partsmodel::Describe(slot);const int nodes[]={17,18,15,11,16,12,7,8};
+ panelphysics::Apply({v,token,nodes[slot],p.panel?-1:p.index,point,inward,budget},[&](){
  // Repeated rounds load the struck fastenings. Each accepted shot can advance
  // one native stage; the next stage needs a new independent localized round.
  auto &strain=h.strain[slot];strain+=std::min(budget,1000.f);if(strain<180)return;strain=0;
  if(!gApply(v+kDamage,component,200,1)||!Current(id)||Record(id).revision!=token.revision)return;
- const auto &p=partsmodel::Describe(slot);const int nodes[]={17,18,15,11,16,12,7,8};
  if(p.panel)gSetBumper(v,nodes[slot],p.index,false);else gSetDoor(v,nodes[slot],p.index,false);
  if(Current(id)&&Record(id).revision==token.revision&&State(v,slot)>before)Log("car parts: ref %d model %d %s ballistic %s -> %s",id.ref,id.model,p.name,StateName(before,p.panel),StateName(State(v,slot),p.panel));
+ });
 }
 bool SeverRotor(uint8_t *v,bool main)
 {

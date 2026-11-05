@@ -12,6 +12,7 @@
 #include <dlfcn.h>
 #include <new>
 #include <vector>
+#include <string_view>
 
 namespace carglass {namespace {
 using glassmodel::Pane;
@@ -411,11 +412,11 @@ bool SeverSection(uint8_t *v,Vec3 normal,float offset,bool debris)
  }catch(const std::bad_alloc &){return false;}
 }
 namespace {
-bool RestPoint(const Mesh &m,const std::vector<Vec3> &offsets,Vec3 &point,Vec3 &normal)
+bool RestPoint(const Mesh &m,const std::vector<Vec3> &offsets,Vec3 &point,Vec3 &normal,bool project=false)
 {
- if(offsets.empty())return true;if(offsets.size()!=size_t(m.nv))return false;
- float nearest=1e-4f;Vec3 rest{},axis{};bool found=false;
- auto displaced=[&](unsigned i){const auto a=m.v[i],d=offsets[i];return Vec3{a.x+d.x,a.y+d.y,a.z+d.z};};
+ if(offsets.empty()&&!project)return true;if(!offsets.empty()&&offsets.size()!=size_t(m.nv))return false;
+ float nearest=project?.25f:1e-4f;Vec3 rest{},axis{};bool found=false;
+ auto displaced=[&](unsigned i){const auto a=m.v[i],d=offsets.empty()?Vec3{}:offsets[i];return Vec3{a.x+d.x,a.y+d.y,a.z+d.z};};
  for(int i=0;i<m.nt;i++){
   const auto t=m.t[i];const auto a=displaced(t.v[0]),e=Sub(displaced(t.v[1]),a),f=Sub(displaced(t.v[2]),a),p=Sub(point,a);
   const float ee=skinmodel::Dot(e,e),ef=skinmodel::Dot(e,f),ff=skinmodel::Dot(f,f),pe=skinmodel::Dot(p,e),pf=skinmodel::Dot(p,f),den=ee*ff-ef*ef;if(den<1e-14f)continue;
@@ -435,23 +436,34 @@ bool Perforate(uint8_t *v,const void *identity,Vec3 hit,Vec3 normal,float budget
  if(!gReady||!gConfig.carDeformation||Ref(v)<0||(game::EntityFlags(v)&7)!=2||(!game::IsAircraft(v)&&!Eligible(v))||!game::EntityClump(v)||!(v[0x297]&0x40)||(game::EntityFlags(v)&game::kEntityBulletProof)||!Finite(hit)||!Finite(normal)||!std::isfinite(budget)||budget<=3)return false;
  try{
   Collect();auto found=std::find_if(gCars.begin(),gCars.end(),[&](const Car &c){return c.car==v;});if(found==gCars.end()&&gCars.size()>=kMaxCars)return false;
-  Car fresh{v,Ref(v),game::EntityModel(v),game::EntityClump(v),0,{}};Car &car=found==gCars.end()?fresh:*found;
+  Car fresh{v,Ref(v),game::EntityModel(v),game::EntityClump(v),0,{}};Car &car=found==gCars.end()?fresh:*found;car.parts.reserve(kMaxParts);
   Objects objects;rw.atomics(car.clump,Gather,&objects);if(!objects.valid||std::find(objects.a.begin(),objects.a.begin()+objects.n,identity)==objects.a.begin()+objects.n)return false;
-  void *atomic=const_cast<void *>(identity);if(!(rw.atomicFlags(atomic)&4))return false;
-  auto old=std::find_if(car.parts.begin(),car.parts.end(),[&](const Part &p){return p.atomic==atomic;});const bool isNew=old==car.parts.end();if(!isNew&&rw.geometry(atomic)!=old->copy)return false;
-  if(isNew&&car.parts.size()>=kMaxParts)return false;size_t count=0;for(const auto &p:car.parts)count+=p.holes.size();
-  auto source=isNew?rw.geometry(atomic):rw.geometry(old->holder);Mesh m;if(!m.Read(source,atomic,rw.root(car.clump)))return false;
-  Vec3 origin,basis[3];if(!InCar(m.frame,m.root,{0,0,0},origin))return false;float toCar[16]{};
-  for(int a=0;a<3;a++){if(!InCar(m.frame,m.root,{float(a==0),float(a==1),float(a==2)},basis[a]))return false;auto b=Sub(basis[a],origin);toCar[4*a]=b.x;toCar[4*a+1]=b.y;toCar[4*a+2]=b.z;}toCar[12]=origin.x;toCar[13]=origin.y;toCar[14]=origin.z;
-  Vec3 p,n,local,localNormal;if(!dentmodel::Local(reinterpret_cast<float *>(v+8),hit,false,p)||!dentmodel::Local(reinterpret_cast<float *>(v+8),normal,true,n)||!dentmodel::Local(toCar,p,false,local)||!dentmodel::Local(toCar,n,true,localNormal))return false;
-  if(!isNew&&!RestPoint(m,old->offsets,local,localNormal))return false;
-  auto holes=isNew?std::vector<skinmodel::Hole>{}:old->holes;const float radius=.015f+.0003f*std::min(budget,200.f);
-  for(const auto &h:holes)if(skinmodel::Dot(Sub(h.centre,local),Sub(h.centre,local))<h.radius*h.radius*.25f)return false;
-  if(!isNew)for(const auto &cut:old->cuts)if(skinmodel::Dot(local,cut.normal)>cut.offset+.00001f)return false;
-  holes.push_back({local,localNormal,radius});Pending pending;pending.atomic=atomic;pending.copy=CopySkin(m,holes,pending.bytes,kBudget-gBytes,isNew?nullptr:&old->cuts,false,nullptr,car.broken,isNew?nullptr:&old->offsets);if(!pending.copy)return false;
-  if(isNew){pending.holder=rw.createAtomic();if(!pending.holder)return false;rw.setGeometry(pending.holder,source,0);car.parts.reserve(kMaxParts);}
-  rw.setGeometry(atomic,pending.copy,0);
-  if(isNew){car.parts.push_back({atomic,pending.holder,pending.copy,pending.bytes,{},std::move(holes)});pending.holder=nullptr;}else{gBytes-=old->bytes;old->copy=pending.copy;old->bytes=pending.bytes;old->holes=std::move(holes);}gBytes+=pending.bytes;
+  auto primary=const_cast<void *>(identity);if(!(rw.atomicFlags(primary)&4))return false;
+  auto stem=[](const char *name){std::string_view s=name?name:"";if(s.size()>4&&s.substr(s.size()-4)=="_dam")s.remove_suffix(4);else if(s.size()>3&&s.substr(s.size()-3)=="_ok")s.remove_suffix(3);return s;};
+  const auto frame=rw.frame(primary);const auto key=stem(frame?rw.name(frame):nullptr);
+  std::vector<void *> targets{primary};if(!key.empty())for(size_t i=0;i<objects.n;i++)if(objects.a[i]!=primary){auto f=rw.frame(objects.a[i]);if(stem(f?rw.name(f):nullptr)==key)targets.push_back(objects.a[i]);}
+  struct HolePending {Pending mesh;std::vector<skinmodel::Hole> holes;};std::vector<HolePending> prepared;prepared.reserve(targets.size());size_t extra=0,newParts=0,count=0;for(const auto &p:car.parts)count+=p.holes.size();
+  for(auto atomic:targets){
+   auto old=std::find_if(car.parts.begin(),car.parts.end(),[&](const Part &p){return p.atomic==atomic;});const bool isNew=old==car.parts.end();if(!isNew&&rw.geometry(atomic)!=old->copy)return false;
+   if(car.parts.size()+newParts+isNew>kMaxParts)return false;auto source=isNew?rw.geometry(atomic):rw.geometry(old->holder);Mesh m;if(!m.Read(source,atomic,rw.root(car.clump)))return false;
+   Vec3 origin,axes[3];if(!InCar(m.frame,m.root,{},origin))return false;float toCar[16]{};
+   for(int i=0;i<3;i++){if(!InCar(m.frame,m.root,{float(i==0),float(i==1),float(i==2)},axes[i]))return false;const auto d=Sub(axes[i],origin);toCar[4*i]=d.x;toCar[4*i+1]=d.y;toCar[4*i+2]=d.z;}toCar[12]=origin.x;toCar[13]=origin.y;toCar[14]=origin.z;
+   Vec3 p,n,local,localNormal;if(!dentmodel::Local(reinterpret_cast<float *>(v+8),hit,false,p)||!dentmodel::Local(reinterpret_cast<float *>(v+8),normal,true,n)||!dentmodel::Local(toCar,p,false,local)||!dentmodel::Local(toCar,n,true,localNormal))return false;
+   const std::vector<Vec3> empty;const auto &offsets=isNew?empty:old->offsets;
+   if(!RestPoint(m,offsets,local,localNormal,atomic!=primary)){if(atomic==primary)return false;continue;}
+   auto holes=isNew?std::vector<skinmodel::Hole>{}:old->holes;const float radius=.015f+.0003f*std::min(budget,200.f);
+   bool duplicate=false;for(const auto &h:holes)duplicate|=skinmodel::Dot(Sub(h.centre,local),Sub(h.centre,local))<h.radius*h.radius*.25f;
+   if(!isNew)for(const auto &cut:old->cuts)duplicate|=skinmodel::Dot(local,cut.normal)>cut.offset+.00001f;
+   if(duplicate){if(atomic==primary)return false;continue;}
+   holes.push_back({local,localNormal,radius});prepared.emplace_back();auto &pending=prepared.back();pending.holes=std::move(holes);auto &mesh=pending.mesh;mesh.atomic=atomic;mesh.was=isNew?nullptr:&*old;
+   mesh.copy=CopySkin(m,pending.holes,mesh.bytes,kBudget-gBytes-extra,isNew?nullptr:&old->cuts,false,nullptr,car.broken,&offsets);if(!mesh.copy)return false;extra+=mesh.bytes;if(gBytes+extra>kBudget)return false;
+   if(isNew){mesh.holder=rw.createAtomic();if(!mesh.holder)return false;rw.setGeometry(mesh.holder,source,0);++newParts;}
+  }
+  if(prepared.empty()||!Same(car))return false;
+  for(auto &pending:prepared){auto &mesh=pending.mesh;rw.setGeometry(mesh.atomic,mesh.copy,0);
+   if(mesh.was){gBytes-=mesh.was->bytes;mesh.was->copy=mesh.copy;mesh.was->bytes=mesh.bytes;mesh.was->holes=std::move(pending.holes);}
+   else{car.parts.push_back({mesh.atomic,mesh.holder,mesh.copy,mesh.bytes,{},std::move(pending.holes)});mesh.holder=nullptr;}gBytes+=mesh.bytes;
+  }
   if(found==gCars.end())gCars.push_back(std::move(fresh));
   if(count==0||count==7||count==15||count==31||((count+1)%64==0))Log("vehicle material: ref %d model %d holes %zu",Ref(v),game::EntityModel(v),count+1);return true;
  }catch(const std::bad_alloc &){return false;}

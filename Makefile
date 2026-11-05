@@ -32,7 +32,7 @@ PLUGIN += src/jetshadow.cpp
 PLUGIN += src/jetboardingpose.cpp
 PLUGIN += src/handlingmodel.cpp src/handling.cpp src/drivelog.cpp src/headbalance.cpp
 PLUGIN += src/glassmodel.cpp src/carglass.cpp
-PLUGIN += src/partsmodel.cpp src/carparts.cpp
+PLUGIN += src/partsmodel.cpp src/carparts.cpp src/panelphysics.cpp
 PLUGIN += src/dentmodel.cpp src/carimpact.cpp
 PLUGIN += src/mechanicalmodel.cpp src/carmechanics.cpp src/projectilemodel.cpp
 PLUGIN += src/firemodel.cpp src/carfire.cpp src/airframemodel.cpp src/airframedamage.cpp src/airframedebris.cpp
@@ -352,6 +352,7 @@ test-game-assets: $(BUILD)/test_glass_assets $(BUILD)/test_estateassets $(BUILD)
 	MACVC_NATIVE="$(MACVC_NATIVE)" $(BUILD)/test_shotreceipt_native
 	MACVC_NATIVE="$(MACVC_NATIVE)" $(BUILD)/test_carfire_audio_native
 	$(BUILD)/test_airportheli
+	MACVC_NATIVE="$(MACVC_NATIVE)" $(BUILD)/test_panelphysics_native
 	GAMEDATA="$(GAMEDATA)" $(BUILD)/test_airportheli_assets
 	GAMEDATA="$(GAMEDATA)" $(BUILD)/test_aircraftcontrols_assets
 	GAMEDATA="$(GAMEDATA)" $(BUILD)/test_shotcollision --assets
@@ -449,7 +450,7 @@ FEEDBACK_TESTS += test_handlingmodel test_handlinghook test_drivelog test_headba
 FEEDBACK_TESTS += test_glassmodel test_carglass
 FEEDBACK_TESTS += test_partsmodel test_carparts test_dentmodel test_cardeform test_mechanicalmodel test_projectilemodel test_carmechanics test_carsystem_lights
 FEEDBACK_TESTS += test_skinmodel test_airframemodel test_airframedamage
-FEEDBACK_TESTS += test_materialmodel
+FEEDBACK_TESTS += test_materialmodel test_panelphysics
 FEEDBACK_TESTS += test_firemodel
 FEEDBACK_TESTS += test_carfire
 FEEDBACK_TESTS += test_carfire_awareness
@@ -839,3 +840,11 @@ test-game-assets: $(BUILD)/test_airportheli_assets
 
 $(BUILD)/test_materialmodel: tests/test_materialmodel.cpp src/materialmodel.h src/mechanicalmodel.cpp src/projectilemodel.cpp $(wildcard src/*.h) | $(BUILD)
 	$(CXX) $(CXXFLAGS) -Isrc -o $@ tests/test_materialmodel.cpp src/mechanicalmodel.cpp src/projectilemodel.cpp
+
+$(BUILD)/test_panelphysics: tests/test_panelphysics.cpp tests/test_carglass.cpp src/panelphysics.cpp src/carglass.cpp src/glassmodel.cpp src/dentmodel.cpp $(wildcard src/*.h) | $(BUILD)
+	$(CXX) $(CXXFLAGS) -Isrc -o $@ tests/test_panelphysics.cpp src/glassmodel.cpp src/dentmodel.cpp
+
+$(BUILD)/test_panelphysics_native: tests/test_panelphysics_native.cpp tests/test_panelphysics.cpp tests/test_carglass.cpp src/panelphysics.cpp src/carglass.cpp src/glassmodel.cpp src/dentmodel.cpp $(wildcard src/*.h) | $(BUILD)
+	$(CXX) $(CXXFLAGS) -Isrc -o $@ tests/test_panelphysics_native.cpp src/glassmodel.cpp src/dentmodel.cpp
+
+test-game-assets: $(BUILD)/test_panelphysics_native

@@ -8,6 +8,8 @@
 #include <cstdio>
 #include <cstring>
 #include <cstdlib>
+#include <map>
+#include <string>
 #if __has_feature(address_sanitizer)
 #include <sanitizer/asan_interface.h>
 #endif
@@ -22,6 +24,12 @@ void Log(const char *,...){}
 namespace hooks {void *Chain(const char *,void *){return nullptr;}}
 
 namespace {
+void Check(bool,const char *);
+std::map<const void *,std::string> frameNames;
+void RegisterFrameNames(){
+ rw::Frame::registerPlugin(0,0x253f2fe,[](void *p,int32_t,int32_t)->void *{frameNames[p]="door_lf_hi_ok";return p;},[](void *p,int32_t,int32_t)->void *{frameNames.erase(p);return p;},[](void *d,void *s,int32_t,int32_t)->void *{frameNames[d]=frameNames[s];return d;});
+ rw::Frame::registerPluginStream(0x253f2fe,[](rw::Stream *stream,int32_t length,void *p,int32_t,int32_t)->rw::Stream *{Check(length>=0&&length<256,"bounded native frame name");std::vector<char> name(size_t(length)+1);stream->read8(name.data(),length);frameNames[p]=name.data();return stream;},nullptr,nullptr);
+}
 static_assert(offsetof(rw::Geometry,matList)+offsetof(rw::MaterialList,numMaterials)==0x88,
               "fixture must match macVC's measured geometry ABI");
 static_assert(sizeof(rw::Triangle)==sizeof(carglass::Triangle));
@@ -40,7 +48,7 @@ void Bind()
  r.destroyAtomic=[](void *a){static_cast<rw::Atomic *>(a)->destroy();return 1;};
  r.setGeometry=[](void *a,void *g,unsigned flags)->void *{static_cast<rw::Atomic *>(a)->setGeometry(static_cast<rw::Geometry *>(g),flags);return a;};
  r.frame=[](const void *a)->void *{return static_cast<const rw::Atomic *>(a)->getFrame();};
- r.name=[](void *){return "door_lf_hi_ok";};
+ r.name=[](void *f){return frameNames.at(f).c_str();};
  r.parent=[](const void *f)->void *{return static_cast<const rw::Frame *>(f)->getParent();};
  r.matrix=[](void *f){return reinterpret_cast<float *>(&static_cast<rw::Frame *>(f)->matrix);};
  r.nv=[](const void *g){return static_cast<const rw::Geometry *>(g)->numVertices;};
@@ -67,6 +75,7 @@ void Bind()
  };
  r.sphere=[](void *m)->void *{return &static_cast<rw::MorphTarget *>(m)->boundingSphere;};
  r.setSphere=[](void *m,const void *s)->void *{static_cast<rw::MorphTarget *>(m)->boundingSphere=*static_cast<const rw::Sphere *>(s);return m;};
+ carglass::gPanes=+[](unsigned,CVector,CVector,CVector,CVector,CVector,float,bool,bool,int,bool){};carglass::gSound=+[](uint8_t,const CVector &){};
 }
 const float *NativeLTM(void *f){return reinterpret_cast<float *>(static_cast<rw::Frame *>(f)->getLTM());}
 void Shadow(rw::Atomic *atomic,rw::Geometry *geometry)
@@ -183,13 +192,27 @@ void StockSkin(const char *file,int model)
  carglass::Restore(vehicle);airframedebris::n.destroy(physicalPiece);Check(temporaryPieces==0&&sourceRefs==0,"native debris cleanup releases geometry and parent model references");
  Check(tested>0,"stock helicopter tested actual opaque skin");std::printf("stock skin: %s %u atomics passed\n",file,tested);clump->destroy();
 }
+void StockCar(const char *file,int model){
+ const char *env=std::getenv("GAMEDATA");const std::string base=env?env:"/Applications/Grand Theft Auto Vice City.app/Contents/Resources/GameData";ImgArchive img;Check(img.Open(base+"/models/gta3.img"),"real car archive opens");std::vector<uint8_t> bytes;Check(img.Read(file,bytes),"real car DFF reads");rw::StreamMemory stream;stream.open(bytes.data(),rw::uint32(bytes.size()));Check(rw::findChunk(&stream,rw::ID_CLUMP,nullptr,nullptr),"real car clump found");auto clump=rw::Clump::streamRead(&stream);Check(clump,"real car loads with native frame names");
+ std::memset(vehicle,0,sizeof vehicle);*reinterpret_cast<void **>(pool)=vehicle;*reinterpret_cast<void **>(pool+8)=&allocation;*reinterpret_cast<int *>(pool+16)=1;*reinterpret_cast<void **>(vehicle+0x58)=clump;*reinterpret_cast<unsigned *>(vehicle+0x60)=2;*reinterpret_cast<int16_t *>(vehicle+0x6a)=int16_t(model);vehicle[0x297]=64;auto m=reinterpret_cast<float *>(vehicle+8);m[0]=m[5]=m[10]=m[15]=1;carglass::gPool=&poolAddress;carglass::gReady=true;gConfig.carGlass=gConfig.carDeformation=true;game::api.PoolsGetVehicle=GetVehicle;
+ struct Pane {void *atomic;int face;glassmodel::Pane pane;Vec3 hit,normal;};std::vector<Pane> panes;uint8_t selected=0;
+ for(auto link=clump->atomics.link.next;link!=&clump->atomics.link;link=link->next){auto a=rw::Atomic::fromClump(link);if(!(a->getFlags()&4))continue;carglass::Mesh mesh;if(!mesh.Read(a->geometry,a,clump->getFrame()))continue;
+  for(int i=0;i<mesh.nt;i++){Vec3 p[3];const auto pane=mesh.Face(i,p);const auto bit=glassmodel::Bit(pane);if(pane==glassmodel::Pane::None||pane==glassmodel::Pane::Front||(selected&bit))continue;selected|=bit;panes.push_back({a,i,pane,{(p[0].x+p[1].x+p[2].x)/3,(p[0].y+p[1].y+p[2].y)/3,(p[0].z+p[1].z+p[2].z)/3},carglass::Cross(carglass::Sub(p[1],p[0]),carglass::Sub(p[2],p[0]))});}
+ }
+ Check(panes.size()>=2,"actual car exposes its modeled side/rear glazing");
+ for(const auto &pane:panes){carglass::Bullet(vehicle,pane.atomic,pane.face,pane.hit,pane.normal);const auto car=std::find_if(carglass::gCars.begin(),carglass::gCars.end(),[](const auto &c){return c.car==vehicle;});Check(car!=carglass::gCars.end()&&(car->broken&glassmodel::Bit(pane.pane)),"actual side/rear impact commits its pane");
+  for(auto link=clump->atomics.link.next;link!=&clump->atomics.link;link=link->next){auto a=rw::Atomic::fromClump(link);carglass::Mesh mesh;if(!mesh.Read(a->geometry,a,clump->getFrame()))continue;for(int i=0;i<mesh.nt;i++)Check(mesh.Face(i)!=pane.pane,"all actual rendered and damaged variants lose the struck pane");}
+ }
+ std::printf("real car panes: %s %zu passed\n",file,panes.size());carglass::Restore(vehicle);clump->destroy();
+}
 
 }
 int main()
 {
- Check(rw::Engine::init()&&rw::Engine::open(nullptr)&&rw::Engine::start(),"NULL renderer initialized");Bind();BindDebris();
+ Check(rw::Engine::init(),"NULL renderer initialized");RegisterFrameNames();Check(rw::Engine::open(nullptr)&&rw::Engine::start(),"NULL renderer starts");Bind();BindDebris();
  for(bool strip:{false,true})for(bool glassOnly:{false,true})for(bool broken:{false,true})for(bool dented:{false,true})Copy(strip,broken,glassOnly,dented);
  StockSkin("sparrow.dff",199);StockSkin("maverick.dff",217);StockSkin("deaddodo.dff",181);StockSkin("skimmer.dff",195);
+ StockCar("deluxo.dff",211);StockCar("hermes.dff",204);StockCar("benson.dff",229);
  Check(rw::Geometry::numAllocated==0&&rw::Material::numAllocated==0,"all native geometry/material references released");
  rw::Engine::stop();rw::Engine::close();rw::Engine::term();std::puts("carglass real mesh builder: all passed");
 }

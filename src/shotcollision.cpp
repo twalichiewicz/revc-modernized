@@ -430,7 +430,7 @@ void Hook_VehicleDamage(uint8_t *car,uint8_t *by,int weapon,float damage,CVector
    }
    if(receipt.component>0&&receipt.point.surfaceB==6&&SurfaceRatio(car,receipt.point,receipt.from,receipt.to,damage)>0){
     const auto mat=receipt.airToken.revision?projectilemodel::Material::Skin:projectilemodel::Material::Body;
-    carparts::Projectile(car,receipt.partToken,receipt.component,std::min(damage,projectilemodel::Cost(mat,1)));
+    carparts::Projectile(car,receipt.partToken,receipt.component,std::min(damage,projectilemodel::Cost(mat,1)),{receipt.point.p.x,receipt.point.p.y,receipt.point.p.z},{receipt.to.x-receipt.from.x,receipt.to.y-receipt.from.y,receipt.to.z-receipt.from.z});
    }
    const auto delta=Sub(receipt.to,receipt.from);
    for(size_t i=0;i<receipt.count&&receipt.actor.Current();i++)if(passed[i]>0&&receipt.layers[i].fraction<=delivery.ray.limit&&receipt.layers[i].material!=projectilemodel::Material::Glass&&receipt.layers[i].material!=projectilemodel::Material::ArmoredGlass){

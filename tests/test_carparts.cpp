@@ -115,6 +115,10 @@ void Cases()
  for(auto type:{std::pair<int,int>{180,4},{165,3},{211,0}}){Reset();*reinterpret_cast<int16_t *>(vehicles[0]+0x6a)=type.first;*reinterpret_cast<int *>(vehicles[0]+0x348)=type.second;Check(!carparts::SeverRotor(vehicles[0],true)&&calls.empty(),"rotor detachment never uses automobile layout for native aircraft classes or cars");}
  Reset();auto bullet=carparts::BeginBullet(vehicles[0]);for(int i=0;i<5;i++)carparts::Projectile(vehicles[0],bullet,7,20);Check(State(vehicles[0],7)==0,"individual light rounds accumulate before breaking hinges");fix(vehicles[0]);for(int i=0;i<50;i++)carparts::Projectile(vehicles[0],bullet,7,200);Check(State(vehicles[0],7)==0,"repair retires in-flight part leases");
  Reset();hits={{7,60},{7,60},{7,60}};Run();Check(State(vehicles[0],7)==1&&bodyCallbacks==1,"one native collision callback burst advances only one state");
+ Reset();hits={{7,35}};Run();Check(State(vehicles[0],7)==0,"small contact preserves an uncut fastening");
+ Reset();{const auto cut=carparts::BeginBullet(vehicles[0]);for(int i=0;i<5;i++)carparts::Projectile(vehicles[0],cut,7,20);}hits={{7,35}};Run();Check(State(vehicles[0],7)==1,"prior bullet material loss weakens the same fastening under a later contact");
+ Run(350);Check(State(vehicles[0],7)==1,"accepted connection failure consumes its previous material work once");
+ Reset();hits={{7,60},{7,60},{7,60}};Run();
  for(int i=0;i<100;i++)Run(20);Check(State(vehicles[0],7)==1,"sustained scrape across frames keeps damaged stage");
  hits={{7,60}};Run(350);Check(State(vehicles[0],7)==2,"separate moderate hit frees hinge into native swinging stage");
  Run(350);Check(State(vehicles[0],7)==2,"previous moderate hit cannot detach swinging door");
@@ -152,6 +156,7 @@ void Cases()
  Check(std::all_of(calls.begin(),calls.end(),[](const Call &c){return c.multiplier==.731f;}),"native collision-coefficient argument preserved");
 }
 }
+namespace panelphysics {void Apply(const Load &,void (*f)(void *),void *p){f(p);}}
 namespace hooks {
 void *Chain(const char *s,void *replacement){using namespace fixture;
 #define CHAIN(n,v,T) if(!strcmp(s,n)){auto old=v;v=reinterpret_cast<T>(replacement);return reinterpret_cast<void *>(old);}
