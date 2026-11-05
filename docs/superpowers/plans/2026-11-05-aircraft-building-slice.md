@@ -62,4 +62,6 @@ This task stays pending if Task 2 rejects the host boundary; a research executab
 
 ### Evidence/decision review
 
-- [ ] Use one fresh final reviewer for the evidence/decision milestone, address material findings once with verification, then report the actual gate status. Keep this plan and the feasibility workspace because Task3 and the in-app milestone remain pending.
+- [x] Use one fresh final reviewer for the evidence/decision milestone, address material findings once with verification, then report the actual gate status. Keep this plan and the feasibility workspace because Task3 and the in-app milestone remain pending.
+
+Fresh review of `c7fe3b7..73fcdb6`: no findings; native query reproduction confirmed. No fix pass or re-review needed. This closes the evidence/decision work, not the four host gates or the requested in-app milestone.

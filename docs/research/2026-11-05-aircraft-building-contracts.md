@@ -67,7 +67,7 @@ python3 tools/physics/check_slice_contracts.py \
 
 ## Source-access and architecture decision
 
-**Choose engine-source integration, or a versioned bridge implemented in engine source by the port maintainer. Do not expand the custom solver to compensate for this host gap.** The public [macVC README](https://github.com/gtamac/macVC/blob/main/README.md), checked again for this investigation, describes a download-only repository without source. No matching engine checkout was identified in the immediate workspace. Private source availability is unknown; no one has been contacted.
+**Choose engine-source integration, or a versioned bridge implemented in engine source by the port maintainer. Do not expand the custom solver to compensate for this host gap.** The public [macVC README](https://github.com/gtamac/macVC/blob/main/README.md), checked again for this investigation, describes a download-only repository without source. No matching engine checkout was identified in the immediate workspace. Connected GitHub installation repository-name searches for `macVC` and `reVC` also returned no repositories; this is limited to the connection's accessible installations and those names. Private source availability elsewhere is unknown; no one has been contacted.
 
 The exact required capability is an **entity-identity-aware geometry/ownership transaction at a defined world-step boundary**, with these source-level responsibilities:
 
@@ -96,3 +96,5 @@ Verification on this change:
 - Existing solver/fixture/test files are unchanged from `c7fe3b7`. Installed app executable SHA-256 remains `a1d9e389975295c29ef2887383b21e1bb81da4ac48c224759e65feabf58004ed`, plugin remains `8e9d2306c68debd261508fcc790ddc07069006087b7bbf84bcdac0aba7fd1069`.
 
 Detailed logs/provenance remain in the ignored `slice-contracts` scratch directory. No sanitizer rerun is claimed for the unchanged solver in this audit. None of these offline checks substitutes for required in-app hit/miss/tear, lifecycle and frame-cost measurements.
+
+One fresh reviewer checked `c7fe3b7..73fcdb6`, relevant current adapter source and retained disassembly, and independently reproduced12 passing facts/3 failed authority assertions/exit1. No Critical, Important or Minor findings. The reviewer confirmed the distinction between rejecting the current adapter and proving every future binary implementation impossible; they did not repeat the broader author regression suites. The evidence/decision milestone is reviewed; the in-app milestone is still pending the host contracts.
