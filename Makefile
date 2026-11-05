@@ -35,7 +35,7 @@ PLUGIN += src/glassmodel.cpp src/carglass.cpp
 PLUGIN += src/partsmodel.cpp src/carparts.cpp
 PLUGIN += src/dentmodel.cpp src/carimpact.cpp
 PLUGIN += src/mechanicalmodel.cpp src/carmechanics.cpp src/projectilemodel.cpp
-PLUGIN += src/firemodel.cpp src/carfire.cpp src/airframemodel.cpp src/airframedamage.cpp
+PLUGIN += src/firemodel.cpp src/carfire.cpp src/airframemodel.cpp src/airframedamage.cpp src/airframedebris.cpp
 GUNS      ?= $(wildcard assets/guns/*.vmg)  # every gun built (GUNS="..." to build in only some)
 CXXFLAGS  += -I$(BUILD)
 BLENDER   ?= blender

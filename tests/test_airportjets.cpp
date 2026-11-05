@@ -302,7 +302,10 @@ int main(){
   const CVector originalPlayer=V(gPlayer,0x38);auto findPlayer=game::api.FindPlayerPed;
   for(int cancellation=0;cancellation<7;++cancellation){
    switch(cancellation){case 0:area=1;break;case 1:mission=true;break;case 2:cutsceneRunning=true;break;case 3:*reinterpret_cast<float *>(gPlayer+0x44c)=0;break;case 4:gPlayer[0x4c0]=1;break;case 5:V(gPlayer,0x38).x=10000;break;case 6:game::api.FindPlayerPed=[]()->uint8_t *{return nullptr;};break;}
-   JetFrame(5400+200*cancellation);CHECK(!(streamInfo[227*32+0x11]&1)&&streamInfo[(6500+13)*32+0x11]==2&&allocated==before);
+   JetFrame(5400+200*cancellation);
+   // Approaching in a car now keeps both donor/model requests alive.
+   if(cancellation==4)CHECK((streamInfo[227*32+0x11]&1)&&(streamInfo[(6500+13)*32+0x11]&3)==3&&allocated==before);
+   else CHECK(!(streamInfo[227*32+0x11]&1)&&streamInfo[(6500+13)*32+0x11]==2&&allocated==before);
    area=0;mission=cutsceneRunning=false;*reinterpret_cast<float *>(gPlayer+0x44c)=100;gPlayer[0x4c0]=0;V(gPlayer,0x38)=originalPlayer;game::api.FindPlayerPed=findPlayer;
    JetFrame(5500+200*cancellation);CHECK(streamInfo[227*32+0x11]&1);
   }

@@ -147,7 +147,17 @@ int main()
  int accepted=0;for(int i=0;i<100;i++){const Vec3 at{-.8f,.03f+(i%10)*.095f,-.28f+(i/10)*.048f};accepted+=carglass::Perforate(cars.data(),&atoms[0][0],at,{1,0,0},20);}
  std::printf("hole stress accepted=%d triangles=%zu bytes=%zu\n",accepted,atoms[0][0].geo->triangles.size(),carglass::gBytes);
  Check(accepted>=90,"ongoing distinct bullet holes continue beyond64 within native topology and byte budget");
- carglass::Restore(cars.data());Check(atoms[0][0].geo==original,"airframe repair restores its original shared geometry");Reset();
+ carglass::Restore(cars.data());Check(atoms[0][0].geo==original,"airframe repair restores its original shared geometry");
+ static int debrisCalls=0;game::api.AircraftDebris=+[](uint8_t *,const airframedebris::Piece *p,size_t count){++debrisCalls;for(size_t i=0;i<count;i++)Check(p[i].geometry!=nullptr,"native debris receives actual severed source geometry");return true;};
+ *reinterpret_cast<int16_t *>(cars.data()+0x6a)=199;*reinterpret_cast<int *>(cars.data()+0x348)=0;frames[0][2].name="toprotor";
+ Check(carglass::SeverSection(cars.data(),{0,1,0},.5f),"whole aircraft section splits across coarse shared source triangles");
+ Check(atoms[0][1].geo!=original,"hidden damaged variant retains structural cuts when native rendering switches it in");
+ Check(atoms[0][2].geo==original,"helicopter fuselage section cutting preserves the independently owned main rotor");
+ Check(debrisCalls==1&&atoms[0][0].geo!=original&&atoms[1][0].geo==original,"one physical debris assembly and private parent geometry preserve other aircraft");
+ if(atoms[0][0].geo!=original)for(auto p:atoms[0][0].geo->vertices)Check(p.y<=.50001f,"parent retains only its side of a structural separation");
+ float cutOpening=1;Check(carglass::Opening(cars.data(),{-2,.75f,-.1f},{2,.75f,-.1f},cutOpening),"missing section is a real ballistic opening");Check(!carglass::Perforate(cars.data(),&atoms[0][0],{-.8f,.75f,-.1f},{1,0,0},20),"shots cannot perforate a section already detached");
+ carglass::Restore(cars.data());Check(atoms[0][0].geo==original,"repair restores original whole airframe after section loss");
+ failCreate=0;Check(!carglass::SeverSection(cars.data(),{0,1,0},.5f)&&atoms[0][0].geo==original&&debrisCalls==1,"section allocation failure preserves parent and emits no debris");failCreate=-1;game::api.AircraftDebris=nullptr;Reset();
  Bullet();
  Check(!(atoms[0][0].geo->flags&1)&&stripRebuilds==0&&base->flags==0x3f,"broken copies use triangle lists and retain the original strip geometry");
  Check(atoms[0][0].geo!=base&&Collapsed(atoms[0][0].geo,0)&&Collapsed(atoms[0][0].geo,1),"hit side window disappears");

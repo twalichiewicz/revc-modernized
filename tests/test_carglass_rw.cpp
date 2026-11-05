@@ -9,6 +9,7 @@
 #include <cstring>
 #include <cstdlib>
 #include "../src/carglass.cpp"
+#include "../src/airframedebris.cpp"
 #include "nativejetshadowarm.h"
 #include "../tools/bake/gamefiles.h"
 
@@ -123,12 +124,26 @@ void Copy(bool strip,bool broken,bool glassOnly,bool dented)
 }
 alignas(16) uint8_t vehicle[0x6f0]{},pool[24]{};uint8_t allocation=1;void *poolAddress=pool;
 uint8_t *GetVehicle(int ref){return ref==1?vehicle:nullptr;}
+alignas(16) uint8_t physicalPiece[0x1e8]{};int16_t temporaryPieces=0;int physicalAdds=0,sourceRefs=0;uint32_t physicsTime=1000;uint8_t sourceInfo[0x80]{},objectInfo[0x80]{};uint8_t *physicsModels[6500]{};
+void BindDebris()
+{
+ auto &n=airframedebris::n;airframedebris::gReady=true;game::api.AircraftDebris=airframedebris::Emit;game::api.timeMs=&physicsTime;game::api.modelInfoPtrs=physicsModels;physicsModels[245]=objectInfo;
+ n.temporary=&temporaryPieces;n.reference=[](uint8_t *v){return v==vehicle?1:-1;};
+ n.allocate=[](size_t size)->void *{Check(size==sizeof physicalPiece,"exact native CObject allocation");return temporaryPieces?nullptr:physicalPiece;};n.construct=[](uint8_t *o){std::memset(o,0,sizeof physicalPiece);};
+ n.destroy=[](uint8_t *o){auto c=*reinterpret_cast<rw::Clump **>(o+0x58);if(c)c->destroy();if(o[0x1b4]==3)--temporaryPieces;--sourceRefs;std::memset(o,0,sizeof physicalPiece);};
+ n.setModel=[](uint8_t *o,unsigned model){Check(model==245,"native collision proxy for physical component");*reinterpret_cast<int16_t *>(o+0x6a)=int16_t(model);};n.referenceModel=[](uint8_t *,int model){Check(model==game::EntityModel(vehicle),"debris pins the actual aircraft's model and textures");++sourceRefs;};
+ n.attach=[](uint8_t *o,void *c){auto clump=static_cast<rw::Clump *>(c);*reinterpret_cast<void **>(o+0x58)=c;std::memcpy(o+8,&clump->getFrame()->matrix,64);};
+ n.add=[](uint8_t *o){++physicalAdds;Check(o[0x1b4]==3&&temporaryPieces==1&&*reinterpret_cast<uint32_t *>(o+0x1c8)==physicsTime+12000,"native temporary lifetime and count belong to the object");Check(*reinterpret_cast<float *>(o+0xcc)>0&&reinterpret_cast<Vec3 *>(o+0x84)->z>0,"native debris has mass and separation velocity");};
+ n.createClump=[]()->void *{return rw::Clump::create();};n.destroyClump=[](void *c){static_cast<rw::Clump *>(c)->destroy();return 1;};n.createFrame=[]()->void *{return rw::Frame::create();};n.destroyFrame=[](void *f){static_cast<rw::Frame *>(f)->destroy();return 1;};
+ n.createAtomic=[]()->void *{return rw::Atomic::create();};n.destroyAtomic=[](void *a){static_cast<rw::Atomic *>(a)->destroy();return 1;};n.setClumpFrame=[](void *c,void *f)->void *{static_cast<rw::Clump *>(c)->setFrame(static_cast<rw::Frame *>(f));return c;};n.addChild=[](void *p,void *c)->void *{static_cast<rw::Frame *>(p)->addChild(static_cast<rw::Frame *>(c));return p;};n.addAtomic=[](void *c,void *a)->void *{static_cast<rw::Clump *>(c)->addAtomic(static_cast<rw::Atomic *>(a));return c;};n.setAtomicFrame=[](void *a,void *f)->void *{static_cast<rw::Atomic *>(a)->setFrame(static_cast<rw::Frame *>(f));return a;};n.setGeometry=carglass::rw.setGeometry;n.setFlags=[](void *a,unsigned flags)->void *{static_cast<rw::Atomic *>(a)->setFlags(flags);return a;};n.update=[](void *f)->void *{static_cast<rw::Frame *>(f)->updateObjects();return f;};n.matrix=carglass::rw.matrix;n.verticesCount=carglass::rw.nv;n.morph=carglass::rw.morph;n.vertices=[](const void *m){return reinterpret_cast<const Vec3 *>(static_cast<const rw::MorphTarget *>(m)->vertices);};n.renderCallback=[](void *,void *){};
+}
 void StockSkin(const char *file,int model)
 {
  const char *data=std::getenv("GAMEDATA");if(!data)data="/Applications/Grand Theft Auto Vice City.app/Contents/Resources/GameData";
  ImgArchive img;Check(img.Open(std::string(data)+"/models/gta3.img"),"stock IMG opens");std::vector<uint8_t> bytes;Check(img.Read(file,bytes),"stock helicopter DFF exists");
  rw::Texture::setLoadTextures(false);rw::StreamMemory stream;stream.open(bytes.data(),uint32_t(bytes.size()));
  Check(rw::findChunk(&stream,rw::ID_CLUMP,nullptr,nullptr),"stock clump found");auto clump=rw::Clump::streamRead(&stream);Check(clump,"stock clump reads into real RenderWare");
+ physicsModels[model]=sourceInfo;
  std::memset(vehicle,0,sizeof vehicle);*reinterpret_cast<void **>(pool)=vehicle;*reinterpret_cast<void **>(pool+8)=&allocation;*reinterpret_cast<int *>(pool+16)=1;
  *reinterpret_cast<void **>(vehicle+0x58)=clump;*reinterpret_cast<unsigned *>(vehicle+0x60)=2;*reinterpret_cast<int16_t *>(vehicle+0x6a)=int16_t(model);vehicle[0x297]=0x40;*reinterpret_cast<int *>(vehicle+0x348)=model==181?4:model==195?1:0;
  auto matrix=reinterpret_cast<float *>(vehicle+8);matrix[0]=matrix[5]=matrix[10]=matrix[15]=1;
@@ -153,13 +168,16 @@ void StockSkin(const char *file,int model)
    carglass::Restore(vehicle);Check(atomic->geometry==source,"stock repair restores shared original");++tested;break;
   }
  }
+ const int beforeParts=physicalAdds;Check(carglass::SeverSection(vehicle,{0,-1,0},0),"stock aircraft whole tail skin splits across all source atomics");Check(physicalAdds==beforeParts+1&&temporaryPieces==1,"stock split produces one real RenderWare assembly on a native-shaped physical object");
+ auto debris=*reinterpret_cast<rw::Clump **>(physicalPiece+0x58);Check(debris&&debris->countAtomics()>0,"physical detached section retains real source materials and triangles");
+ carglass::Restore(vehicle);airframedebris::n.destroy(physicalPiece);Check(temporaryPieces==0&&sourceRefs==0,"native debris cleanup releases geometry and parent model references");
  Check(tested>0,"stock helicopter tested actual opaque skin");std::printf("stock skin: %s %u atomics passed\n",file,tested);clump->destroy();
 }
 
 }
 int main()
 {
- Check(rw::Engine::init()&&rw::Engine::open(nullptr)&&rw::Engine::start(),"NULL renderer initialized");Bind();
+ Check(rw::Engine::init()&&rw::Engine::open(nullptr)&&rw::Engine::start(),"NULL renderer initialized");Bind();BindDebris();
  for(bool strip:{false,true})for(bool glassOnly:{false,true})for(bool broken:{false,true})for(bool dented:{false,true})Copy(strip,broken,glassOnly,dented);
  StockSkin("sparrow.dff",199);StockSkin("maverick.dff",217);StockSkin("deaddodo.dff",181);StockSkin("skimmer.dff",195);
  Check(rw::Geometry::numAllocated==0&&rw::Material::numAllocated==0,"all native geometry/material references released");

@@ -149,6 +149,7 @@ void Frame(uint32_t) { if(gFlightFrameObserver)gFlightFrameObserver(); }
 }
 namespace flightmodel { void Frame(uint32_t) { if(gFlightFrameObserver)gFlightFrameObserver(); } }
 namespace airportjets { void Frame(uint32_t) {} }
+namespace airportheli { void Frame(uint32_t) {} }
 namespace jetwash { void Frame(uint32_t) {} }
 namespace doorgrab
 {

@@ -27,7 +27,7 @@ bool Identify(const uint8_t *v,Identity &id)
 }
 bool Eligible(const Identity &id){return gReady&&id.vtable&&id.model>=0&&id.model<6500&&game::IsAircraft(id.v)&&(((id.kind==0&&id.model!=194)||id.kind==3)?gConfig.heliDamage:gConfig.planes)&&!game::Wrecked(id.v)&&(id.v[0x297]&0x40);}
 void (*gUpdateMatrix)(void *),(*gUpdateFrame)(uint8_t *);
-struct History {uint8_t lostRotors=0;airframeroute::State route;Identity id;airframemodel::State state;airframemodel::Layout layout;uint64_t revision=0;void *clump=nullptr,*source=nullptr;uint8_t *info=nullptr,*col=nullptr;uint32_t clock=0;bool seen=false;float health=1000;std::array<partsmodel::Episode,6> contacts{};};
+struct History {uint8_t lostRotors=0,lostSections=0;airframeroute::State route;Identity id;airframemodel::State state;airframemodel::Layout layout;uint64_t revision=0;void *clump=nullptr,*source=nullptr;uint8_t *info=nullptr,*col=nullptr;uint32_t clock=0;bool seen=false;float health=1000;std::array<partsmodel::Episode,6> contacts{};};
 std::array<History,kSlots> gHistory;uint32_t gClock;bool gSeen;
 uint64_t Serial(){if(++gSerial==0)++gSerial;return gSerial;}
 void Observe(){if(game::api.timeMs){const auto now=*game::api.timeMs;if(gSeen&&now<gClock)gHistory={};gClock=now;gSeen=true;}}
@@ -35,7 +35,7 @@ History *Record(const Identity &id)
 {
  if(!game::api.modelInfoPtrs)return nullptr;auto info=game::api.modelInfoPtrs[id.model];auto col=info?*reinterpret_cast<uint8_t **>(info+0x20):nullptr;auto source=info?*reinterpret_cast<void **>(info+0x30):nullptr;auto clump=game::EntityClump(id.v);if(!info||info[0x1d]!=6||!col||!source||!clump)return nullptr;
  auto &h=gHistory[size_t(id.ref>>8)];if(!Same(h.id,id)){h={};h.id=id;h.revision=Serial();h.health=game::VehicleHealth(id.v);}
- if(h.info!=info||h.col!=col||h.source!=source||h.clump!=clump){airframemodel::Layout layout;if(!airframemodel::Build(id.model,id.kind,*reinterpret_cast<const Vec3 *>(col+0x10),*reinterpret_cast<const Vec3 *>(col+0x1c),layout))return nullptr;h.layout=layout;h.info=info;h.col=col;h.source=source;h.clump=clump;h.lostRotors=0;h.revision=Serial();}
+ if(h.info!=info||h.col!=col||h.source!=source||h.clump!=clump){airframemodel::Layout layout;if(!airframemodel::Build(id.model,id.kind,*reinterpret_cast<const Vec3 *>(col+0x10),*reinterpret_cast<const Vec3 *>(col+0x1c),layout))return nullptr;h.layout=layout;h.info=info;h.col=col;h.source=source;h.clump=clump;h.lostRotors=h.lostSections=0;h.revision=Serial();}
  return &h;
 }
 History *Current(uint8_t *v,const Token &token)
@@ -54,6 +54,18 @@ void SyncRotors(History &h)
    Identity now;if(!Identify(id.v,now)||!Same(id,now)||h.revision!=revision||game::EntityClump(id.v)!=h.clump)return;
    h.lostRotors|=bit;Log("airframe part loss: ref %d model %d %s rotor",id.ref,id.model,rotor?"tail":"main");
   }
+ }
+}
+void SyncSections(History &h)
+{
+ const auto id=h.id;const auto revision=h.revision;
+ for(int section=0;section<3;section++){
+  const uint8_t bit=uint8_t(1u<<section);if(h.state.structure[size_t(section)]<1||(h.lostSections&bit))continue;
+  Identity now;if(!Identify(id.v,now)||!Same(id,now)||!Eligible(now)||h.revision!=revision||game::EntityClump(id.v)!=h.clump)return;
+  const auto cut=airframemodel::SectionCut(h.layout,section);
+  if(!carglass::SeverSection(id.v,cut.normal,cut.offset,!(h.state.separated&bit)))continue;
+  if(!Identify(id.v,now)||!Same(id,now)||h.revision!=revision||game::EntityClump(id.v)!=h.clump)return;
+  h.lostSections|=bit;h.state.separated|=bit;Log("airframe section loss: ref %d model %d section %d",id.ref,id.model,section);
  }
 }
 airframemodel::Effects Read(const uint8_t *v){Identity id;if(!Identify(v,id)||!Eligible(id))return {};const auto &h=gHistory[size_t(id.ref>>8)];if(Same(id,h.id))return airframemodel::Read(h.state,h.layout);airframemodel::Effects e;e.managed=true;return e;}
@@ -90,7 +102,7 @@ void Tick(uint8_t *v)
 {
  Identity id;if(!Identify(v,id)||!Eligible(id))return;Observe();auto *h=Record(id);if(!h)return;const float health=game::VehicleHealth(v);
  if(std::isfinite(health)&&health>h->health+1){Repair(v);h=Record(id);if(!h)return;}h->health=health;
- const uint32_t now=game::api.timeMs?*game::api.timeMs:0;if(h->seen&&now>=h->clock)airframemodel::Tick(h->state,(now-h->clock)*.001f,(v[0x295]&16)!=0);h->seen=true;h->clock=now;SyncRotors(*h);
+ const uint32_t now=game::api.timeMs?*game::api.timeMs:0;if(h->seen&&now>=h->clock)airframemodel::Tick(h->state,(now-h->clock)*.001f,(v[0x295]&16)!=0);h->seen=true;h->clock=now;SyncRotors(*h);SyncSections(*h);
 }
 bool MissingMainRotor(uint8_t *params)
 {
@@ -100,12 +112,14 @@ bool CarHeliAudio(uint8_t *manager,uint8_t *params){return MissingMainRotor(para
 void ToyHeliAudio(uint8_t *manager,uint8_t *params){if(!MissingMainRotor(params))gToyHeliAudio(manager,params);}
 void Auto(uint8_t *v)
 {
- Tick(v);Identity before;const bool owned=Identify(v,before)&&Eligible(before)&&before.kind==0;gAuto(v);Identity after;
+ Identity before,after;const bool tracked=Identify(v,before),owned=tracked&&Eligible(before)&&before.kind==0;Tick(v);
+ if(tracked&&(!Identify(v,after)||!Same(before,after)))return;gAuto(v);
  if(owned&&Identify(v,after)&&Same(before,after)&&Read(v).rotor<=0)*reinterpret_cast<float *>(v+0x5f0)=0;
 }
 void Routed(uint8_t *v,void (*native)(uint8_t *))
 {
- Tick(v);Identity id;History *h=nullptr;bool owned=Identify(v,id)&&(Eligible(id)||(game::Wrecked(v)&&gReady&&game::IsAircraft(v)&&(v[0x297]&0x40)));
+ Identity entry,current;const bool tracked=Identify(v,entry);Tick(v);if(tracked&&(!Identify(v,current)||!Same(entry,current)))return;
+ Identity id;History *h=nullptr;bool owned=Identify(v,id)&&(Eligible(id)||(game::Wrecked(v)&&gReady&&game::IsAircraft(v)&&(v[0x297]&0x40)));
  if(owned){h=Record(id);owned=h!=nullptr;}
  const bool nativeCrash=owned&&id.kind==4&&v[0x384]!=0;if(nativeCrash)owned=false;
  const uint64_t revision=owned?h->revision:0;std::array<float,16> input{},observed{};if(owned)std::memcpy(observed.data(),v+8,sizeof observed);
@@ -125,7 +139,7 @@ void Routed(uint8_t *v,void (*native)(uint8_t *))
  std::memcpy(v+8,pose.data(),sizeof pose);const auto delta=skinmodel::Sub(airframeroute::Row(pose,12),airframeroute::Row(observed,12));*reinterpret_cast<Vec3 *>(v+0x84)=h->route.grounded?Vec3{}:Vec3{delta.x/std::max(.001f,dt*50),delta.y/std::max(.001f,dt*50),delta.z/std::max(.001f,dt*50)};
  gUpdateMatrix(v+8);gUpdateFrame(v);
 }
-void Plane(uint8_t *v){Routed(v,gPlane);}void Heli(uint8_t *v){Routed(v,gHeli);}void Boat(uint8_t *v){Tick(v);gBoat(v);}
+void Plane(uint8_t *v){Routed(v,gPlane);}void Heli(uint8_t *v){Routed(v,gHeli);}void Boat(uint8_t *v){Identity before,after;const bool tracked=Identify(v,before);Tick(v);if(tracked&&(!Identify(v,after)||!Same(before,after)))return;gBoat(v);}
 void Fix(uint8_t *v){Repair(v);gFix(v);}void Delete(uint8_t *v){Identity id;if(Identify(v,id)){auto &h=gHistory[size_t(id.ref>>8)];if(Same(h.id,id)){h.revision=Serial();h.clump=nullptr;}}gDelete(v);}void Restart(){gHistory={};gRestart();}
 }
 bool Enabled(const uint8_t *v){Identity id;return Identify(v,id)&&Eligible(id);}
@@ -145,7 +159,7 @@ bool Projectile(uint8_t *v,const Token &token,const projectilemodel::Ray &ray,st
  }
  for(int i=0;i<airframemodel::Count;i++)if(h->state.damage[i]>before[i])Log("airframe projectile: ref %d model %d component %d integrity %.0f%%",h->id.ref,h->id.model,i,100*(1-h->state.damage[i]));
  if(h->state.damage!=before&&game::api.RearmVehicleFire)game::api.RearmVehicleFire(v);
- if(Current(v,token))SyncRotors(*h);return true;
+ if(Current(v,token)){SyncRotors(*h);SyncSections(*h);}return true;
 }
 
 void Perforated(uint8_t *v,const Token &token,float area){if(auto *h=Current(v,token))if(std::isfinite(area)&&area>0)h->state.holes=std::min(10.f,h->state.holes+area);}
@@ -153,10 +167,10 @@ bool ComponentHit(uint8_t *v,Vec3 from,Vec3 to,float entry,float &closest,Vec3 &
 {
  Identity id;if(!Identify(v,id)||!Eligible(id)||!std::isfinite(entry)||entry<0||entry>=closest)return false;const auto &h=gHistory[size_t(id.ref>>8)];if(!Same(h.id,id)||!h.info)return false;
  const auto delta=skinmodel::Sub(to,from);const float a[]={from.x,from.y,from.z},d[]={delta.x,delta.y,delta.z};for(int j=0;j<3;j++)if(!std::isfinite(a[j])||!std::isfinite(d[j]))return false;bool hit=false;
- for(int i=0;i<airframemodel::Count;i++){
-  if((h.layout.helicopter&&(i==airframemodel::WingL||i==airframemodel::WingR||i==airframemodel::Elevator||i==airframemodel::Rudder||i==airframemodel::AileronL||i==airframemodel::AileronR))||(!h.layout.helicopter&&(i==airframemodel::MainRotor||i==airframemodel::TailRotor)))continue;
+ for(int i=0;i<airframemodel::Count+3;i++){
+  if(i<airframemodel::Count&&((h.layout.helicopter&&(i==airframemodel::WingL||i==airframemodel::WingR||i==airframemodel::Elevator||i==airframemodel::Rudder||i==airframemodel::AileronL||i==airframemodel::AileronR))||(!h.layout.helicopter&&(i==airframemodel::MainRotor||i==airframemodel::TailRotor))))continue;
   if(h.layout.single&&i==airframemodel::EngineR)continue;
-  const auto &box=h.layout.volumes[i];const float lo[]={box.lo.x,box.lo.y,box.lo.z},hi[]={box.hi.x,box.hi.y,box.hi.z};float near=entry,far=closest;Vec3 n{};bool valid=true;
+  airframemodel::Box box;if(!airframemodel::Volume(h.state,h.layout,i,box))continue;const float lo[]={box.lo.x,box.lo.y,box.lo.z},hi[]={box.hi.x,box.hi.y,box.hi.z};float near=entry,far=closest;Vec3 n{};bool valid=true;
   for(int axis=0;axis<3;axis++){if(std::fabs(d[axis])<1e-7f){if(a[axis]<lo[axis]||a[axis]>hi[axis])valid=false;continue;}float l=(lo[axis]-a[axis])/d[axis],r=(hi[axis]-a[axis])/d[axis];float sign=-1;if(l>r){std::swap(l,r);sign=1;}if(l>near){near=l;n={float(axis==0)*sign,float(axis==1)*sign,float(axis==2)*sign};}far=std::min(far,r);if(near>=far)valid=false;}
   if(valid&&near<closest){closest=near;normal=n;if(skinmodel::Dot(n,n)<.1f){const float len=std::sqrt(skinmodel::Dot(delta,delta));if(len<=1e-7f)return false;normal={-delta.x/len,-delta.y/len,-delta.z/len};}hit=true;}
  }return hit;

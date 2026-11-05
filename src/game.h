@@ -4,6 +4,7 @@
 // 1.0.5217 (LC_UUID below); hooks are refused on any other build.
 #include "types.h"
 #include "airframemodel.h"
+#include "airframedebris.h"
 
 #include <cstddef>
 #include <cstdint>
@@ -310,6 +311,7 @@ struct Api {
  void (*AirframeFlightUsed)(uint8_t *);
  void (*AirframeCollision)(uint8_t *,Vec3,float);
  bool (*AircraftRotorLoss)(uint8_t *,bool main);
+ bool (*AircraftDebris)(uint8_t *,const airframedebris::Piece *,size_t);
  bool (*VehicleFireManaged)(const uint8_t *);
  void (*RearmVehicleFire)(uint8_t *);
  void (*RepairVehicleFire)(uint8_t *);

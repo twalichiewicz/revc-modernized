@@ -24,6 +24,10 @@ int main(){int failures=0;auto check=[&](bool ok,const char *why){if(!ok){printf
  check(corner.doses[mechanicalmodel::kWheelLF]>0&&corner.doses[mechanicalmodel::kBrakeLF]>0&&corner.doses[mechanicalmodel::kWheelRF]==0,"local wheel/caliper path leaves opposite assembly intact");
  check(std::fabs(corner.remaining+corner.deposited+corner.surfaceLoss-40)<.001f,"overlapping module volumes share absorption without creating energy");
  ray.count=65;check(!Doses(front,ray).valid,"bounded path rejects layer overflow");ray.count=1;ray.budget=NAN;check(!Doses(front,ray).valid,"invalid budget rejected");ray.budget=20;ray.to=ray.from;check(!Doses(front,ray).valid,"degenerate ray rejected");
+ {mechanicalmodel::Box body{{-1,-1,-1},{1,1,1}};std::array<mechanicalmodel::Box,mechanicalmodel::kModules> systems;systems.fill({{.5f,-.2f,-.2f},{.8f,.2f,.2f}});float r[mechanicalmodel::kModules]{},c[mechanicalmodel::kModules];std::fill(c,c+mechanicalmodel::kModules,100.f);r[0]=20;
+ Structure spars;spars.volumes.fill({{-.2f,-.2f,-.2f},{.2f,.2f,.2f}});spars.resistance={80,0,0};spars.capacity={100,100,100};Layer skin{.25f,1,Material::Skin};Ray sparShot{{-2,0,0},{2,0,0},.25f,1,20,&skin,1};auto stopped=Absorb(body,systems,r,c,sparShot,&spars);
+ check(stopped.valid&&stopped.structuralDoses[0]>0&&stopped.doses[0]==0&&stopped.remaining==0,"real structural member consumes the shared bullet energy before a farther functional system");check(std::fabs(stopped.surfaceLoss+stopped.deposited+stopped.remaining-20)<1e-5f,"skin, structural and functional injury conserve one projectile budget");sparShot.limit=.4f;auto cover=Absorb(body,systems,r,c,sparShot,&spars);check(cover.structuralDoses[0]==0,"nearer cover prevents structural damage beyond its accepted contact");
+ }
  printf("projectilemodel: %s\n",failures?"FAILED":"all passed");return failures?1:0;
 }
 #else

@@ -4,6 +4,7 @@
 #include <cstdint>
 namespace carglass {
 bool Install();
+bool SeverSection(uint8_t *vehicle,Vec3 normal,float offset,bool debris=true);
 bool Perforate(uint8_t *vehicle,const void *atomic,Vec3 point,Vec3 normal,float budget);
 void Restore(uint8_t *vehicle);
 bool Opening(uint8_t *vehicle,Vec3 from,Vec3 to,float &fraction);

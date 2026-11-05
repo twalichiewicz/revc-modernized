@@ -1,3 +1,4 @@
+#include "airframedebris.h"
 #include "airportheli.h"
 // GTA VI-style rectangular, tilted minimap with 3D buildings and GPS for macVC.
 //
@@ -819,6 +820,7 @@ __attribute__((constructor)) void Init()
 	if (!carmechanics::Install())
 		Log("car mechanics: native performance hooks missing; re-run install.sh");
  game::api.AircraftRotorLoss=+[](uint8_t *v,bool main){return game::EntityModel(v)==165&&*reinterpret_cast<const int *>(v+0x348)==3?heli::FailRotor(v,main):carparts::SeverRotor(v,main);};
+ if(!airframedebris::Install())Log("airframe debris: native component bindings unavailable");
 	if (!airframedamage::Install())
   Log("airframes: component/skin lifecycle bindings missing; re-run install.sh");
  if (!carimpact::Install())

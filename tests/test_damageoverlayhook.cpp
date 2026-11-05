@@ -156,6 +156,7 @@ void Frame(uint32_t) {}
 }
 namespace flightmodel { void Frame(uint32_t) {} }
 namespace airportjets { void Frame(uint32_t) {} }
+namespace airportheli { void Frame(uint32_t) {} }
 namespace jetwash { void Frame(uint32_t) {} }
 namespace doorgrab
 {

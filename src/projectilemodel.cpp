@@ -17,9 +17,13 @@ constexpr float resistance[]={80,8,16,16,16,16,12,12,12,12,20,70,6,10};
 constexpr float capacity[]={120,10,40,40,40,40,12,12,12,12,35,100,12,15};
 static_assert(sizeof(resistance)/sizeof(float)==mechanicalmodel::kModules);
 }
-Result Absorb(const mechanicalmodel::Box &body,const std::array<mechanicalmodel::Box,mechanicalmodel::kModules> &volumes,const float *resistance,const float *capacity,const Ray &ray)
+Result Absorb(const mechanicalmodel::Box &body,const std::array<mechanicalmodel::Box,mechanicalmodel::kModules> &volumes,const float *resistance,const float *capacity,const Ray &ray,const Structure *structure)
 {
  Result out;
+ constexpr size_t systems=mechanicalmodel::kModules,maximum=systems+3;const size_t modules=systems+(structure?3:0);
+ const auto volume=[&](size_t i)->const mechanicalmodel::Box &{return i<systems?volumes[i]:structure->volumes[i-systems];};
+ const auto resistanceAt=[&](size_t i){return i<systems?resistance[i]:structure->resistance[i-systems];};
+ const auto capacityAt=[&](size_t i){return i<systems?capacity[i]:structure->capacity[i-systems];};
  if(!Finite(ray.from)||!Finite(ray.to)||!std::isfinite(ray.entry)||!std::isfinite(ray.limit)||ray.entry<0||ray.limit>1||ray.limit<ray.entry||
     !std::isfinite(ray.budget)||ray.budget<=0||ray.count>kLayers||(ray.count&&!ray.layers)||!ValidBox(body))return out;
  const Vec3 d{ray.to.x-ray.from.x,ray.to.y-ray.from.y,ray.to.z-ray.from.z};const float length=std::sqrt(d.x*d.x+d.y*d.y+d.z*d.z);
@@ -36,11 +40,11 @@ Result Absorb(const mechanicalmodel::Box &body,const std::array<mechanicalmodel:
  if(!BoxHit(body,ray.from,d,near,far))return out;near=std::max(near,ray.entry);far=std::min(far,ray.limit);if(near>=far)return out;
  // Visible bumpers/panels can extend beyond the original COL body bounds.
  // Charge those entry surfaces before reaching any internal module volume.
- std::array<float,3+2*mechanicalmodel::kModules+kLayers> cuts{};size_t count=0;cuts[count++]=ray.entry;cuts[count++]=near;cuts[count++]=far;
- std::array<float,mechanicalmodel::kModules> enter{},exit{};
- for(int i=0;i<mechanicalmodel::kModules;i++){
-  if(!ValidBox(volumes[i]))return {};
-  float a,b;if(BoxHit(volumes[i],ray.from,d,a,b)){enter[i]=std::max(near,a);exit[i]=std::min(far,b);if(enter[i]<exit[i]){cuts[count++]=enter[i];cuts[count++]=exit[i];}}
+ std::array<float,3+2*maximum+kLayers> cuts{};size_t count=0;cuts[count++]=ray.entry;cuts[count++]=near;cuts[count++]=far;
+ std::array<float,maximum> enter{},exit{};
+ for(size_t i=0;i<modules;i++){
+  if(!ValidBox(volume(i))||!std::isfinite(resistanceAt(i))||resistanceAt(i)<0||!std::isfinite(capacityAt(i))||capacityAt(i)<=0)return {};
+  float a,b;if(BoxHit(volume(i),ray.from,d,a,b)){enter[i]=std::max(near,a);exit[i]=std::min(far,b);if(enter[i]<exit[i]){cuts[count++]=enter[i];cuts[count++]=exit[i];}}
  }
  for(size_t i=0;i<n;i++)if(layers[i].fraction>=ray.entry-1e-6f&&layers[i].fraction<=far)cuts[count++]=std::max(ray.entry,layers[i].fraction);
  std::sort(cuts.begin(),cuts.begin()+count);size_t layer=0;while(layer<n&&layers[layer].fraction<ray.entry-1e-6f)++layer;
@@ -48,10 +52,11 @@ Result Absorb(const mechanicalmodel::Box &body,const std::array<mechanicalmodel:
   const float t=cuts[k];while(layer<n&&layers[layer].fraction<=t+1e-6f){const auto &l=layers[layer++];
    const float loss=std::min(out.remaining,Cost(l.material,l.incidence));out.surfaceLoss+=loss;out.remaining-=loss;for(size_t j=0;j<ray.count;j++)if(ray.layers[j].material==l.material&&std::fabs(ray.layers[j].fraction-l.fraction)*length<=.001f)out.layerRemaining[j]=out.remaining;}
   const float next=cuts[k+1],middle=(t+next)*.5f;float rate=0;
-  for(int i=0;i<mechanicalmodel::kModules;i++)if(enter[i]<exit[i]&&middle>=enter[i]&&middle<exit[i])rate+=resistance[i];
+  for(size_t i=0;i<modules;i++)if(enter[i]<exit[i]&&middle>=enter[i]&&middle<exit[i])rate+=resistanceAt(i);
+  if(!std::isfinite(rate))return {};
   if(rate<=0||next<=t||out.remaining<=0)continue;
   const float absorbed=std::min(out.remaining,(next-t)*length*rate);out.remaining-=absorbed;out.deposited+=absorbed;
-  for(int i=0;i<mechanicalmodel::kModules;i++)if(enter[i]<exit[i]&&middle>=enter[i]&&middle<exit[i])out.doses[i]=std::min(1.f,out.doses[i]+absorbed*(resistance[i]/rate)/capacity[i]);
+  for(size_t i=0;i<modules;i++)if(enter[i]<exit[i]&&middle>=enter[i]&&middle<exit[i]){auto &dose=i<systems?out.doses[i]:out.structuralDoses[i-systems];dose=std::min(1.f,dose+absorbed*(resistanceAt(i)/rate)/capacityAt(i));}
  }
  return out;
 }

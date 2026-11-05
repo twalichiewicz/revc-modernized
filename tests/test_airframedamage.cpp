@@ -16,7 +16,8 @@ static void *Lookup(void *,const char *);
 #undef dlsym
 namespace game {Api api{};}
 Config gConfig;void Log(const char *,...){}
-namespace carglass {int restored=0;void Restore(uint8_t *){++restored;}}
+static int swapClassOnSection=-1;
+namespace carglass {int restored=0,sections=0;bool lastDebris=false;void Restore(uint8_t *){++restored;}bool SeverSection(uint8_t *v,Vec3,float,bool debris){++sections;lastDebris=debris;if(swapClassOnSection>=0){*reinterpret_cast<int *>(v+0x348)=swapClassOnSection;*reinterpret_cast<int16_t *>(v+0x6a)=int16_t(swapClassOnSection==4?180:199);swapClassOnSection=-1;}return true;}}
 namespace fixture {
 alignas(16) uint8_t car[0x6f0]{},pool[24]{},info[0x80]{},col[0x40]{};uint8_t flags[1]{1};uint8_t *models[6500]{};void *poolPointer=pool;int fireRearms=0;int fireRepairs=0;bool teleport=false;float step=1;uint32_t now=1000;std::map<std::string,void *> entries;int bad=0;
 void Check(bool b,const char *s){if(!b){printf("FAIL: %s\n",s);++bad;}}
@@ -35,15 +36,18 @@ int main(){using namespace fixture;Setup();game::api.PoolsGetVehicle=Get;game::a
  __asan_poison_memory_region(car+0x388,sizeof car-0x388);
 #endif
  auto t=airframedamage::BeginBullet(car);Check(t.revision!=0,"mission-created exact CPlane gets independent systems lease");
- projectilemodel::Layer skin{0,1,projectilemodel::Material::Skin};projectilemodel::Ray ray{{-12,0,0},{0,0,0},0,1,100,&skin,1};for(int i=0;i<20;i++)airframedamage::Projectile(car,t,ray);
+ projectilemodel::Layer skin{0,1,projectilemodel::Material::Skin};projectilemodel::Ray ray{{-12,0,0},{0,0,0},0,1,100,&skin,1};
  float internal=1;Vec3 normal;Check(airframedamage::ComponentHit(car,{-12,0,0},{0,0,0},.17f,internal,normal)&&internal<1&&internal>=.17f,"existing opening traces a bounded real internal component volume");
+ for(int i=0;i<20;i++)airframedamage::Projectile(car,t,ray);internal=1;Check(airframedamage::ComponentHit(car,{-12,0,0},{0,0,0},.17f,internal,normal),"disabled internal components remain physical material until their section separates");
  Check(fireRearms>0,"actual independent component injury notifies fire rearming without hull health loss");
+ projectilemodel::Layer beamSkin{.25f,1,projectilemodel::Material::Skin};projectilemodel::Ray beam{{-2.4f,0,4},{-2.4f,0,-4},.25f,1,80,&beamSkin,1};for(int i=0;i<12;i++)airframedamage::Projectile(car,t,beam);Check(carglass::sections==1&&carglass::lastDebris&&game::api.AirframeEffects(car).leftLift==0,"independent structural failure emits one whole native plane section with lost lift");
  auto e=game::api.AirframeEffects?game::api.AirframeEffects(car):airframemodel::Effects{};Check(e.managed&&e.leftLift<.5f&&e.rightLift==1,"actual owner applies localized systems in missions");
  if(entries.count("_ZN8CVehicle13FlyingControlE12eFlightModel"))reinterpret_cast<void (*)(uint8_t *,int)>(entries["_ZN8CVehicle13FlyingControlE12eFlightModel"])(car,5);
  Check(entries.count("_ZN8CVehicle13FlyingControlE12eFlightModel")&&reinterpret_cast<Vec3 *>(car+0x84)->z>0&&reinterpret_cast<Vec3 *>(car+0x84)->z<.03f,"native AI/mission flight consumes damaged wing lift without replacing its flight controller");
  *reinterpret_cast<Vec3 *>(car+0x84)={};teleport=true;if(entries.count("_ZN8CVehicle13FlyingControlE12eFlightModel"))reinterpret_cast<void (*)(uint8_t *,int)>(entries["_ZN8CVehicle13FlyingControlE12eFlightModel"])(car,5);teleport=false;Check(std::fabs(reinterpret_cast<Vec3 *>(car+0x84)->z-.03f)<1e-6f,"native mission teleport retires the old force receipt");
  if(entries.count("_ZN7CEntity14DeleteRwObjectEv"))reinterpret_cast<void (*)(uint8_t *)>(entries["_ZN7CEntity14DeleteRwObjectEv"])(car);
  *reinterpret_cast<void **>(car+0x58)=reinterpret_cast<void *>(4);auto streamed=airframedamage::BeginBullet(car);auto afterStream=game::api.AirframeEffects?game::api.AirframeEffects(car):airframemodel::Effects{};Check(streamed.revision!=t.revision&&afterStream.leftLift<.5f,"render streaming retires contacts while preserving damaged internals");
+ airframedamage::Tick(car);Check(carglass::sections==2&&!carglass::lastDebris,"streamed plane reapplies missing section without duplicating physical debris");
  if(entries.count("_ZN11CAutomobile3FixEv"))reinterpret_cast<void (*)(uint8_t *)>(entries["_ZN11CAutomobile3FixEv"])(car);
  Check(!airframedamage::Projectile(car,t,ray)&&carglass::restored>0&&fireRepairs>0,"repair retires pending airframe bullets and restores skin");
 
@@ -64,5 +68,8 @@ int main(){using namespace fixture;Setup();game::api.PoolsGetVehicle=Get;game::a
  airframedamage::Repair(car);airframedamage::Tick(car);Check(game::api.AirframeEffects(car).rotor==1&&rotorLoss[0]==2,"repair clears rotor presentation and function together");
  audioCalls=0;Check(rotorAudio(nullptr,params)&&audioCalls==1,"repair restores native rotor sound ownership");
  auto tail=airframedamage::BeginBullet(car);for(int i=0;i<10;i++)airframedamage::Projectile(car,tail,exposed,nullptr,airframemodel::TailRotor);Check(game::api.AirframeEffects(car).antiTorque==0&&game::api.AirframeEffects(car).rotor==1&&rotorLoss[1]==1,"tail rotor part loss owns yaw instead of killing main lift");
+ static int staleNativeCalls=0;
+ Setup();airframedamage::BeginBullet(car);airframedamage::gHistory[0].state.structure[0]=1;swapClassOnSection=0;airframedamage::gPlane=+[](uint8_t *){++staleNativeCalls;};airframedamage::Plane(car);Check(staleNativeCalls==0,"section callback cannot dispatch a stale native plane controller onto a replacement automobile");
+ staleNativeCalls=0;Setup();*reinterpret_cast<int16_t *>(car+0x6a)=199;*reinterpret_cast<int *>(car+0x348)=0;airframedamage::BeginBullet(car);airframedamage::gHistory[0].state.structure[0]=1;swapClassOnSection=4;airframedamage::gAuto=+[](uint8_t *){++staleNativeCalls;};airframedamage::Auto(car);Check(staleNativeCalls==0,"section callback cannot dispatch automobile control onto a replacement CPlane");
  printf("airframedamage: %s\n",bad?"FAILED":"all passed");return bad?1:0;
 }

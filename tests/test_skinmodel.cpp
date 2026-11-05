@@ -12,5 +12,6 @@ int main(){using namespace skinmodel;int bad=0;auto check=[&](bool b,const char 
  }
  check(area<1.95f&&area>1.90f&&!centre,"real octagonal hole removes local area without deleting the coarse original triangle");
  hole.centre.z=2;pieces.clear();check(Subtract(triangle,hole,pieces)&&pieces.size()==1&&pieces[0].size()==3,"one skin impact does not remove the far side of the airframe");
+ auto half=Slice(triangle,{{1,0,0},0});float sectionArea=0;for(size_t i=1;i+1<half.size();i++)sectionArea+=std::fabs(Cross(Sub(half[i].position,half[0].position),Sub(half[i+1].position,half[0].position)).z)*.5f;check(std::fabs(sectionArea-1)<1e-5f,"structural plane clips coarse skin with interpolated boundary vertices");
  printf("skinmodel: %s\n",bad?"FAILED":"all passed");return bad?1:0;
 }

@@ -6,10 +6,21 @@
 namespace skinmodel {
 struct Hole {Vec3 centre{},normal{};float radius=0;};
 struct Sample {Vec3 position{},weights{};};
+struct Cut {Vec3 normal{};float offset=0;};
+
 inline Vec3 Sub(Vec3 a,Vec3 b){return {a.x-b.x,a.y-b.y,a.z-b.z};}
 inline float Dot(Vec3 a,Vec3 b){return a.x*b.x+a.y*b.y+a.z*b.z;}
 inline Vec3 Cross(Vec3 a,Vec3 b){return {a.y*b.z-a.z*b.y,a.z*b.x-a.x*b.z,a.x*b.y-a.y*b.x};}
 inline Vec3 Mix(Vec3 a,Vec3 b,float t){return {a.x+(b.x-a.x)*t,a.y+(b.y-a.y)*t,a.z+(b.z-a.z)*t};}
+inline std::vector<Sample> Slice(const std::vector<Sample> &polygon,const Cut &cut)
+{
+ std::vector<Sample> out;if(polygon.size()<3||polygon.size()>64)return out;out.reserve(polygon.size()+1);
+ for(size_t i=0;i<polygon.size();i++){
+  const auto a=polygon[i],b=polygon[(i+1)%polygon.size()];const float da=a.position.x*cut.normal.x+a.position.y*cut.normal.y+a.position.z*cut.normal.z-cut.offset,db=b.position.x*cut.normal.x+b.position.y*cut.normal.y+b.position.z*cut.normal.z-cut.offset;
+  if(da<=0)out.push_back(a);if((da<0&&db>0)||(da>0&&db<0)){const float t=da/(da-db);out.push_back({Mix(a.position,b.position,t),Mix(a.weights,b.weights,t)});}
+ }
+ return out;
+}
 // Subtract a convex octagonal opening from one convex skin polygon. Samples
 // carry original-triangle barycentrics, preserving all interpolated attributes.
 // The slab prevents a bullet's entrance hole from cutting the opposite shell.
