@@ -1,0 +1,71 @@
+variant=baseline
+rigid-wing miss: joint_broken=0 chassis_slowdown=0.000000 m/s static_reaction=0.000000 Ns momentum_error=0.000000000 Ns PASS
+rigid-wing strike: joint_broken=1 chassis_slowdown=0.555556 m/s static_reaction=2702.992514 Ns momentum_error=0.000000000 Ns PASS
+rigid-soft: projectile_vz=0.983789 m/s sheet_pz=-5.075428 Ns elastic_shape_change=0.132770 m momentum_error=0.908488460 Ns FAIL
+soft-soft symmetric: signed_separation=0.102859 m top_pz=0.051875 Ns momentum_error=0.000000000 Ns PASS
+soft-soft asymmetric: signed_separation=0.085639 m top_pz=-0.307542 Ns momentum_error=0.692458044 Ns FAIL
+Scope: CPU rigid breakage + elastic contact coupling only. Plasticity/fracture, angular CCD, real assets, city performance and game ownership are NOT validated.
+exit=1
+
+variant=no-split
+rigid-wing miss: joint_broken=0 chassis_slowdown=0.000000 m/s static_reaction=0.000000 Ns momentum_error=0.000000000 Ns PASS
+rigid-wing strike: joint_broken=1 chassis_slowdown=0.555556 m/s static_reaction=2884.166558 Ns momentum_error=0.000000000 Ns PASS
+rigid-soft: projectile_vz=1.024387 m/s sheet_pz=-5.149387 Ns elastic_shape_change=0.135339 m momentum_error=0.875365803 Ns FAIL
+soft-soft symmetric: signed_separation=0.102859 m top_pz=0.051875 Ns momentum_error=0.000000000 Ns PASS
+soft-soft asymmetric: signed_separation=0.085639 m top_pz=-0.307542 Ns momentum_error=0.692458044 Ns FAIL
+Scope: CPU rigid breakage + elastic contact coupling only. Plasticity/fracture, angular CCD, real assets, city performance and game ownership are NOT validated.
+exit=1
+
+variant=no-damping
+rigid-wing miss: joint_broken=0 chassis_slowdown=0.000000 m/s static_reaction=0.000000 Ns momentum_error=0.000000000 Ns PASS
+rigid-wing strike: joint_broken=1 chassis_slowdown=0.555556 m/s static_reaction=2702.992514 Ns momentum_error=0.000000000 Ns PASS
+rigid-soft: projectile_vz=1.061517 m/s sheet_pz=-5.108013 Ns elastic_shape_change=0.140943 m momentum_error=0.953817948 Ns FAIL
+soft-soft symmetric: signed_separation=0.102859 m top_pz=0.051875 Ns momentum_error=0.000000000 Ns PASS
+soft-soft asymmetric: signed_separation=0.085639 m top_pz=-0.307542 Ns momentum_error=0.692458044 Ns FAIL
+Scope: CPU rigid breakage + elastic contact coupling only. Plasticity/fracture, angular CCD, real assets, city performance and game ownership are NOT validated.
+exit=1
+
+variant=node-only
+rigid-wing miss: joint_broken=0 chassis_slowdown=0.000000 m/s static_reaction=0.000000 Ns momentum_error=0.000000000 Ns PASS
+rigid-wing strike: joint_broken=1 chassis_slowdown=0.555556 m/s static_reaction=2702.992514 Ns momentum_error=0.000000000 Ns PASS
+rigid-soft: projectile_vz=-5.000000 m/s sheet_pz=0.000000 Ns elastic_shape_change=0.000000 m momentum_error=0.000000000 Ns FAIL
+soft-soft symmetric: signed_separation=0.102859 m top_pz=0.051875 Ns momentum_error=0.000000000 Ns PASS
+soft-soft asymmetric: signed_separation=0.085639 m top_pz=-0.307542 Ns momentum_error=0.692458044 Ns FAIL
+Scope: CPU rigid breakage + elastic contact coupling only. Plasticity/fracture, angular CCD, real assets, city performance and game ownership are NOT validated.
+exit=1
+
+variant=implicit
+rigid-wing miss: joint_broken=0 chassis_slowdown=0.000000 m/s static_reaction=0.000000 Ns momentum_error=0.000000000 Ns PASS
+rigid-wing strike: joint_broken=1 chassis_slowdown=0.555556 m/s static_reaction=2702.992514 Ns momentum_error=0.000000000 Ns PASS
+rigid-soft: projectile_vz=4.234252 m/s sheet_pz=3.309368 Ns elastic_shape_change=0.735502 m momentum_error=12.558604653 Ns FAIL
+soft-soft symmetric: signed_separation=0.102859 m top_pz=0.051875 Ns momentum_error=0.000000000 Ns PASS
+soft-soft asymmetric: signed_separation=0.085639 m top_pz=-0.307542 Ns momentum_error=0.692458044 Ns FAIL
+Scope: CPU rigid breakage + elastic contact coupling only. Plasticity/fracture, angular CCD, real assets, city performance and game ownership are NOT validated.
+exit=1
+
+variant=projection
+rigid-wing miss: joint_broken=0 chassis_slowdown=0.000000 m/s static_reaction=0.000000 Ns momentum_error=0.000000000 Ns PASS
+rigid-wing strike: joint_broken=1 chassis_slowdown=0.555556 m/s static_reaction=2702.992514 Ns momentum_error=0.000000000 Ns PASS
+rigid-soft: projectile_vz=0.401516 m/s sheet_pz=-5.379573 Ns elastic_shape_change=0.110703 m momentum_error=0.021969265 Ns PASS
+soft-soft symmetric: signed_separation=0.102859 m top_pz=0.051875 Ns momentum_error=0.000000000 Ns PASS
+soft-soft asymmetric: signed_separation=0.085639 m top_pz=-0.307542 Ns momentum_error=0.692458044 Ns FAIL
+Scope: CPU rigid breakage + elastic contact coupling only. Plasticity/fracture, angular CCD, real assets, city performance and game ownership are NOT validated.
+exit=1
+
+variant=zero-erp
+rigid-wing miss: joint_broken=0 chassis_slowdown=0.000000 m/s static_reaction=0.000000 Ns momentum_error=0.000000000 Ns PASS
+rigid-wing strike: joint_broken=1 chassis_slowdown=0.555556 m/s static_reaction=2702.992514 Ns momentum_error=0.000000000 Ns PASS
+rigid-soft: projectile_vz=0.952820 m/s sheet_pz=-5.106306 Ns elastic_shape_change=0.134721 m momentum_error=0.847093047 Ns FAIL
+soft-soft symmetric: signed_separation=0.102859 m top_pz=0.051875 Ns momentum_error=0.000000000 Ns PASS
+soft-soft asymmetric: signed_separation=0.085639 m top_pz=-0.307542 Ns momentum_error=0.692458044 Ns FAIL
+Scope: CPU rigid breakage + elastic contact coupling only. Plasticity/fracture, angular CCD, real assets, city performance and game ownership are NOT validated.
+exit=1
+
+variant=half-step
+rigid-wing miss: joint_broken=0 chassis_slowdown=0.000000 m/s static_reaction=0.000000 Ns momentum_error=0.000000000 Ns PASS
+rigid-wing strike: joint_broken=1 chassis_slowdown=0.555556 m/s static_reaction=2797.088501 Ns momentum_error=0.000000000 Ns PASS
+rigid-soft: projectile_vz=1.071065 m/s sheet_pz=-5.154908 Ns elastic_shape_change=0.134035 m momentum_error=0.916165440 Ns FAIL
+soft-soft symmetric: signed_separation=0.129734 m top_pz=0.083202 Ns momentum_error=0.000000000 Ns PASS
+soft-soft asymmetric: signed_separation=0.077100 m top_pz=-0.331591 Ns momentum_error=0.668408993 Ns FAIL
+Scope: CPU rigid breakage + elastic contact coupling only. Plasticity/fracture, angular CCD, real assets, city performance and game ownership are NOT validated.
+exit=1

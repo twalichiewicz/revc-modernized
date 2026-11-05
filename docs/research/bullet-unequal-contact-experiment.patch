@@ -1,0 +1,7 @@
+diff --git a/src/BulletSoftBody/btSoftBody.h b/src/BulletSoftBody/btSoftBody.h
+index 27705e6..86292ff 100644
+--- a/src/BulletSoftBody/btSoftBody.h
++++ b/src/BulletSoftBody/btSoftBody.h
+@@ -1373 +1373 @@ public:
+-					face->m_n[j]->m_v += w[j] * n * I_tilde * node->m_im;
++					face->m_n[j]->m_v += w[j] * n * I_tilde * face->m_n[j]->m_im;

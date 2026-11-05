@@ -1,0 +1,11 @@
+checkout=original
+single-contact equal: momentum_error=0.000000000 Ns angular_error=0.000000000 Nms reference_error=0.000000000 Ns reference_angular_error=0.000000000 Nms impulse_share_error=0.000000000 Ns initial_energy=0.500000000 J final_energy=0.137681159 J inelastic_reference_energy=0.137681159 J PASS
+single-contact heavy-face: momentum_error=0.724637681 Ns angular_error=0.422532746 Nms reference_error=0.000000000 Ns reference_angular_error=0.000000000 Nms impulse_share_error=0.362318841 Ns initial_energy=0.500000000 J final_energy=0.237450116 J inelastic_reference_energy=0.079831933 J FAIL
+single-contact light-face: momentum_error=0.652173913 Ns angular_error=0.380279471 Nms reference_error=0.000000000 Ns reference_angular_error=0.000000000 Nms impulse_share_error=0.326086957 Ns initial_energy=0.500000000 J final_energy=0.047889099 J inelastic_reference_energy=0.395833333 J FAIL
+exit=1
+
+checkout=experimental
+single-contact equal: momentum_error=0.000000000 Ns angular_error=0.000000000 Nms reference_error=0.000000000 Ns reference_angular_error=0.000000000 Nms impulse_share_error=0.000000000 Ns initial_energy=0.500000000 J final_energy=0.137681159 J inelastic_reference_energy=0.137681159 J PASS
+single-contact heavy-face: momentum_error=0.000000000 Ns angular_error=0.000000000 Nms reference_error=0.000000000 Ns reference_angular_error=0.000000000 Nms impulse_share_error=0.000000000 Ns initial_energy=0.500000000 J final_energy=0.087796681 J inelastic_reference_energy=0.079831933 J PASS
+single-contact light-face: momentum_error=0.000000000 Ns angular_error=0.000000000 Nms reference_error=0.000000000 Ns reference_angular_error=0.000000000 Nms impulse_share_error=0.000000000 Ns initial_energy=0.500000000 J final_energy=1.035601764 J inelastic_reference_energy=0.395833333 J FAIL
+exit=1
