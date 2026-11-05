@@ -1,0 +1,3 @@
+# Unified-diff context prefixes contain intentional spaces before native tabs.
+# Validate the applied source with git diff --check in the host checkout.
+tools/host/*.patch -whitespace
