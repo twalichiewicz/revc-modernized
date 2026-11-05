@@ -10,6 +10,8 @@
 
 **Spec:** `docs/superpowers/specs/2026-11-05-world-physics-design.md`.
 
+**Latest priority (2026-11-05):** The user narrowed the next milestone to one controlled aircraft/wing against one building. Pause solver expansion except for demonstrated blockers in that slice. The [slice plan](2026-11-05-aircraft-building-slice.md) and [host-contract decision](../../research/2026-11-05-aircraft-building-contracts.md) supersede numerical optimization as the next action. Native per-instance query authority has a reproduced gap; require matching engine source or a source-implemented host bridge before solver handoff. Tasks3–5 remain incomplete; an experimental app and live performance measurements remain pending the four host gates.
+
 ## Global constraints
 
 - Use metres, seconds, kilograms, newtons, newton-seconds and joules inside the shared module. Native unit conversion occurs once in the adapter.

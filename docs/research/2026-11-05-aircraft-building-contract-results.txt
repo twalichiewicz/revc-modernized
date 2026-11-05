@@ -1,0 +1,13 @@
+macVC1.0.5217, pristine SHA256 a715c2ce363265385b73ac6d2decd386f7d8bbccb61519766907a563a663cc95
+Scope: isolated native callers and real sphere LOS math; synthetic objects/geometry. No game/plugin/solver.
+facts: exit=0
+AUTHORITY MISSING: physical contact has no per-instance geometry replacement
+AUTHORITY MISSING: LOS-clear has no per-instance geometry replacement
+AUTHORITY MISSING: vertical query has no per-instance geometry replacement
+facts=12 failures=0 authority_missing=3 scope=offline-native-dispatch-and-LOS-sphere
+authority: exit=1
+AUTHORITY MISSING: physical contact has no per-instance geometry replacement
+AUTHORITY MISSING: LOS-clear has no per-instance geometry replacement
+AUTHORITY MISSING: vertical query has no per-instance geometry replacement
+facts=12 failures=0 authority_missing=3 scope=offline-native-dispatch-and-LOS-sphere
+In-app handoff remains gated on motion, all query routes, publication and lifecycle evidence.
