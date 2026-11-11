@@ -8,6 +8,7 @@
 #include "log.h"
 #include "nativebullet.h"
 #include "shotcollision.h"
+#include "aircraftbodyclient.h"
 #include <algorithm>
 #include <array>
 #include <cmath>
@@ -153,7 +154,7 @@ bool Helicopter(uint8_t *v,int model)
  if(model!=6||!Eligible(v))return false;
  Rotor *rotor=State(v); // release prior suppression even at a direct native flight entry
  if(!(v[0x156]&2)||!PlayerOwns(v)||!api.GetPad||!api.timeStep||(gCutscene&&*gCutscene)||(v[0x294]==2&&!rotor))return false;
- if(gConfig.heliDamage&&rotor&&rotor->failed)return true;
+ if(gConfig.heliDamage&&rotor&&rotor->failed&&!aircraftbodyclient::Owned(v))return true;
  uint8_t *pad=api.GetPad(0);if(!pad)return false;
  const CVector r=Row(v,8),f=Row(v,0x18),u=Row(v,0x28),start=Mul(Row(v,0x84),kHz),angular=Mul(Row(v,0x90),kHz),com=Row(v,0xe4);
  const float mass=Scalar(v,0xcc),turnMass=Scalar(v,0xd0),height=EntityPos(v).z,health=VehicleHealth(v),tick=*api.timeStep;
@@ -173,7 +174,10 @@ bool Helicopter(uint8_t *v,int model)
  if(height>3200)climb=std::min(climb,std::max(0.0f,12*(3800-height)/600));
  if(height>3800)climb=std::min(climb,-std::min(8.0f,(height-3800)*.05f));
  const auto damage=api.AirframeEffects?api.AirframeEffects(v):airframemodel::Effects{};
- const float power=(v[0x295]&0x10)?std::clamp(Scalar(v,0x5f0)/.22f,0.0f,1.0f)*(damage.managed?damage.power*damage.rotor:std::clamp((health-100)/500,0.0f,1.0f)):0;
+ // Material blade loss starts at the tips, where thrust ~ integral c r^2 dr is
+ // concentrated: surviving material fraction a leaves about a^3 of rotor thrust.
+ const float material=std::clamp(damage.rotor,0.0f,1.0f),rotorThrust=aircraftbodyclient::Owned(v)?material*material*material:damage.rotor;
+ const float power=(v[0x295]&0x10)?std::clamp(Scalar(v,0x5f0)/.22f,0.0f,1.0f)*(damage.managed?damage.power*rotorThrust:std::clamp((health-100)/500,0.0f,1.0f)):0;
  if(api.AirframeFlightUsed)api.AirframeFlightUsed(v);pitch*=damage.pitch;roll*=damage.roll;
  // Automobile calls CPhysical::ProcessControl (including gravity) before
  // FlyingControl. Reconstruct the start of that step for feedback; the output
@@ -196,6 +200,16 @@ bool Helicopter(uint8_t *v,int model)
 void Hook_Flying(uint8_t *v,int model){if(!planeflight::Apply(v,model)&&!Helicopter(v,model))gFlying(v,model);}
 bool Hook_Blade(uint8_t *v,CVector at,uint8_t *matrix,int16_t type,float radius,float damage)
 {
+ // A material rotor owns its strike outcome: the native disc test is clamped to
+ // attached blades, and an accepted overlap becomes work on the struck blade.
+ // Native slowdown/impulse stay; there is no binary failure or hidden rotor.
+ if(aircraftbodyclient::Owned(v)){
+  float attached=radius;if(type==3&&aircraftbodyclient::BladeRadius(v,attached)){if(!(attached>.05f))return false;radius=std::min(radius,attached);}
+  const float before=Scalar(v,0x5f0);if(type==3&&Eligible(v)&&State(v))RotorOrigin(v,at);
+  const bool result=gBlade(v,at,matrix,type,radius,damage);
+  if(type==3&&before>.15f&&Scalar(v,0x5f0)==.15f&&aircraftbodyclient::Owned(v))aircraftbodyclient::BladeStrike(v,before,api.timeMs?*api.timeMs:0);
+  return result;
+ }
  Rotor *r=Eligible(v)?State(v):nullptr;const int ref=r?r->ref:-1;const float before=r?Scalar(v,0x5f0):0;
  if(r&&type==3)RotorOrigin(v,at);
  const bool result=gBlade(v,at,matrix,type,radius,damage);
@@ -208,7 +222,7 @@ bool Hook_Blade(uint8_t *v,CVector at,uint8_t *matrix,int16_t type,float radius,
 void Hook_Control(uint8_t *v)
 {
  Rotor *r=Eligible(v)?State(v):nullptr;const int ref=r?r->ref:-1;
- if(gConfig.heliDamage&&r&&r->failed){
+ if(gConfig.heliDamage&&r&&r->failed&&!aircraftbodyclient::Owned(v)){
   SetScalar(v,0x5f0,-1);if(v[0x19e]==20)v[0x19e]=0;
   if(r->broken==2&&api.timeStep&&std::isfinite(*api.timeStep)&&*api.timeStep>0){
    const CVector right=Row(v,8),forward=Row(v,0x18),up=Row(v,0x28),angular=Row(v,0x90),com=Row(v,0xe4);
@@ -221,7 +235,7 @@ void Hook_Control(uint8_t *v)
   }
  }
  gControl(v);
- r=State(v);if(gConfig.heliDamage&&r&&r->ref==ref&&r->failed){SetScalar(v,0x5f0,0);Hide(v,*r);}
+ r=State(v);if(gConfig.heliDamage&&r&&r->ref==ref&&r->failed&&!aircraftbodyclient::Owned(v)){SetScalar(v,0x5f0,0);Hide(v,*r);}
 }
 void Hook_Fix(uint8_t *v)
 {
@@ -334,7 +348,7 @@ void Frame(uint32_t now)
  for(int i=0;i<count;++i){
   if(flags[i]&0x80)continue;uint8_t *v=api.PoolsGetVehicle(i*256|flags[i]);Rotor *r=v?State(v):nullptr;if(!r)continue;
   if(!gConfig.heliDamage){if(r->clump&&r->clump==EntityClump(v))gAtomics(r->clump,RestoreAtomic,r);}
-  else if(r->failed)Hide(v,*r);
+  else if(r->failed&&!aircraftbodyclient::Owned(v))Hide(v,*r);
  }
 }
 bool Install()

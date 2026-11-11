@@ -179,8 +179,7 @@ void Hook_StartShake(uint8_t *pad, int16_t ms, uint8_t strength)
 {
 	if (Muted(pad))
 		return;
-	const uint32_t from = uint32_t(reinterpret_cast<uintptr_t>(__builtin_return_address(0)) -
-	                               reinterpret_cast<uintptr_t>(hooks::ImageBase()));
+	const uint32_t from = hooks::ReturnOffset(__builtin_return_address(0));
 	for (uint32_t call : kSuspensionCalls)
 		if (from == call)
 			return Play(std::min<int>(ms, kSuspensionMaxMs), strength * kSuspensionScale);

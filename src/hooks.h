@@ -27,6 +27,26 @@ void UninstallAll();
 // The running game's Mach-O header (= its __TEXT base); valid after Init.
 const void *ImageBase();
 
+// Named caller/callee relocation for the separately compiled source host.
+// Unknown source return addresses have no vanilla identity (UINT32_MAX).
+#ifdef VC_SOURCE_UUID_BYTES
+uint32_t ReturnOffset(const void *address);
+const void *ReturnAddress(uint32_t vanillaOffset);
+#else
+inline uint32_t ReturnOffset(const void *address)
+{
+	const auto base = ImageBase();
+	if (!base || !address) return UINT32_MAX;
+	const uintptr_t offset = reinterpret_cast<uintptr_t>(address) - reinterpret_cast<uintptr_t>(base);
+	return offset <= UINT32_MAX ? uint32_t(offset) : UINT32_MAX;
+}
+inline const void *ReturnAddress(uint32_t offset)
+{
+	const auto base = ImageBase();
+	return base ? reinterpret_cast<const uint8_t *>(base) + offset : nullptr;
+}
+#endif
+
 // For hooks that recognise their caller by return address: true if the
 // instruction before image base + `retOffset` is a `bl` to `mangledName`.
 bool IsCallTo(uint32_t retOffset, const char *mangledName);

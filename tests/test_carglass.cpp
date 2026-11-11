@@ -20,6 +20,7 @@ namespace game {Api api{};}
 Config gConfig;
 void Log(const char *,...){}
 namespace fixture {
+static void *(*extraLookup)(const char *)=nullptr;
 using V=CVector;
 using T=carglass::Triangle;
 struct Mat {uint8_t colour[4]={255,255,255,160};const char *texture=nullptr;};
@@ -107,6 +108,7 @@ namespace hooks {void *Chain(const char *n,void *f){using namespace fixture;void
 static void *Lookup(void *,const char *s)
 {
  using namespace fixture;
+ if(extraLookup)if(auto symbol=extraLookup(s))return symbol;
 #define BIND(n,f) if(!strcmp(s,n))return reinterpret_cast<void *>(f)
  BIND("_ZN6CPools15ms_pVehiclePoolE",&poolPointer);
  BIND("_Z20RpClumpForAllAtomicsPN2rw5ClumpEPFPNS_6AtomicES3_PvES4_",Atomics);

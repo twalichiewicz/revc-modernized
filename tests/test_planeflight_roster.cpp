@@ -153,7 +153,11 @@ static void RosterReset()
 	gRejectExitHook=true;CHECK(!planeflight::Install());
 	gRejectExitHook=false;CHECK(planeflight::Install());
 }
+#ifdef PLANEROSTER_NO_MAIN
+int RosterFixtureMain()
+#else
 int main()
+#endif
 {
 	RosterReset();
 	gMission=true;planeflight::Frame(100);gMission=false;
@@ -188,11 +192,11 @@ int main()
 	gExit=true;gBlocked=true;planeflight::Frame(13000);
 	CHECK(gWarp==0&&gIgnored==gBoat);gBlocked=false;planeflight::Frame(13001);
 	CHECK(gWarp==1&&game::PedInVehicle(gPlayer)&&*reinterpret_cast<uint8_t **>(gDodo+0x218)==gPlayer);
-	seat(gPlayer);CHECK(gSeat>0&&std::fabs(V(gPlayer,0x38).y-V(gDodo,0x38).y)>1);
+	seat(gPlayer);const auto pilotSeat=Plus(Plus(Plus(V(gDodo,0x38),Times(V(gDodo,8),-.32f)),Times(V(gDodo,0x18),.25f)),Times(V(gDodo,0x28),.05f));CHECK(gSeat>0&&Magnitude(Plus(V(gPlayer,0x38),Times(pilotSeat,-1)))<3e-4f); // two world-space float ULPs at the airport
 	gExit=false;planeflight::Frame(2);CHECK(planeflight::Apply(gDodo,5)); // a clock epoch change cannot release a still-valid native actor
 	gMoves=gTurns=0;
-	gExit=false;gThrottle=0;gBrake=255;gRoll=96;V(gDodo,0x84)={0,-.04f,0};control(gDodo);
-	CHECK(std::fabs(V(gDodo,0x84).y)*50<1.9f&&V(gDodo,0x90).z<0&&std::fabs(V(gDodo,0x90).y)<1e-6f);
+	gExit=false;gThrottle=0;gBrake=255;gRoll=96;V(gDodo,0x84)=Times(V(gDodo,0x18),.04f);V(gDodo,0x90)={};control(gDodo);
+	const auto spin=V(gDodo,0x90),forward=V(gDodo,0x18);CHECK(std::hypot(V(gDodo,0x84).x,V(gDodo,0x84).y)*50<1.9f&&spin.z<0&&std::fabs(spin.x*forward.x+spin.y*forward.y+spin.z*forward.z)<1e-6f);
 	gThrottle=255;gBrake=gRoll=0;V(gDodo,0x84)={0,-1.2f,0};control(gDodo);CHECK(gPhysical==2&&gOriginalPlane==0&&gMoves>0);
 	*reinterpret_cast<int16_t *>(gBoat+0x6a)=181;*reinterpret_cast<int32_t *>(gBoat+0x348)=4;
 	control(gBoat);CHECK(gOriginalPlane==1); // same-model ambient/unowned native control retained
@@ -212,6 +216,14 @@ int main()
 	control(gDodo);const float collisionHealth=game::VehicleHealth(gDodo);
 	CHECK(gDamage==1&&collisionHealth<1000&&collisionHealth>250&&gExplosions==0);
 	control(gDodo);CHECK(game::VehicleHealth(gDodo)==collisionHealth&&gDamage==1); // native ProcessControl clears consumed contact
+	game::api.AirframeEffects=+[](const uint8_t *){airframemodel::Effects e;e.managed=true;return e;};
+	*reinterpret_cast<float *>(gDodo+0x13c)=8*(*reinterpret_cast<float *>(gDodo+0xcc))/50;
+	control(gDodo);CHECK(gDamage==2&&game::VehicleHealth(gDodo)<collisionHealth&&gExplosions==0); // effects alone cannot revoke the fallback
+	gDamage=1;*reinterpret_cast<float *>(gDodo+0x2a0)=collisionHealth;
+	game::api.AirframeContactsManaged=+[](const uint8_t *){return true;};
+	*reinterpret_cast<float *>(gDodo+0x13c)=14*(*reinterpret_cast<float *>(gDodo+0xcc))/50;
+	control(gDodo);CHECK(game::VehicleHealth(gDodo)==collisionHealth&&gDamage==1&&gExplosions==0&&gKills==0);
+	game::api.AirframeEffects=nullptr;game::api.AirframeContactsManaged=nullptr; // localized material/occupant consumers already spend this contact
 	for(int mode=0;mode<3;mode++){
   const auto flags=*reinterpret_cast<uint32_t *>(gDodo+0x60);const auto health=game::VehicleHealth(gDodo);const auto kills=gKills,explosions=gExplosions;
   game::api.AirframeEffects=+[](const uint8_t *){airframemodel::Effects e;e.managed=true;return e;};game::api.VehicleFireManaged=mode==2?+[](const uint8_t *){return true;}:nullptr;gConfig.carFire=mode!=0;planeflight::gPlane.burning=0;*reinterpret_cast<float *>(gDodo+0x2a0)=200;planeflight::gPrevious=10000;control(gDodo);planeflight::gPrevious+=6001;control(gDodo);CHECK(game::Wrecked(gDodo)==(mode<2));

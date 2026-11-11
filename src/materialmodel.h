@@ -4,6 +4,12 @@
 #include <cmath>
 #include <cstddef>
 namespace materialmodel {
+// Accepted impulse times average signed closing velocity. A rebounding
+// contact may return energy; only nonnegative dissipated work damages material.
+inline float ImpulseWork(float impulse,float closingBefore,float outwardAfter){
+ if(!std::isfinite(impulse)||impulse<=0||!std::isfinite(closingBefore)||closingBefore<0||!std::isfinite(outwardAfter))return 0;
+ return std::max(0.f,.5f*impulse*(closingBefore-outwardAfter));
+}
 constexpr size_t kLayers=64;
 enum class Material {Body,Glass,Rubber,Armor,ArmoredGlass,Skin};
 inline bool Armored(int model){return model==157||model==158;}

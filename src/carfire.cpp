@@ -5,6 +5,7 @@
 #include "game.h"
 #include "hooks.h"
 #include "log.h"
+#include "aircraftbodyclient.h"
 #include <array>
 #include <algorithm>
 #include <cmath>
@@ -17,9 +18,9 @@ volatile uint64_t *gGates[4]{};void **gPool,**gPedPool;uint8_t *gManager;bool gR
 bool (*gMission)();CVector (*gCoords)();int *gDuty;
 void (*gControl)(uint8_t *),(*gDamage)(uint8_t *,float,uint16_t),(*gInflict)(uint8_t *,uint8_t *,int,float,CVector);
 void (*gProcess)(uint8_t *),(*gExtinguish)(uint8_t *),(*gFix)(uint8_t *),(*gDelete)(uint8_t *),(*gRestart)(),(*gDispatch)();
-void (*gPlaneControl)(uint8_t *),(*gBoatControl)(uint8_t *),(*gHeliControl)(uint8_t *);
+void (*gPlaneControl)(uint8_t *),(*gBoatControl)(uint8_t *),(*gHeliControl)(uint8_t *),(*gBikeControl)(uint8_t *);
 bool (*gEngineAudio)(uint8_t *,uint8_t *);
-void (*gLeave)(uint8_t *),(*gCannon)(uint8_t *);
+void (*gLeave)(uint8_t *),(*gCannon)(uint8_t *),(*gKill)(uint8_t *);bool (*gExplode)(uint8_t *,uint8_t *,int,const CVector &,uint32_t,bool);
 uint8_t *(*gFurthest)(void *,CVector,float,float);
 uint8_t *(*gStart)(void *,uint8_t *,uint8_t *,float,uint8_t),*(*gNearest)(void *,CVector,float *);
 int (*gEngine)(void *),(*gTotal)(const void *);void (*gSetEngine)(void *,unsigned);
@@ -38,10 +39,12 @@ bool Identify(uint8_t *v,Identity &id)
 }
 bool Eligible(const Identity &id)
 {
- return gReady&&gConfig.carFire&&id.vtable&&id.model>=0&&id.model<6500&&id.model!=162&&id.model!=171&&((!game::IsAircraft(id.car)&&*reinterpret_cast<int *>(id.car+0x348)==0)||(game::api.AirframeEffects&&game::api.AirframeEffects(id.car).managed))&&!game::Wrecked(id.car)&&(id.car[0x297]&0x40)&&
+ return gReady&&gConfig.carFire&&id.vtable&&id.model>=0&&id.model<6500&&id.model!=162&&id.model!=171&&(aircraftbodyclient::Owned(id.car)||(!game::IsAircraft(id.car)&&*reinterpret_cast<int *>(id.car+0x348)==0)||(game::api.AirframeEffects&&game::api.AirframeEffects(id.car).managed))&&!game::Wrecked(id.car)&&(id.car[0x297]&0x40)&&
   !(game::EntityFlags(id.car)&((1u<<26)|(1u<<28)))&&std::isfinite(game::VehicleHealth(id.car));
 }
-struct History {Identity id;firemodel::State state;uint8_t *fire=nullptr;uint64_t revision=0;uint32_t clock=0;bool seen=false,crewHeld=false;int driverRef=-1;};
+struct History {Identity id;firemodel::State state;uint8_t *fire=nullptr;uint64_t revision=0;uint32_t clock=0;bool seen=false,crewHeld=false;int driverRef=-1;
+ // Material health: last value written, native/script baseline and crash latch.
+ float written=-1,baseline=1000,ceiling=1000,impact=0;uint64_t generation=0;uint32_t crashAt=0;bool destroyed=false;};
 std::array<History,kSlots> gHistory;
 History &Record(const Identity &id){auto &h=gHistory[size_t(id.ref>>8)];if(!Same(h.id,id)){h={};h.id=id;h.revision=Serial();}return h;}
 struct Lease {Identity id;uint64_t revision=0;};
@@ -72,7 +75,10 @@ void Extinguish(uint8_t *f)
  gExtinguish(f);Identity now;
  if(revision&&Identify(id.car,now)&&Same(id,now)){auto &h=gHistory[size_t(id.ref>>8)];if(h.revision==revision&&h.fire==f){h.fire=nullptr;firemodel::Extinguish(h.state);Log("car fire: model %d extinguished",id.model);}}
 }
-firemodel::Input Input(const uint8_t *v){return game::IsAircraft(v)&&game::api.AirframeFire?game::api.AirframeFire(v):carmechanics::FireInput(v);}
+firemodel::Input Input(const uint8_t *v){
+ if(aircraftbodyclient::Owned(v)){AircraftBodySnapshot body;firemodel::Input out;if(aircraftbodyclient::Read(v,body)){out.heat=body.heat;out.fuel=body.fuel;out.engine=body.engine;out.electrical=body.electrical;out.breach=body.breach;}out.health=game::VehicleHealth(v);out.running=(v[0x295]&0x10)!=0;return out;}
+ return game::IsAircraft(v)&&game::api.AirframeFire?game::api.AirframeFire(v):carmechanics::FireInput(v);
+}
 bool Create(const Lease &lease)
 {
  if(!Current(lease))return false;auto *v=lease.id.car;
@@ -100,7 +106,7 @@ void Advance(const Lease &lease)
  auto input=Input(lease.id.car);input.health=game::VehicleHealth(lease.id.car);
  const bool burning=h.state.lit&&FireFor(h.fire,lease.id);firemodel::Tick(h.state,input,dt);
  if(!Current(lease))return;
- if(burning&&dt>0&&dt<=1){if(game::IsAircraft(lease.id.car)&&game::api.AirframeBurn)game::api.AirframeBurn(lease.id.car,dt);else carmechanics::Burn(lease.id.car,dt);}
+ if(burning&&dt>0&&dt<=1){if(aircraftbodyclient::Owned(lease.id.car))aircraftbodyclient::Burn(lease.id.car,dt);else if(game::IsAircraft(lease.id.car)&&game::api.AirframeBurn)game::api.AirframeBurn(lease.id.car,dt);else carmechanics::Burn(lease.id.car,dt);}
  if(!Current(lease))return;
  if(h.state.spent){Burnout(lease);return;}
  if(h.state.lit&&!h.fire&&!Create(lease)){
@@ -150,10 +156,54 @@ void UpdateService(uint8_t *v)
  // own duty counter and road route; never manufacture or decrement counts.
  if(sameDriver&&v[0x19e]==11&&!game::Wrecked(v)){const auto at=game::EntityPos(v);std::memcpy(v+0x1b4,&at,sizeof at);v[0x19e]=8;v[0x19f]=0;}
 }
-void Control(uint8_t *v){Scope scope(v,1u<<Countdown,true);gControl(v);if(scope.valid)Advance(scope.lease);UpdateService(v);}
-void PlaneControl(uint8_t *v){Scope scope(v,0,true);gPlaneControl(v);if(scope.valid)Advance(scope.lease);}
-void HeliControl(uint8_t *v){Scope scope(v,0,true);gHeliControl(v);if(scope.valid)Advance(scope.lease);}
-void BoatControl(uint8_t *v){Scope scope(v,1u<<BoatCountdown,true);gBoatControl(v);if(scope.valid)Advance(scope.lease);}
+// Source-host material vehicles: native health is a function of canonical
+// material state. The host restores native collision HP (VehicleDamage), so the
+// remaining writers are this mapping, native weapons and scripts; their deltas
+// are retained as a baseline and the worse assessment wins, never the sum.
+//   D = worst(engine, fuel breach, aircraft structure) + 25% of the other two
+//   ceiling = 1000 - 760 * max(0, (D - 5%) / 95%)   (D=1 -> 240, fire range)
+// Aircraft structure = max(lost lifting/rotor material, crash latch). The latch
+// rises from a 6 m/s accepted native impact to 1 at 15 m/s, beyond helicopter
+// crashworthy limits. A destroyed, fuelled airframe ignites; if that fire is not
+// quenched it blows the aircraft up 5 s later. Low health alone never ignites
+// anything, and cars keep the non-explosive progressive fire (issue #44).
+float Ceiling(const AircraftBodySnapshot &b,bool aircraft,float crash){
+ auto unit=[](float x){return std::isfinite(x)?std::clamp(x,0.f,1.f):0.f;};
+ const float engine=unit(b.engine),fuel=unit(b.breach),structure=aircraft?std::max(unit(crash),1-unit(std::min({b.rotor,b.leftLift,b.rightLift}))):0.f;
+ const float worst=std::max({engine,fuel,structure}),damage=std::clamp(worst+.25f*(engine+fuel+structure-worst),0.f,1.f);
+ return 1000-760*std::max(0.f,(damage-.05f)/.95f);
+}
+// Accepted native contact impulse from the previous world pass, as delta-v (m/s).
+float Impact(const uint8_t *v){const float mass=*reinterpret_cast<const float *>(v+0xcc),impulse=*reinterpret_cast<const float *>(v+0x13c);return std::isfinite(mass)&&mass>0&&std::isfinite(impulse)&&impulse>0?impulse*50/mass:0;}
+void Destroy(const Lease &lease)
+{
+ auto *v=lease.id.car;if(!Current(lease))return;const int kind=*reinterpret_cast<const int *>(v+0x348);const auto at=game::EntityPos(v);
+ Log("car fire: ref %d model %d crash fire reached the fuel; airframe destroyed",lease.id.ref,lease.id.model);
+ // CPlane has no native BlowUpCar: wreck, occupants and blast as its native crash.
+ if(kind==4){if(!gKill||!gExplode)return;*reinterpret_cast<float *>(v+0x2a0)=0;v[0x295]&=uint8_t(~0x10);auto &flags=*reinterpret_cast<uint32_t *>(v+0x60);flags=(flags&~0xf8u)|(5u<<3)|(1u<<20);Invalidate(v);gKill(v);gExplode(v,nullptr,6,at,0,false);return;}
+ // Native lethal crash damage: class BlowUpCar, collision proof and occupants.
+ if(kind==0||kind==1||kind==5)gInflict(v,nullptr,39,2*(std::max(0.f,game::VehicleHealth(v))+1000),at);
+}
+void Health(const Lease &lease,float impact)
+{
+ auto *v=lease.id.car;AircraftBodySnapshot body;if(!Current(lease)||!aircraftbodyclient::Owned(v)||!aircraftbodyclient::Read(v,body))return;
+ auto &h=gHistory[size_t(lease.id.ref>>8)];const float native=game::VehicleHealth(v);if(!std::isfinite(native))return;
+ if(h.generation!=body.generation){h.generation=body.generation;h.written=-1;h.ceiling=1000;h.impact=0;h.crashAt=0;h.destroyed=false;}
+ h.baseline=h.written<0?native:h.baseline+(native-h.written);
+ const bool aircraft=game::IsAircraft(v);if(aircraft&&impact>0)h.impact=std::max(h.impact,std::clamp((impact-6)/9,0.f,1.f));
+ const float ceiling=Ceiling(body,aircraft,h.impact);if(ceiling<h.ceiling-.5f)firemodel::Rearm(h.state);h.ceiling=ceiling;
+ const float health=std::min(h.baseline,ceiling+std::max(0.f,h.baseline-1000));*reinterpret_cast<float *>(v+0x2a0)=health;h.written=health;
+ if(!aircraft||h.impact<1||h.destroyed||!game::api.timeMs)return;const uint32_t now=*game::api.timeMs;
+ if(!h.crashAt){if(!(body.fuel>.01f))return;h.crashAt=now?now:1;firemodel::Ignite(h.state);Log("car fire: ref %d model %d airframe crash ignited its fuel",lease.id.ref,lease.id.model);return;}
+ if(now>=h.crashAt&&now-h.crashAt>=5000&&h.state.lit&&FireFor(h.fire,lease.id)){h.destroyed=true;Destroy(lease);}
+}
+void Control(uint8_t *v){const float impact=Impact(v);Scope scope(v,1u<<Countdown,true);gControl(v);if(scope.valid){Health(scope.lease,impact);Advance(scope.lease);}UpdateService(v);}
+void PlaneControl(uint8_t *v){const float impact=Impact(v);Scope scope(v,0,true);gPlaneControl(v);if(scope.valid){Health(scope.lease,impact);Advance(scope.lease);}}
+void HeliControl(uint8_t *v){const float impact=Impact(v);Scope scope(v,0,true);gHeliControl(v);if(scope.valid){Health(scope.lease,impact);Advance(scope.lease);}}
+void BoatControl(uint8_t *v){const float impact=Impact(v);Scope scope(v,1u<<BoatCountdown,true);gBoatControl(v);if(scope.valid){Health(scope.lease,impact);Advance(scope.lease);}}
+#ifdef VC_SOURCE_UUID_BYTES
+void BikeControl(uint8_t *v){const float impact=Impact(v);Scope scope(v,0,true);gBikeControl(v);if(scope.valid){Health(scope.lease,impact);Advance(scope.lease);}}
+#endif
 void Process(uint8_t *f)
 {
  uint8_t *v=FireAddress(f)&&f[0]==1&&f[1]==0?*reinterpret_cast<uint8_t **>(f+0x10):nullptr;
@@ -170,7 +220,7 @@ struct DispatchScope {DispatchScope *previous=gDispatchScope;bool allowed=false;
  if(gReady&&gConfig.carFire&&gCoords){const auto p=gCoords();for(const auto &h:gHistory){Lease lease{h.id,h.revision};if(!h.state.lit||!Current(lease)||!FireFor(h.fire,h.id))continue;
   const auto at=game::EntityPos(h.id.car);const float dx=p.x-at.x,dy=p.y-at.y,dz=p.z-at.z;if(std::isfinite(dx)&&std::isfinite(dy)&&std::isfinite(dz)&&dx*dx+dy*dy+dz*dz<120*120){allowed=true;break;}}
  }gDispatchScope=this;}~DispatchScope(){gDispatchScope=previous;}};
-bool NativeCall(const void *address,uint32_t offset){return hooks::ImageBase()&&reinterpret_cast<uintptr_t>(address)-reinterpret_cast<uintptr_t>(hooks::ImageBase())==offset;}
+bool NativeCall(const void *address,uint32_t offset){return hooks::ReturnOffset(address)==offset;}
 int Total(const void *manager){const int count=gTotal(manager);return manager==gManager&&gDispatchScope&&gDispatchScope->allowed&&NativeCall(__builtin_return_address(0),0x53030)?std::max(3,count):count;}
 uint8_t *Nearest(void *manager,CVector at,float *radius){
  if(manager==gManager&&radius&&*radius==30&&gDispatchScope&&gDispatchScope->allowed&&NativeCall(__builtin_return_address(0),0x53140)){float expanded=120;auto *f=gNearest(manager,at,&expanded);*radius=expanded;return f;}
@@ -199,6 +249,7 @@ bool Install()
  B(gPedPool,"_ZN6CPools11ms_pPedPoolE");
  B(gCoords,"_Z15FindPlayerCoorsv");B(gDuty,"_ZN8CCarCtrl19NumFiretrucksOnDutyE");B(gStart,"_ZN12CFireManager9StartFireEP7CEntityS1_fh");B(gEngine,"_ZN14CDamageManager15GetEngineStatusEv");B(gSetEngine,"_ZN14CDamageManager15SetEngineStatusEj");
 #undef B
+ gKill=reinterpret_cast<decltype(gKill)>(dlsym(RTLD_MAIN_ONLY,"_ZN8CVehicle17KillPedsInVehicleEv"));gExplode=reinterpret_cast<decltype(gExplode)>(dlsym(RTLD_MAIN_ONLY,"_ZN10CExplosion12AddExplosionEP7CEntityS1_14eExplosionTypeRK7CVectorjb"));
  gGates[Countdown]=hooks::Flag("skip:car_fire_countdown");gGates[Rollover]=hooks::Flag("skip:car_rollover_drain");gGates[Lethal]=hooks::Flag("skip:car_ordinary_lethal");gGates[BoatCountdown]=hooks::Flag("skip:aircraft_boat_fire");
  if(!gGates[0]||!gGates[1]||!gGates[2]||!gGates[3]||!game::api.PoolsGetVehicle||!game::api.timeMs||!hooks::IsCallTo(0x53030,"_ZNK12CFireManager19GetTotalActiveFiresEv")||!hooks::IsCallTo(0x53140,"_ZN12CFireManager15FindNearestFireE7CVectorPf")||!hooks::IsCallTo(0x50814,"_ZN6CCarAI23TellOccupantsToLeaveCarEP8CVehicle")||!hooks::IsCallTo(0x24f618,"_ZN12CFireManager33FindFurthestFire_NeverMindFireMenE7CVectorff"))return false;
 #define C(v,s,f) if(!v)v=reinterpret_cast<decltype(v)>(hooks::Chain(s,reinterpret_cast<void *>(f)))
@@ -206,6 +257,9 @@ bool Install()
  C(gProcess,"_ZN5CFire11ProcessFireEv",Process);C(gExtinguish,"_ZN5CFire10ExtinguishEv",Extinguish);C(gFix,"_ZN11CAutomobile3FixEv",Fix);C(gDelete,"_ZN7CEntity14DeleteRwObjectEv",Delete);C(gRestart,"_ZN6CWorld15ClearForRestartEv",Restart);
  C(gDispatch,"_ZN8CCarCtrl28GenerateEmergencyServicesCarEv",Dispatch);C(gTotal,"_ZNK12CFireManager19GetTotalActiveFiresEv",Total);C(gNearest,"_ZN12CFireManager15FindNearestFireE7CVectorPf",Nearest);
  C(gHeliControl,"_ZN5CHeli14ProcessControlEv",HeliControl);C(gPlaneControl,"_ZN6CPlane14ProcessControlEv",PlaneControl);C(gBoatControl,"_ZN5CBoat14ProcessControlEv",BoatControl);
+#ifdef VC_SOURCE_UUID_BYTES
+ C(gBikeControl,"_ZN5CBike14ProcessControlEv",BikeControl);
+#endif
  C(gLeave,"_ZN6CCarAI23TellOccupantsToLeaveCarEP8CVehicle",Leave);
  C(gEngineAudio,"_ZN13cAudioManager19ProcessEngineDamageER14cVehicleParams",EngineAudio);C(gCannon,"_ZN11CAutomobile16FireTruckControlEv",Cannon);C(gFurthest,"_ZN12CFireManager33FindFurthestFire_NeverMindFireMenE7CVectorff",Furthest);
 #undef C

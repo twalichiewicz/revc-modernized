@@ -109,7 +109,7 @@ bool gWaypointRow;    // ...drawing the waypoint's row
 Vec2 gLegendFrom, gLegendTo;
 float gLegendScale = kLegendScale; // this frame's (the title is scaled before the box is seen: last frame's)
 
-uint32_t Offset(const void *ret) { return uint32_t(static_cast<const uint8_t *>(ret) - gText); }
+uint32_t Offset(const void *ret) { return hooks::ReturnOffset(ret); }
 
 bool TabsActive(const uint8_t *menu) { return gTabsOn && MenuActive(menu) && !MenuGameNotLoaded(menu); }
 

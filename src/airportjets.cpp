@@ -549,7 +549,8 @@ void Crash(uint8_t *v,uint8_t *by){if(Wrecked(v))return;*reinterpret_cast<float 
 void Damage(uint8_t *v,uint8_t *by,int weapon,float amount,CVector at){originalDamage(v,by,weapon,amount,at);if(Find(v)&&VehicleHealth(v)<=0&&!(weapon==31&&api.VehicleFireManaged&&api.VehicleFireManaged(v)))Crash(v,by);}
 void Control(uint8_t *v){Jet *jet=Find(v);if(!jet)return originalControl(v);
  const float mass=*reinterpret_cast<float *>(v+0xcc),impulse=*reinterpret_cast<float *>(v+0x13c);const float impact=mass>0?impulse*50/mass:0;
- if(!Wrecked(v)&&std::isfinite(impact)&&impact>4)n.damage(v,nullptr,39,std::min(1500.0f,(impact-4)*(impact-4)*12),EntityPos(v));
+ const bool materialManaged=api.AirframeContactsManaged&&api.AirframeContactsManaged(v);
+ if(!materialManaged&&!Wrecked(v)&&std::isfinite(impact)&&impact>4)n.damage(v,nullptr,39,std::min(1500.0f,(impact-4)*(impact-4)*12),EntityPos(v));
  const uint32_t now=api.timeMs?*api.timeMs:gPrevious;
  if(!Wrecked(v)&&VehicleHealth(v)<250&&!(api.VehicleFireManaged&&api.VehicleFireManaged(v))){if(!jet->burning)jet->burning=now;else if(now-jet->burning>5000)Crash(v,nullptr);}else jet->burning=0;
  float water=0;if(!Wrecked(v)&&api.GetWaterLevel&&api.GetWaterLevel(EntityPos(v).x,EntityPos(v).y,EntityPos(v).z,&water,true)&&EntityPos(v).z<water-.5f)Crash(v,nullptr);

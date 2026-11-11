@@ -506,6 +506,44 @@ $(BUILD)/test_jetwheel_flight: tests/test_jetwheel_flight.cpp tests/test_planefl
 
 $(BUILD)/test_jetwheels: tests/test_jetwheels.cpp src/jetwheels.cpp $(wildcard src/*.h) | $(BUILD)
 	$(CXX) $(CXXFLAGS) -Isrc -o $@ tests/test_jetwheels.cpp
+$(BUILD)/test_dodowheels: tests/test_dodowheels.cpp tests/test_jetwheels.cpp src/jetwheels.cpp $(wildcard src/*.h) | $(BUILD)
+	$(CXX) $(CXXFLAGS) -Isrc -o $@ tests/test_dodowheels.cpp
+test: test-dodo-gear
+test-dodo-gear: $(BUILD)/test_dodowheels
+	$(BUILD)/test_dodowheels
+$(BUILD)/test_dodo_material_owner: tests/test_dodo_material_owner.cpp tests/test_planeflight_roster.cpp tests/test_planeflight.cpp src/planeflight.cpp $(wildcard src/*.h) | $(BUILD)
+	$(CXX) $(CXXFLAGS) -Isrc -o $@ tests/test_dodo_material_owner.cpp
+test: test-dodo-material
+test-dodo-material: $(BUILD)/test_dodo_material_owner
+	$(BUILD)/test_dodo_material_owner
+$(BUILD)/test_dodomodel: tests/test_dodomodel.cpp tests/test_airportjetmodel.cpp src/airportjetmodel.cpp tools/bake/gamefiles.cpp $(wildcard src/*.h tools/bake/*.h) | $(BUILD)
+	$(CXX) $(CXXFLAGS) -Isrc -o $@ tests/test_dodomodel.cpp tools/bake/gamefiles.cpp -lz
+test-game-assets: test-dodo-assets
+test-dodo-assets: $(BUILD)/test_dodomodel
+	GAMEDATA="$(GAMEDATA)" $(BUILD)/test_dodomodel
+$(BUILD)/diagnose_dodo_legacy: tools/host/diagnostics/dodo_legacy_damage.cpp tests/test_carglass.cpp tests/test_dodomodel.cpp tests/test_airportjetmodel.cpp src/carglass.cpp src/airportjetmodel.cpp src/dentmodel.cpp src/airframemodel.cpp tools/bake/gamefiles.cpp $(wildcard src/*.h tools/bake/*.h) | $(BUILD)
+	$(CXX) $(CXXFLAGS) -Isrc -Itests -o $@ tools/host/diagnostics/dodo_legacy_damage.cpp src/dentmodel.cpp src/glassmodel.cpp src/airframemodel.cpp tools/bake/gamefiles.cpp -lz
+$(BUILD)/test_aircraftconnectivity: tests/test_aircraftconnectivity.cpp src/aircraftconnectivity.h src/skinmodel.h src/boundsindex.h src/vec3.h | $(BUILD)
+	$(CXX) $(CXXFLAGS) -Isrc -o $@ tests/test_aircraftconnectivity.cpp
+$(BUILD)/test_aircraftbodymodel: tests/test_aircraftbodymodel.cpp src/aircraftbodymodel.cpp src/mechanicalmodel.cpp src/aircraftbodymodel.h src/vehiclebodylayout.h src/aircraftconnectivity.h src/skinmodel.h src/boundsindex.h src/materialmodel.h src/vec3.h | $(BUILD)
+	$(CXX) $(CXXFLAGS) -Isrc -o $@ tests/test_aircraftbodymodel.cpp src/aircraftbodymodel.cpp src/mechanicalmodel.cpp
+$(BUILD)/test_dodo_body_assets: tests/test_dodo_body_assets.cpp tests/test_dodomodel.cpp tests/test_airportjetmodel.cpp src/aircraftbodymodel.cpp src/mechanicalmodel.cpp src/aircraftconnectivity.h $(wildcard src/*.h) tools/bake/gamefiles.cpp | $(BUILD)
+	$(CXX) $(CXXFLAGS) -Isrc -o $@ tests/test_dodo_body_assets.cpp src/aircraftbodymodel.cpp src/mechanicalmodel.cpp src/firemodel.cpp tools/bake/gamefiles.cpp -lz
+test: test-aircraft-body
+test-aircraft-body: $(BUILD)/test_vehiclebodymodel $(BUILD)/test_aircraftconnectivity $(BUILD)/test_aircraftbodymodel $(BUILD)/test_boundsindex $(BUILD)/test_aircraftsections
+	$(BUILD)/test_vehiclebodymodel
+	$(BUILD)/test_aircraftconnectivity
+	$(BUILD)/test_aircraftbodymodel
+	$(BUILD)/test_boundsindex
+	$(BUILD)/test_aircraftsections
+test-game-assets: test-dodo-body-assets
+test-dodo-body-assets: $(BUILD)/test_dodo_body_assets
+	GAMEDATA="$(GAMEDATA)" $(BUILD)/test_dodo_body_assets
+$(BUILD)/test_wing_mapping: tests/test_wing_mapping.cpp tools/host/WingMapping.h | $(BUILD)
+	$(CXX) $(CXXFLAGS) -o $@ tests/test_wing_mapping.cpp
+test: test-wing-mapping
+test-wing-mapping: $(BUILD)/test_wing_mapping
+	$(BUILD)/test_wing_mapping
 
 $(BUILD)/test_jetaudio: tests/test_jetaudio.cpp src/jetaudio.cpp $(wildcard src/*.h) | $(BUILD)
 	$(CXX) $(CXXFLAGS) -Isrc -o $@ tests/test_jetaudio.cpp
@@ -866,3 +904,171 @@ test-game-assets: $(BUILD)/test_crashdamage_native $(BUILD)/test_panelcollision
 test: test-physics-app
 test-physics-app:
 	python3 -m unittest discover -s tests -p test_physics_app_install.py
+
+# Source-host integration support; the existing physics checks remain separate.
+$(BUILD)/test_host_stream_semaphores: tests/test_host_stream_semaphores.cpp tools/host/PrivateSemaphore.h | $(BUILD)
+	$(CXX) $(CXXFLAGS) -Itools/host -o $@ $<
+$(BUILD)/test_host_controller_copy: tests/test_host_controller_copy.cpp tools/host/ControllerButtons.h | $(BUILD)
+	$(CXX) $(CXXFLAGS) -Itools/host -o $@ $<
+$(BUILD)/test_host_compressed_texture: tests/test_host_compressed_texture.cpp tools/host/CompressedTexture.h | $(BUILD)
+	$(CXX) $(CXXFLAGS) -Itools/host -o $@ $<
+.PHONY: test-host-support
+test: test-host-support
+$(BUILD)/test_host_game_cache: tests/test_host_game_cache.cpp tools/host/GameCache.h | $(BUILD)
+	$(CXX) -std=c++17 -O2 $< -o $@
+test-host-support: $(BUILD)/test_host_stream_semaphores $(BUILD)/test_host_controller_copy $(BUILD)/test_host_compressed_texture $(BUILD)/test_host_game_cache
+	$(BUILD)/test_host_stream_semaphores
+	$(BUILD)/test_host_controller_copy
+	$(BUILD)/test_host_compressed_texture
+	$(BUILD)/test_host_game_cache
+	python3 -I tests/test_source_calls.py
+	python3 -I tests/test_source_hook_slots.py
+
+$(BUILD)/test_boundsindex: tests/test_boundsindex.cpp src/boundsindex.h src/vec3.h | $(BUILD)
+	$(CXX) $(CXXFLAGS) -Isrc -o $@ tests/test_boundsindex.cpp
+
+$(BUILD)/test_bodycontact: tests/test_bodycontact.cpp tools/host/BodyContact.h src/vec3.h | $(BUILD)
+	$(CXX) $(CXXFLAGS) -Isrc -Itools/host -o $@ tests/test_bodycontact.cpp
+test: test-bodycontact
+test-bodycontact: $(BUILD)/test_bodycontact
+	$(BUILD)/test_bodycontact
+
+$(BUILD)/test_bodyloads: tests/test_bodyloads.cpp tools/host/BodyLoads.h src/vec3.h | $(BUILD)
+	$(CXX) $(CXXFLAGS) -Isrc -Itools/host -o $@ tests/test_bodyloads.cpp
+test: test-bodyloads
+test-bodyloads: $(BUILD)/test_bodyloads
+	$(BUILD)/test_bodyloads
+
+$(BUILD)/test_aircraftsections: tests/test_aircraftsections.cpp src/aircraftbodymodel.cpp src/mechanicalmodel.cpp src/aircraftbodymodel.h src/vehiclebodylayout.h src/aircraftconnectivity.h src/skinmodel.h src/boundsindex.h src/vec3.h | $(BUILD)
+	$(CXX) $(CXXFLAGS) -Isrc -o $@ tests/test_aircraftsections.cpp src/mechanicalmodel.cpp
+
+$(BUILD)/test_vehicle_body_assets: tests/test_vehicle_body_assets.cpp tests/test_airportjetmodel.cpp src/airportjetmodel.cpp src/aircraftbodymodel.cpp src/mechanicalmodel.cpp src/projectilemodel.cpp src/firemodel.cpp $(wildcard src/*.h) tools/bake/gamefiles.h tools/bake/gamefiles.cpp | $(BUILD)
+	$(CXX) $(CXXFLAGS) -Isrc -o $@ tests/test_vehicle_body_assets.cpp src/aircraftbodymodel.cpp src/mechanicalmodel.cpp src/projectilemodel.cpp src/firemodel.cpp tools/bake/gamefiles.cpp -lz
+.PHONY: test-vehicle-body-assets
+test-vehicle-body-assets: $(BUILD)/test_vehicle_body_assets
+	$(BUILD)/test_vehicle_body_assets
+test-game-assets: test-vehicle-body-assets
+
+$(BUILD)/test_vehiclebodymodel: tests/test_vehiclebodymodel.cpp src/aircraftbodymodel.cpp src/mechanicalmodel.cpp $(wildcard src/*.h) | $(BUILD)
+	$(CXX) $(CXXFLAGS) -Isrc -o $@ tests/test_vehiclebodymodel.cpp src/aircraftbodymodel.cpp src/mechanicalmodel.cpp
+
+$(BUILD)/test_source_vehicle_shots: tests/test_source_vehicle_shots.cpp tests/test_shotcollision.cpp src/shotcollision.cpp tools/bake/visualmodel.cpp tools/bake/gamefiles.cpp src/mapdata.cpp $(wildcard src/*.h) | $(BUILD)
+	$(CXX) $(CXXFLAGS) -Isrc -o $@ tests/test_source_vehicle_shots.cpp tools/bake/visualmodel.cpp tools/bake/gamefiles.cpp src/mapdata.cpp -lz
+
+$(BUILD)/test_source_vehicle_consumers: tests/test_source_vehicle_consumers.cpp tests/test_carmechanics.cpp src/carmechanics.cpp src/mechanicalmodel.cpp src/projectilemodel.cpp src/partsmodel.cpp $(wildcard src/*.h) | $(BUILD)
+	$(CXX) $(CXXFLAGS) -Isrc -o $@ tests/test_source_vehicle_consumers.cpp src/mechanicalmodel.cpp src/projectilemodel.cpp src/partsmodel.cpp
+
+$(BUILD)/test_source_vehicle_glass: tests/test_source_vehicle_glass.cpp tests/test_carglass.cpp src/carglass.cpp src/glassmodel.cpp src/dentmodel.cpp $(wildcard src/*.h) | $(BUILD)
+	$(CXX) $(CXXFLAGS) -Isrc -o $@ tests/test_source_vehicle_glass.cpp src/glassmodel.cpp src/dentmodel.cpp
+
+$(BUILD)/test_source_vehicle_parts: tests/test_source_vehicle_parts.cpp tests/test_carparts.cpp src/carparts.cpp src/partsmodel.cpp $(wildcard src/*.h) | $(BUILD)
+	$(CXX) $(CXXFLAGS) -Isrc -o $@ tests/test_source_vehicle_parts.cpp src/partsmodel.cpp
+
+$(BUILD)/test_source_vehicle_contacts: tests/test_source_vehicle_contacts.cpp tests/test_cardeform.cpp src/carimpact.cpp src/dentmodel.cpp src/partsmodel.cpp $(wildcard src/*.h) | $(BUILD)
+	$(CXX) $(CXXFLAGS) -Isrc -o $@ tests/test_source_vehicle_contacts.cpp src/dentmodel.cpp src/partsmodel.cpp
+
+.PHONY: test-source-vehicle-routing
+test-source-vehicle-routing: $(BUILD)/test_source_vehicle_shots $(BUILD)/test_source_vehicle_consumers $(BUILD)/test_source_vehicle_glass $(BUILD)/test_source_vehicle_parts $(BUILD)/test_source_vehicle_contacts $(BUILD)/test_source_aircraft_wheels
+	$(BUILD)/test_source_vehicle_shots
+	$(BUILD)/test_source_vehicle_consumers
+	$(BUILD)/test_source_vehicle_glass
+	$(BUILD)/test_source_vehicle_parts
+	$(BUILD)/test_source_vehicle_contacts
+	$(BUILD)/test_source_aircraft_wheels
+test: test-source-vehicle-routing
+
+$(BUILD)/test_source_aircraft_wheels: tests/test_source_aircraft_wheels.cpp tests/test_jetwheels.cpp src/jetwheels.cpp $(wildcard src/*.h) | $(BUILD)
+	$(CXX) $(CXXFLAGS) -Isrc -o $@ tests/test_source_aircraft_wheels.cpp
+
+
+$(BUILD)/test_bodyaffine: tests/test_bodyaffine.cpp tools/host/BodyAffine.h | $(BUILD)
+	$(CXX) $(CXXFLAGS) -Isrc -o $@ tests/test_bodyaffine.cpp
+.PHONY: test-bodyaffine
+test-bodyaffine: $(BUILD)/test_bodyaffine
+	$(BUILD)/test_bodyaffine
+test: test-bodyaffine
+
+$(BUILD)/test_vehicle_crash_tuning: tests/test_vehicle_crash_tuning.cpp tests/test_vehicle_body_assets.cpp tests/test_airportjetmodel.cpp src/airportjetmodel.cpp src/aircraftbodymodel.cpp src/mechanicalmodel.cpp src/projectilemodel.cpp src/firemodel.cpp tools/host/BodyContact.h $(wildcard src/*.h) tools/bake/gamefiles.h tools/bake/gamefiles.cpp | $(BUILD)
+	$(CXX) $(CXXFLAGS) -Isrc -Itools/host -o $@ tests/test_vehicle_crash_tuning.cpp src/aircraftbodymodel.cpp src/mechanicalmodel.cpp src/projectilemodel.cpp src/firemodel.cpp tools/bake/gamefiles.cpp -lz
+.PHONY: test-vehicle-crash-tuning
+test-vehicle-crash-tuning: $(BUILD)/test_vehicle_crash_tuning
+	GAMEDATA="$(GAMEDATA)" $(BUILD)/test_vehicle_crash_tuning
+
+$(BUILD)/test_bodypublication: tests/test_bodypublication.cpp tools/host/BodyPublication.h src/vec3.h | $(BUILD)
+	$(CXX) $(CXXFLAGS) -Isrc -Itools/host -o $@ tests/test_bodypublication.cpp
+.PHONY: test-bodypublication
+test-bodypublication: $(BUILD)/test_bodypublication
+	$(BUILD)/test_bodypublication
+
+$(BUILD)/test_bodypublication_assets: tests/test_bodypublication_assets.cpp tests/test_vehicle_body_assets.cpp tests/test_airportjetmodel.cpp tools/host/BodyPublication.h tools/host/BodyAffine.h src/airportjetmodel.cpp src/aircraftbodymodel.cpp src/mechanicalmodel.cpp src/projectilemodel.cpp src/firemodel.cpp $(wildcard src/*.h) tools/bake/gamefiles.h tools/bake/gamefiles.cpp | $(BUILD)
+	$(CXX) $(CXXFLAGS) -Isrc -Itools/host -o $@ tests/test_bodypublication_assets.cpp src/aircraftbodymodel.cpp src/mechanicalmodel.cpp src/projectilemodel.cpp src/firemodel.cpp tools/bake/gamefiles.cpp -lz
+.PHONY: test-bodypublication-assets
+test-bodypublication-assets: $(BUILD)/test_bodypublication_assets
+	GAMEDATA="$(GAMEDATA)" $(BUILD)/test_bodypublication_assets
+
+$(BUILD)/test_body_shift_contact: tests/test_body_shift_contact.cpp tools/host/BodyContact.h src/vec3.h | $(BUILD)
+	$(CXX) $(CXXFLAGS) -Isrc -Itools/host -o $@ tests/test_body_shift_contact.cpp
+.PHONY: test-body-shift-contact
+test-body-shift-contact: $(BUILD)/test_body_shift_contact
+	$(BUILD)/test_body_shift_contact
+
+# Track B: material rotor strike/presentation and material-derived vehicle health.
+$(BUILD)/test_heli_material: tests/test_heli_material.cpp tests/test_flightmodelhook.cpp src/flightmodel.cpp src/planeflight.cpp $(wildcard src/*.h) | $(BUILD)
+	$(CXX) $(CXXFLAGS) -Isrc -o $@ tests/test_heli_material.cpp
+$(BUILD)/test_rotor_alpha: tests/test_rotor_alpha.cpp src/aircraftbodybridge.h tools/host/regular-engine.patch | $(BUILD)
+	$(CXX) $(CXXFLAGS) -Isrc -o $@ tests/test_rotor_alpha.cpp
+$(BUILD)/test_carfire_material: tests/test_carfire_material.cpp tests/test_carfire.cpp src/carfire.cpp src/firemodel.cpp $(wildcard src/*.h) | $(BUILD)
+	$(CXX) $(CXXFLAGS) -Isrc -o $@ tests/test_carfire_material.cpp src/firemodel.cpp
+$(BUILD)/test_blade_strike_assets: tests/test_blade_strike_assets.cpp tests/test_vehicle_body_assets.cpp tests/test_airportjetmodel.cpp src/airportjetmodel.cpp src/aircraftbodymodel.cpp src/mechanicalmodel.cpp src/projectilemodel.cpp src/firemodel.cpp $(wildcard src/*.h) tools/bake/gamefiles.h tools/bake/gamefiles.cpp | $(BUILD)
+	$(CXX) $(CXXFLAGS) -Isrc -o $@ tests/test_blade_strike_assets.cpp src/aircraftbodymodel.cpp src/mechanicalmodel.cpp src/projectilemodel.cpp src/firemodel.cpp tools/bake/gamefiles.cpp -lz
+.PHONY: test-material-rotor-health
+test-material-rotor-health: $(BUILD)/test_heli_material $(BUILD)/test_rotor_alpha $(BUILD)/test_carfire_material $(BUILD)/test_blade_strike_assets
+	$(BUILD)/test_heli_material
+	$(BUILD)/test_rotor_alpha
+	$(BUILD)/test_carfire_material
+	GAMEDATA="$(GAMEDATA)" $(BUILD)/test_blade_strike_assets
+test: test-material-rotor-health
+
+$(BUILD)/test_learjet_body: tests/test_learjet_body.cpp tests/test_dodomodel.cpp tests/test_airportjetmodel.cpp src/airportjetmodel.cpp src/aircraftbodymodel.cpp src/mechanicalmodel.cpp src/firemodel.cpp $(wildcard src/*.h) tools/bake/gamefiles.h tools/bake/gamefiles.cpp | $(BUILD)
+	$(CXX) $(CXXFLAGS) -Isrc -o $@ tests/test_learjet_body.cpp src/aircraftbodymodel.cpp src/mechanicalmodel.cpp src/firemodel.cpp tools/bake/gamefiles.cpp -lz
+.PHONY: test-learjet-body
+test-learjet-body: $(BUILD)/test_learjet_body
+	GAMEDATA="$(GAMEDATA)" $(BUILD)/test_learjet_body
+
+$(BUILD)/test_vehicle_glass_stopgap: tests/test_vehicle_glass_stopgap.cpp tests/test_vehicle_body_assets.cpp tests/test_airportjetmodel.cpp src/airportjetmodel.cpp src/aircraftbodymodel.cpp src/mechanicalmodel.cpp src/projectilemodel.cpp src/firemodel.cpp $(wildcard src/*.h) tools/bake/gamefiles.h tools/bake/gamefiles.cpp | $(BUILD)
+	$(CXX) $(CXXFLAGS) -Isrc -o $@ tests/test_vehicle_glass_stopgap.cpp src/aircraftbodymodel.cpp src/mechanicalmodel.cpp src/projectilemodel.cpp src/firemodel.cpp tools/bake/gamefiles.cpp -lz
+.PHONY: test-vehicle-glass-stopgap
+test-vehicle-glass-stopgap: $(BUILD)/test_vehicle_glass_stopgap
+	GAMEDATA="$(GAMEDATA)" $(BUILD)/test_vehicle_glass_stopgap
+
+# Playtest follow-up (2026-11-10): register the new suites with the aggregates.
+test: test-bodypublication test-body-shift-contact
+test-game-assets: test-vehicle-crash-tuning test-bodypublication-assets test-learjet-body test-vehicle-glass-stopgap
+
+$(BUILD)/test_body_contact_depth: tests/test_body_contact_depth.cpp tools/host/BodyContact.h src/vec3.h | $(BUILD)
+	$(CXX) $(CXXFLAGS) -Isrc -Itools/host -o $@ tests/test_body_contact_depth.cpp
+.PHONY: test-body-contact-depth
+test-body-contact-depth: $(BUILD)/test_body_contact_depth
+	$(BUILD)/test_body_contact_depth
+test: test-body-contact-depth
+
+$(BUILD)/test_body_yield: tests/test_body_yield.cpp tests/test_vehicle_crash_tuning.cpp tests/test_vehicle_body_assets.cpp tests/test_airportjetmodel.cpp src/airportjetmodel.cpp src/aircraftbodymodel.cpp src/mechanicalmodel.cpp src/projectilemodel.cpp src/firemodel.cpp tools/host/BodyContact.h $(wildcard src/*.h) tools/bake/gamefiles.h tools/bake/gamefiles.cpp | $(BUILD)
+	$(CXX) $(CXXFLAGS) -Isrc -Itools/host -o $@ tests/test_body_yield.cpp src/aircraftbodymodel.cpp src/mechanicalmodel.cpp src/projectilemodel.cpp src/firemodel.cpp tools/bake/gamefiles.cpp -lz
+.PHONY: test-body-yield
+test-body-yield: $(BUILD)/test_body_yield
+	GAMEDATA="$(GAMEDATA)" $(BUILD)/test_body_yield
+test-game-assets: test-body-yield
+# Material probes inside a solid box exit by the nearest face (palm trunk drop).
+$(BUILD)/test_body_inside_box: tests/test_body_inside_box.cpp tools/host/BodyContact.h src/vec3.h | $(BUILD)
+	$(CXX) $(CXXFLAGS) -Isrc -Itools/host -o $@ tests/test_body_inside_box.cpp
+.PHONY: test-body-inside-box
+test-body-inside-box: $(BUILD)/test_body_inside_box
+	$(BUILD)/test_body_inside_box
+test: test-body-inside-box
+# Material vertices just below a floor are pushed back up (inverted-car sink).
+$(BUILD)/test_body_sunk_support: tests/test_body_sunk_support.cpp tools/host/BodyContact.h src/vec3.h | $(BUILD)
+	$(CXX) $(CXXFLAGS) -Isrc -Itools/host -o $@ tests/test_body_sunk_support.cpp
+.PHONY: test-body-sunk-support
+test-body-sunk-support: $(BUILD)/test_body_sunk_support
+	$(BUILD)/test_body_sunk_support
+test: test-body-sunk-support

@@ -43,7 +43,9 @@ void *ResolveAnchor(void *atomic,void *data){auto &q=*static_cast<Resolve *>(dat
 }
 bool Grips(uint8_t *car,uint8_t *ped,wheelgrip::Grip &left,wheelgrip::Grip &right){
  if(!gReady||!car||!ped||!game::IsAircraft(car)||!game::PedInVehicle(ped)||game::PedVehicle(ped)!=car||*reinterpret_cast<uint8_t **>(car+0x218)!=ped)return false;void *clump=game::EntityClump(car);if(!clump||gType(clump)!=2)return false;void *root=gRoot(clump);if(!root)return false;
- const auto m=reinterpret_cast<float *>(car+8);const auto d=Sub(V(*reinterpret_cast<Vec3 *>(ped+0x38)),V(*reinterpret_cast<Vec3 *>(car+0x38)));const vm::Vec3 seat{Dot(d,{m[0],m[1],m[2]}),Dot(d,{m[4],m[5],m[6]}),Dot(d,{m[8],m[9],m[10]})};if(!Finite(seat))return false;
+ const auto m=reinterpret_cast<float *>(car+8);
+ if(game::EntityModel(car)==181){static auto named=reinterpret_cast<bool(*)(void*,Vec3*,Vec3*,Vec3*)>(dlsym(RTLD_DEFAULT,"VCSourceDodoGrips"));Vec3 a,b,up;if(named&&named(clump,&a,&b,&up)){vm::Vec3 forward{m[4],m[5],m[6]};left=wheelgrip::OnStick(V(a),V(up),forward,.019f,true);right=wheelgrip::OnStick(V(b),V(up),forward,.019f,false);return Finite(left.hand.pos)&&Finite(right.hand.pos);}}
+ const auto d=Sub(V(*reinterpret_cast<Vec3 *>(ped+0x38)),V(*reinterpret_cast<Vec3 *>(car+0x38)));const vm::Vec3 seat{Dot(d,{m[0],m[1],m[2]}),Dot(d,{m[4],m[5],m[6]}),Dot(d,{m[8],m[9],m[10]})};if(!Finite(seat))return false;
  Resolve resolved{gAnchor,root};if(gAnchor.car==car&&gAnchor.model==game::EntityModel(car)&&gAnchor.clump==clump)gEach(clump,ResolveAnchor,&resolved);
  if(!resolved.found){Search search{car,root,seat};gEach(clump,Find,&search);gAnchor=search.anchor;if(!gAnchor.atomic)return false;gEach(clump,ResolveAnchor,&resolved);if(!resolved.found)return false;Log("aircraft controls: model %d tracking stick at %.3f %.3f %.3f",gAnchor.model,resolved.point.x,resolved.point.y,resolved.point.z);}
  const auto point=Transform(m,resolved.point),origin=Transform(m,{});const auto up=vm::Normal(Sub(Transform(m,resolved.up),origin)),forward=vm::Normal(vm::Vec3{m[4],m[5],m[6]});

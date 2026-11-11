@@ -69,7 +69,7 @@ bool Hook_PickupUpdate(uint8_t *pickup, uint8_t *ped, uint8_t *vehicle, int play
 void Hook_SetHelpMessage(uint16_t *text, bool quick, bool forever)
 {
 	const uintptr_t site =
-	    reinterpret_cast<uintptr_t>(__builtin_return_address(0)) - reinterpret_cast<uintptr_t>(hooks::ImageBase());
+	    hooks::ReturnOffset(__builtin_return_address(0));
 	if (gOffer == Offer::kNone || !text || site != kForSaleHelpSite) {
 		orig_SetHelpMessage(text, quick, forever);
 		return;

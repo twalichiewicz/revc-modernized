@@ -215,7 +215,7 @@ void Hook_InsertKeys(uint16_t *text)
 	if (!text)
 		return;
 	const uintptr_t site =
-	    reinterpret_cast<uintptr_t>(__builtin_return_address(0)) - reinterpret_cast<uintptr_t>(hooks::ImageBase());
+	    hooks::ReturnOffset(__builtin_return_address(0));
 	const bool help = site == kSetHelpMessageSite;
 	if (help)
 		Copy(gHelpRaw, text);

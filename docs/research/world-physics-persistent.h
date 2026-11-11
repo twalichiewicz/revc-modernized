@@ -11,6 +11,8 @@
 #include <Eigen/Eigenvalues>
 #include <Eigen/SparseCholesky>
 #include <set>
+#include <functional>
+#include <numeric>
 #include "world-physics-rigid.h"
 namespace persistent {
 using Matrix=Eigen::Matrix<double,Eigen::Dynamic,3,Eigen::RowMajor>;
@@ -21,6 +23,11 @@ struct Options {
     double gap=.002,activation=.02,contactStiffness=1e6,velocityTolerance=1e-8;
     double maxRigidRotation=.25,geometryTolerance=1e-10;
     int maxNewton=80,maxBacktracks=32,maxSubdivisions=10;
+    // Opt-in for authored assemblies with overlapping render subcomponents.
+    // Intra-fragment self contact is excluded; broken fragments still collide.
+    bool excludeConnectedSelfContact=false;
+    bool linearAabbCulling=false;
+
 };
 struct Pin {structure::Asset *asset;int node;};
 struct Stats {
@@ -38,6 +45,7 @@ struct Geometry {
     std::unique_ptr<ipc::CollisionMesh> mesh;
     std::vector<std::array<int,2>> edges;
     std::vector<std::array<int,3>> faces;
+    std::function<bool(size_t,size_t)> canCollide;
 };
 struct Evaluation {double value=0,contact=0;Vector gradient;Sparse hessian;int contacts=0;};
 class Stepper {
@@ -138,7 +146,18 @@ class Stepper {
         for(auto pair:edges){e(row,0)=pair.first;e(row,1)=pair.second;g.edges.push_back({pair.first,pair.second});++row;}
         for(int i=0;i<int(g.faces.size());++i)for(int j=0;j<3;++j)f(i,j)=g.faces[i][j];
         g.mesh=std::make_unique<ipc::CollisionMesh>(reference,e,f);
-        g.mesh->can_collide=[this](size_t a,size_t b){return owners[a]<0||owners[a]!=owners[b];};
+        std::vector<int> groups(nodes.size());std::iota(groups.begin(),groups.end(),0);
+        auto root=[&](int i){while(groups[i]!=i)i=groups[i];return i;};
+        if(options.excludeConnectedSelfContact)for(int i=0;i<int(members.size());++i)
+            if(!s.bars[i].broken)groups[root(members[i].a)]=root(members[i].b);
+        for(int i=0;i<int(groups.size());++i)groups[i]=root(i);
+        g.canCollide=[this,groups](size_t a,size_t b){
+            if(owners[a]>=0&&owners[a]==owners[b])return false;
+            if(options.excludeConnectedSelfContact&&a<groups.size()&&b<groups.size()&&
+               (groups[a]==groups[b]||(fixed[a]&&fixed[b])))return false;
+            return true;
+        };
+        g.mesh->can_collide=g.canCollide;
         g.mesh->set_vertex_thickness(Vector::Constant(mass.size(),options.gap/2));
         return g;
     }
@@ -177,6 +196,23 @@ class Stepper {
             bool sameRigid=owners[ids[0]]>=0;
             for(int k=0;k<4;++k)if(ids[k]>=0){p[k]=paths[ids[k]].get();sameRigid&=owners[ids[k]]==owners[ids[0]];}
             if(sameRigid)return;
+            if(options.excludeConnectedSelfContact){
+                int split=primitive==continuous::Primitive::EdgeEdge?2:1;bool eligible=false;
+                for(int i=0;i<split;++i)for(int j=split;j<4;++j)
+                    if(ids[i]>=0&&ids[j]>=0)eligible|=g.canCollide(ids[i],ids[j]);
+                if(!eligible)return;
+            }
+            if(options.linearAabbCulling){
+                const int count=primitive==continuous::Primitive::PointPoint?2:primitive==continuous::Primitive::PointEdge?3:4;
+                const int split=primitive==continuous::Primitive::EdgeEdge?2:1;
+                Eigen::Vector3d lo[2]={Eigen::Vector3d::Constant(INFINITY),Eigen::Vector3d::Constant(INFINITY)},hi[2]={Eigen::Vector3d::Constant(-INFINITY),Eigen::Vector3d::Constant(-INFINITY)};
+                bool linear=true;double scale=1;
+                for(int i=0;i<count;++i){auto path=continuous::directed::ExactLinear(p[i]);if(!path){linear=false;break;}for(auto at:{path->from,path->to}){int side=i<split?0:1;lo[side]=lo[side].cwiseMin(at);hi[side]=hi[side].cwiseMax(at);scale=std::max(scale,at.cwiseAbs().maxCoeff());}}
+                // Linear convex primitives stay within their endpoint boxes.
+                // Inflate the rejection bound, preserving the same CCD gap.
+                const double bound=options.gap+256*std::numeric_limits<double>::epsilon()*scale;
+                if(linear&&((lo[0]-hi[1]).maxCoeff()>bound||(lo[1]-hi[0]).maxCoeff()>bound))return;
+            }
             auto r=continuous::Sweep(primitive,p,options.gap,1024,options.geometryTolerance);
             if(r.hit)fraction=std::min(fraction,r.time);
         };
@@ -349,7 +385,7 @@ class Stepper {
         double work=0;for(int i=0;i<q.rows();++i)work+=forces.row(i).dot(q.row(i)-old.q.row(i));
         double loss=Energy(old,geometry)+work-Energy(next,newGeometry);
         if(!std::isfinite(work)||!std::isfinite(loss))throw std::invalid_argument("Unrepresentable work/loss receipt");
-        if(loss< -1e-8*(1+std::abs(Energy(old,geometry))+std::abs(work)))throw std::runtime_error("Contact interval gained energy");
+        if(loss< -1e-8*(1+std::abs(Energy(old,geometry))+std::abs(work))){char message[240];std::snprintf(message,sizeof(message),"Contact interval gained energy loss=%.17g before=%.17g after=%.17g work=%.17g dt=%.17g",loss,Energy(old,geometry),Energy(next,newGeometry),work,dt);throw std::runtime_error(message);}
         stats.externalWork+=work;stats.numericalLoss+=loss;stats.contactEnergy=after;stats.contactRelease=next.contactRelease;
         Eigen::Vector3d sum=Eigen::Vector3d::Zero(),torque=sum;
         for(int i=0;i<q.rows();++i) {
@@ -388,7 +424,10 @@ class Stepper {
     }
   public:
     double time=0;
-    Stepper(World &w,std::vector<structure::Asset*> participants,std::vector<Pin> pins={},Options settings={},std::vector<RigidBox*> managed={})
+    double ReleasedContactEnergy()const{return released;}
+    double ContactEnergy()const{auto state=Snapshot();auto geometry=Mesh(state);return Potential(state,state.q,geometry,false).contact;}
+    void AccountReleasedContact(double energy){if(!std::isfinite(energy)||energy<0||!std::isfinite(released+energy))throw std::invalid_argument("Invalid contact release receipt");released+=energy;}
+    Stepper(World &w,std::vector<structure::Asset*> participants,std::vector<Pin> pins={},Options settings={},std::vector<RigidBox*> managed={},const Matrix &contactReference=Matrix(),double releasedEnergy=0)
         :world(w),assets(std::move(participants)),options(settings),rigids(std::move(managed)) {
         if((assets.empty()&&rigids.empty())||!std::isfinite(options.gap)||!std::isfinite(options.activation)||!std::isfinite(options.contactStiffness)||!std::isfinite(options.velocityTolerance)||
            !std::isfinite(options.geometryTolerance)||options.geometryTolerance<=0||options.geometryTolerance>options.gap/10||
@@ -422,6 +461,8 @@ class Stepper {
         auto &registered=world.world->getSoftBodyArray();if(registered.size()!=int(bodies.size()))throw std::invalid_argument("Island does not own all registered soft participants");
         for(int i=0;i<registered.size();++i)if(!bodies.count(registered[i]))throw std::invalid_argument("Unowned structural participant");
         reference=Snapshot().q;
+        if(contactReference.size()){if(contactReference.rows()!=reference.rows()||contactReference.cols()!=3||!contactReference.allFinite())throw std::invalid_argument("Invalid retained contact reference");reference=contactReference;}
+        if(!std::isfinite(releasedEnergy)||releasedEnergy<0)throw std::invalid_argument("Invalid retained contact release");released=releasedEnergy;
         ValidateIsland();
         ValidateSolidGeometry(Snapshot());
     }

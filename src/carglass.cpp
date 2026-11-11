@@ -1,6 +1,7 @@
 #include "carglass.h"
 #include "glassmodel.h"
 #include "skinmodel.h"
+#include "aircraftbodyclient.h"
 #include "game.h"
 #include "config.h"
 #include "hooks.h"
@@ -43,6 +44,14 @@ struct Part {void *atomic,*holder,*copy;size_t bytes;std::vector<Vec3> offsets;s
 struct Car {uint8_t *car;int ref,model;void *clump;uint8_t broken=0;std::vector<Part> parts;bool dented=false;};
 std::vector<Car> gCars;
 size_t gBytes;
+bool SourceOwned(uint8_t *v){
+ if(aircraftbodyclient::Owned(v))return true;
+#ifdef VC_SOURCE_UUID_BYTES
+ static auto owns=reinterpret_cast<bool(*)(const void*)>(dlsym(RTLD_MAIN_ONLY,"VCSourceWingOwns"));return owns&&owns(v);
+#else
+ (void)v;return false;
+#endif
+}
 bool Finite(Vec3 p){return std::isfinite(p.x)&&std::isfinite(p.y)&&std::isfinite(p.z);}
 Vec3 Sub(Vec3 a,Vec3 b){return {a.x-b.x,a.y-b.y,a.z-b.z};}
 Vec3 Cross(Vec3 a,Vec3 b){return {a.y*b.z-a.z*b.y,a.z*b.x-a.x*b.z,a.x*b.y-a.y*b.x};}
@@ -63,7 +72,7 @@ int Ref(uint8_t *v)
 }
 bool Eligible(uint8_t *v)
 {
- return Ref(v)>=0&&(game::EntityFlags(v)&7)==2&&*reinterpret_cast<int *>(v+0x348)==0&&
+ return !SourceOwned(v)&&Ref(v)>=0&&(game::EntityFlags(v)&7)==2&&*reinterpret_cast<int *>(v+0x348)==0&&
         !game::IsAircraft(v)&&game::EntityModel(v)!=171&&game::EntityClump(v)&&(v[0x297]&0x40);
 }
 bool Same(const Car &c){return Ref(c.car)==c.ref&&game::EntityModel(c.car)==c.model&&game::EntityClump(c.car)==c.clump;}
@@ -355,11 +364,12 @@ void Bumper(uint8_t *v,int node,int panel,bool noFlying)
    for(auto pane:{Pane::Rear,Pane::LeftRear,Pane::RightRear})Break(v,pane,hit);
   }catch(const std::bad_alloc &){}
 }
-void Fix(uint8_t *v){Forget(v,true);gFix(v);}
+void Fix(uint8_t *v){Forget(v,!SourceOwned(v));gFix(v);}
 void Delete(uint8_t *v){Forget(v,false);gDelete(v);}
 } // namespace
 bool Dent(uint8_t *v,const dentmodel::Impact &hit)
 {
+ if(SourceOwned(v))return false;
  dentmodel::Impact checked;
  if(!gReady||!gConfig.carDeformation||(!Eligible(v)&&!(Ref(v)>=0&&(game::EntityFlags(v)&7)==2&&game::IsAircraft(v)&&game::EntityClump(v)&&(v[0x297]&0x40)))||game::EntityModel(v)==162||
     (game::EntityFlags(v)&(1u<<27))||!dentmodel::Make(hit.point,hit.inward,3+hit.depth/.018f,checked))return false;
@@ -367,6 +377,7 @@ bool Dent(uint8_t *v,const dentmodel::Impact &hit)
 }
 void Bullet(uint8_t *v,const void *atomic,int triangle,Vec3 hit,Vec3 normal)
 {
+ if(SourceOwned(v))return;
  if(!gReady||!gConfig.carGlass||!Eligible(v)||(game::EntityFlags(v)&game::kEntityBulletProof)||!Finite(hit)||!Finite(normal))return;
  Objects objects;rw.atomics(game::EntityClump(v),Gather,&objects);
  // Check identity against the live clump before touching the supplied atomic.
@@ -376,6 +387,7 @@ void Bullet(uint8_t *v,const void *atomic,int triangle,Vec3 hit,Vec3 normal)
 }
 bool SeverSection(uint8_t *v,Vec3 normal,float offset,bool debris)
 {
+ if(SourceOwned(v))return false;
  if(!gReady||!gConfig.carDeformation||Ref(v)<0||(game::EntityFlags(v)&7)!=2||!game::IsAircraft(v)||!game::EntityClump(v)||!(v[0x297]&0x40)||!Finite(normal)||!std::isfinite(offset)||!std::isfinite(skinmodel::Dot(normal,normal))||skinmodel::Dot(normal,normal)<.5f)return false;
  try{
   Collect();auto found=std::find_if(gCars.begin(),gCars.end(),[&](const Car &c){return c.car==v;});if(found==gCars.end()&&gCars.size()>=kMaxCars)return false;
@@ -435,6 +447,7 @@ bool InHole(Vec3 point,const skinmodel::Hole &hole){
 }
 bool Perforate(uint8_t *v,const void *identity,Vec3 hit,Vec3 normal,float budget)
 {
+ if(SourceOwned(v))return false;
  if(!gReady||!gConfig.carDeformation||Ref(v)<0||(game::EntityFlags(v)&7)!=2||(!game::IsAircraft(v)&&!Eligible(v))||!game::EntityClump(v)||!(v[0x297]&0x40)||(game::EntityFlags(v)&game::kEntityBulletProof)||!Finite(hit)||!Finite(normal)||!std::isfinite(budget)||budget<=3)return false;
  try{
   Collect();auto found=std::find_if(gCars.begin(),gCars.end(),[&](const Car &c){return c.car==v;});if(found==gCars.end()&&gCars.size()>=kMaxCars)return false;
@@ -472,6 +485,7 @@ bool Perforate(uint8_t *v,const void *identity,Vec3 hit,Vec3 normal,float budget
 }
 bool Opening(uint8_t *v,Vec3 from,Vec3 to,float &fraction)
 {
+ if(SourceOwned(v))return false;
  if(!gReady||!Finite(from)||!Finite(to)||!std::isfinite(fraction))return false;
  const auto found=std::find_if(gCars.begin(),gCars.end(),[&](const Car &c){return c.car==v&&Same(c);});if(found==gCars.end())return false;
  Objects objects;rw.atomics(found->clump,Gather,&objects);if(!objects.valid)return false;Vec3 a,b;if(!dentmodel::Local(reinterpret_cast<float *>(v+8),from,false,a)||!dentmodel::Local(reinterpret_cast<float *>(v+8),to,false,b))return false;bool hit=false;
@@ -492,7 +506,12 @@ bool Opening(uint8_t *v,Vec3 from,Vec3 to,float &fraction)
   }
  }return hit;
 }
-void Restore(uint8_t *v){Forget(v,true);}
+void Restore(uint8_t *v){
+ if(SourceOwned(v)){Forget(v,false);return;}
+#ifdef VC_SOURCE_UUID_BYTES
+ static auto repair=reinterpret_cast<void(*)(void*)>(dlsym(RTLD_MAIN_ONLY,"VCSourceRepairWing"));if(repair)repair(v);
+#endif
+ Forget(v,true);}
 bool Install()
 {
  if(gReady||(!gConfig.carGlass&&!gConfig.carDeformation))return true;

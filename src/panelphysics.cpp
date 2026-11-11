@@ -3,6 +3,7 @@
 #include "game.h"
 #include "hooks.h"
 #include "dentmodel.h"
+#include "aircraftbodyclient.h"
 #include <algorithm>
 #include <array>
 #include <cmath>
@@ -31,7 +32,7 @@ int Ref(const uint8_t *v,void **binding,size_t stride){
 struct Actor {
  uint8_t *v=nullptr;int ref=-1,model=-1;void *clump=nullptr,*table=nullptr;std::array<float,16> pose{};
  explicit Actor(uint8_t *car){
-  const int r=Ref(car,n.vehicles,0x6f0);if(r<0||!game::api.PoolsGetVehicle||game::api.PoolsGetVehicle(r)!=car||(game::EntityFlags(car)&7)!=2||*reinterpret_cast<const int *>(car+0x348)!=0||game::IsAircraft(car))return;
+  const int r=Ref(car,n.vehicles,0x6f0);if(r<0||!game::api.PoolsGetVehicle||game::api.PoolsGetVehicle(r)!=car||(game::EntityFlags(car)&7)!=2||aircraftbodyclient::Owned(car)||*reinterpret_cast<const int *>(car+0x348)!=0||game::IsAircraft(car))return;
   v=car;ref=r;model=game::EntityModel(car);clump=game::EntityClump(car);table=*reinterpret_cast<void **>(car);std::memcpy(pose.data(),car+8,sizeof pose);
   for(int row:{0,4,8,12})if(!Finite({pose[row],pose[row+1],pose[row+2]}))v=nullptr;
  }

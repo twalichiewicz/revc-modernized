@@ -113,6 +113,39 @@ class InstallTests(unittest.TestCase):
         app_package.restore(self.app,self.backup,self.root/"Archive.app",self.expected,self.expected)
         self.assertEqual(app_package.fingerprint(self.app),self.expected)
 
+    def test_upgrade_preserves_existing_experimental_resources(self):
+        private=self.stage/"Contents/Frameworks/PhysicsTest";resource=self.stage/"Contents/Resources/PhysicsTest"
+        private.mkdir();resource.mkdir(parents=True)
+        (private/"old-library.dylib").write_bytes(b"keep");(resource/"aircraft.txt").write_bytes(b"existing mesh")
+        returned=app_package.experimental_directories(self.stage)
+        self.assertEqual(returned,(private,resource))
+        self.assertEqual((private/"old-library.dylib").read_bytes(),b"keep")
+        self.assertEqual((resource/"aircraft.txt").read_bytes(),b"existing mesh")
+
+    def test_changed_installed_experiment_refuses_upgrade(self):
+        host=self.app/"Contents/MacOS/vcPhysicsHost";host.write_bytes(b"previous test")
+        previous=app_package.fingerprint(self.app);host.write_bytes(b"another user build")
+        with self.assertRaisesRegex(RuntimeError,"changed"):
+            app_package.install(self.stage,self.app,self.backup,previous,lambda p:None)
+        self.assertFalse(self.backup.exists())
+
+    def test_legacy_recovery_record_still_restores_original(self):
+        app_package.install(self.stage,self.app,self.backup,self.expected,lambda p:None)
+        legacy={name:app_package.digest(self.app/name) for name in (*app_package.PROTECTED,"Contents/Info.plist")}
+        app_package.restore(self.app,self.backup,self.root/"Archive.app",legacy,self.expected)
+        self.assertEqual(app_package.fingerprint(self.app),self.expected)
+
+    def test_smoke_requires_physical_strike_and_clear_miss(self):
+        image=self.root/"smoke.ppm";intact=b"P6\n100 100\n255\n"+bytes(30000)
+        image.write_bytes(b"P6\n100 100\n255\n"+bytes([255])*30000)
+        Path(str(image)+".intact.ppm").write_bytes(intact);Path(str(image)+".repaired.ppm").write_bytes(intact)
+        report={"kind":"wing-strike","failures":0,"accepted":323,"fragments":2,"mounts":12,"contacts":1,"miss_mounts":0,"hit_speed":5.2,"miss_speed":6,"native_steps":0}
+        metadata=Path(str(image)+".json");metadata.write_text(json.dumps(report))
+        app_package.check_smoke_results(image)
+        report["contacts"]=0;metadata.write_text(json.dumps(report))
+        with self.assertRaisesRegex(RuntimeError,"physical"):
+            app_package.check_smoke_results(image)
+
 
 @unittest.skipUnless(sys.platform == "darwin" and shutil.which("xcrun"), "native Cocoa launcher requires macOS CLT")
 class LauncherTests(unittest.TestCase):

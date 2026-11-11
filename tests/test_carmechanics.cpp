@@ -23,6 +23,7 @@ alignas(16) uint8_t cars[2][0x6f0]{},pool[24]{},handling[0xdc]{},infos[2][0x260]
 uint8_t flags[2]={1,1};void *poolPointer=pool;std::array<uint8_t *,6500> models{};uint32_t now=1000;
 struct Frame{float m[16]{};};Frame frames[4];int modelClump;
 int fails=0,bursts=0,nativeFixes=0;bool nested=false,repairInside=false,recycleInside=false,throwInside=false,foreignCalc=false,deleteInside=false,repairDuringFrames=false;
+static void *(*extraLookup)(const char *)=nullptr;
 std::array<std::vector<carimpact::Collision>,2> hits;
 float steerAngle=0;float torque[2]{},foreignTorque=0;const uint8_t *retained=nullptr;
 struct WCall {float thrust,brake,grip,toe;CVector direction;};WCall wheels[2][4];
@@ -79,6 +80,7 @@ namespace hooks {void *Chain(const char *s,void *r){using namespace fixture;
  return nullptr;
 }}
 static void *Lookup(void *,const char *s){using namespace fixture;
+ if(extraLookup)if(auto symbol=extraLookup(s))return symbol;
  if(!strcmp(s,"_ZN6CPools15ms_pVehiclePoolE"))return &poolPointer;
  if(!strcmp(s,"_ZN15CClumpModelInfo14GetFrameFromIdEPN2rw5ClumpEi"))return reinterpret_cast<void *>(FrameId);
  if(!strcmp(s,"_Z16RwFrameGetMatrixPN2rw5FrameE"))return reinterpret_cast<void *>(Matrix);

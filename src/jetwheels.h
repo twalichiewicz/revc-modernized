@@ -12,6 +12,13 @@ inline constexpr std::array<Gear,3> kGear{{
  {{1.071306f,-.980299f,-1.867551f},.327233f,.346674f,false}
 }};
 inline constexpr float kTravel=.10f,kTireBottom=-2.194784f;
+// Original deaddodo.dff: separate nose wheel and two tires in wheel_rear.
+inline constexpr std::array<Gear,3> kDodoGear{{
+ {{0,2.649681f,-1.243550f},.258f,.176f,true},
+ {{-1.790860f,-.432198f,-1.243550f},.258f,.176f,false},
+ {{1.790860f,-.432198f,-1.243550f},.258f,.176f,false}
+}};
+inline constexpr float kDodoTireBottom=-1.501550f;
 struct WheelPose {
  float spin=0;         // actual accumulated rotation about localX, radians
  float compression=0;  // wheel center displacement along localZ, metres

@@ -608,8 +608,7 @@ void *Hook_AtomicDefault(void *atomic)
 __attribute__((noinline)) void Hook_AddLight(uint8_t type, CVector pos, CVector direction, float radius, float red,
                                              float green, float blue, uint8_t fog, bool extra)
 {
-	const auto *base = static_cast<const uint8_t *>(hooks::ImageBase());
-	const uint32_t site = uint32_t(static_cast<const uint8_t *>(__builtin_return_address(0)) - base);
+	const uint32_t site = hooks::ReturnOffset(__builtin_return_address(0));
 	if (carlightrules::SuppressCabinLight(camera::InSeat(), gPreRendering && gPreRendering == camera::SeatVehicle(),
 	                                      site))
 		return;

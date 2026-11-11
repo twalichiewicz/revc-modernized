@@ -7,6 +7,7 @@
 #include "partsmodel.h"
 #include "skinmodel.h"
 #include "airframeroute.h"
+#include "aircraftbodyclient.h"
 #include <array>
 #include <cmath>
 #include <cstring>
@@ -81,11 +82,17 @@ void SyncSections(History &h)
   h.lostSections|=bit;h.state.separated|=bit;Log("airframe section loss: ref %d model %d section %d",id.ref,id.model,section);
  }
 }
-airframemodel::Effects Read(const uint8_t *v){Identity id;if(!Identify(v,id)||!Eligible(id))return {};const auto &h=gHistory[size_t(id.ref>>8)];if(Same(id,h.id))return airframemodel::Read(h.state,h.layout);airframemodel::Effects e;e.managed=true;return e;}
-firemodel::Input Fire(const uint8_t *v){Identity id;if(!Identify(v,id)||!Eligible(id))return {};const auto &h=gHistory[size_t(id.ref>>8)];return Same(id,h.id)?airframemodel::Fire(h.state,(v[0x295]&16)!=0):firemodel::Input{};}
-void Burn(uint8_t *v,float dt){Identity id;if(!std::isfinite(dt)||dt<=0||dt>1||!Identify(v,id)||!Eligible(id)||(game::EntityFlags(v)&(1u<<26)))return;if(auto *h=Record(id)){for(int i:{airframemodel::EngineL,airframemodel::EngineR,airframemodel::Electrical,airframemodel::FuelL,airframemodel::FuelR})h->state.damage[i]=std::min(1.f,h->state.damage[i]+.02f*dt);}}
+airframemodel::Effects Read(const uint8_t *v){AircraftBodySnapshot body;if(aircraftbodyclient::Owned(v)){aircraftbodyclient::Read(v,body);airframemodel::Effects e;e.managed=true;e.power=body.power;e.leftLift=body.leftLift;e.rightLift=body.rightLift;e.pitch=body.pitch;e.roll=body.roll;e.yaw=body.yaw;e.rotor=body.rotor;e.antiTorque=body.antiTorque;e.drag=body.drag;return e;}Identity id;if(!Identify(v,id)||!Eligible(id))return {};const auto &h=gHistory[size_t(id.ref>>8)];airframemodel::Effects e;if(Same(id,h.id))e=airframemodel::Read(h.state,h.layout);else e.managed=true;
+#ifdef VC_SOURCE_UUID_BYTES
+ static auto wing=reinterpret_cast<double(*)(const void*)>(dlsym(RTLD_MAIN_ONLY,"VCSourceWingIntegrity"));
+ if(wing&&id.model==181){float remaining=std::clamp(float(wing(v)),0.f,1.f);e.rightLift*=remaining;e.roll*=remaining;e.drag+=1-remaining;}
+#endif
+ return e;}
+firemodel::Input Fire(const uint8_t *v){AircraftBodySnapshot body;if(aircraftbodyclient::Owned(v)){aircraftbodyclient::Read(v,body);firemodel::Input f;f.heat=body.heat;f.fuel=body.fuel;f.engine=body.engine;f.electrical=body.electrical;f.breach=body.breach;f.running=(v[0x295]&16)!=0;return f;}Identity id;if(!Identify(v,id)||!Eligible(id))return {};const auto &h=gHistory[size_t(id.ref>>8)];return Same(id,h.id)?airframemodel::Fire(h.state,(v[0x295]&16)!=0):firemodel::Input{};}
+void Burn(uint8_t *v,float dt){if(aircraftbodyclient::Owned(v)){aircraftbodyclient::Burn(v,dt);return;}Identity id;if(!std::isfinite(dt)||dt<=0||dt>1||!Identify(v,id)||!Eligible(id)||(game::EntityFlags(v)&(1u<<26)))return;if(auto *h=Record(id)){for(int i:{airframemodel::EngineL,airframemodel::EngineR,airframemodel::Electrical,airframemodel::FuelL,airframemodel::FuelR})h->state.damage[i]=std::min(1.f,h->state.damage[i]+.02f*dt);}}
 void Collision(uint8_t *v,Vec3 point,Vec3 inward,float severity)
 {
+ if(aircraftbodyclient::Owned(v))return; // native source already owns accepted impulse work
  Identity id;if(!std::isfinite(severity)||severity<=3||!game::api.timeMs||!Identify(v,id)||!Eligible(id)||(game::EntityFlags(v)&(1u<<27)))return;Observe();auto *h=Record(id);if(!h)return;
  const int region=point.x<h->layout.body.lo.x*.3f?0:point.x>h->layout.body.hi.x*.3f?1:point.y<0?2:3;
  auto &contact=h->contacts[region];const auto now=*game::api.timeMs;
@@ -123,9 +130,10 @@ void Flying(uint8_t *v,int model)
  const auto com=*reinterpret_cast<const Vec3 *>(v+0xe4);if(!finite(com))return;const Vec3 centre{r.x*com.x+f.x*com.y+u.x*com.z,r.y*com.x+f.y*com.y+u.y*com.z,r.z*com.x+f.z*com.y+u.z*com.z};
  auto torque=[&](Vec3 force,Vec3 lever,float amount){gTurn(v,force.x*amount*turnMass,force.y*amount*turnMass,force.z*amount*turnMass,centre.x+lever.x,centre.y+lever.y,centre.z+lever.z);};torque(u,f,pitch);torque(r,u,roll);torque(f,r,yaw);
 }
-void Repair(uint8_t *v){Identity id;if(Identify(v,id))gHistory[size_t(id.ref>>8)]={};carglass::Restore(v);if(game::api.RepairVehicleFire)game::api.RepairVehicleFire(v);}
+void Repair(uint8_t *v){aircraftbodyclient::Repair(v);Identity id;if(Identify(v,id))gHistory[size_t(id.ref>>8)]={};carglass::Restore(v);if(game::api.RepairVehicleFire)game::api.RepairVehicleFire(v);}
 void Tick(uint8_t *v)
 {
+ if(aircraftbodyclient::Owned(v))return;
  Identity id;if(!Identify(v,id)||!Eligible(id,true))return;Observe();auto *h=Record(id);if(!h)return;const float health=game::VehicleHealth(v);
  if(std::isfinite(health)&&health>h->health+1){Repair(v);h=Record(id);if(!h)return;}h->health=health;
  const uint32_t now=game::api.timeMs?*game::api.timeMs:0;if(h->seen&&now>=h->clock)airframemodel::Tick(h->state,(now-h->clock)*.001f,(v[0x295]&16)!=0);h->seen=true;h->clock=now;
@@ -155,7 +163,7 @@ void Routed(uint8_t *v,void (*native)(uint8_t *))
  if(owned){airframeroute::Before(h->route,reinterpret_cast<float *>(v+8));std::memcpy(input.data(),v+8,sizeof input);}
  FlightScope scope{gFlightScope,v};gFlightScope=&scope;struct Restore {FlightScope *previous;~Restore(){gFlightScope=previous;}} restore{scope.previous};native(v);
  Identity now;if(!owned||scope.used||!Identify(v,now)||!Same(id,now)||h->revision!=revision||!game::api.timeStep)return;
- auto e=airframemodel::Read(h->state,h->layout);if(game::Wrecked(v)){e.power=e.rotor=e.leftLift=e.rightLift=0;}
+ auto e=Read(v);if(game::Wrecked(v)){e.power=e.rotor=e.leftLift=e.rightLift=0;}
  if(e.power==1&&e.rotor==1&&e.leftLift==1&&e.rightLift==1&&e.pitch==1&&e.roll==1&&e.yaw==1&&e.antiTorque==1&&!h->route.seen)return;
  std::array<float,16> pose;std::memcpy(pose.data(),v+8,sizeof pose);const float dt=std::clamp(*game::api.timeStep,0.f,3.f)/50;
  if(!airframeroute::After(h->route,input,pose,e,id.kind==3,dt))return;
@@ -172,10 +180,12 @@ void Plane(uint8_t *v){Routed(v,gPlane);}void Heli(uint8_t *v){Routed(v,gHeli);}
 void Fix(uint8_t *v){Repair(v);gFix(v);}void Delete(uint8_t *v){Identity id;if(Identify(v,id)){auto &h=gHistory[size_t(id.ref>>8)];if(Same(h.id,id)){h.revision=Serial();h.clump=nullptr;}}gDelete(v);}void Restart(){gHistory={};gRestart();}
 }
 bool Enabled(const uint8_t *v){Identity id;return Identify(v,id)&&Eligible(id);}
-Token BeginBullet(uint8_t *v){Observe();Identity id;if(!Identify(v,id)||!Eligible(id)||(game::EntityFlags(v)&game::kEntityBulletProof))return {};auto *h=Record(id);if(!h)return {};Token t;t.revision=h->revision;t.clump=h->clump;std::memcpy(t.pose.data(),v+8,sizeof t.pose);return t;}
+Token BeginBullet(uint8_t *v){if(aircraftbodyclient::Owned(v))return {};Observe();Identity id;if(!Identify(v,id)||!Eligible(id)||(game::EntityFlags(v)&game::kEntityBulletProof))return {};auto *h=Record(id);if(!h)return {};Token t;t.revision=h->revision;t.clump=h->clump;std::memcpy(t.pose.data(),v+8,sizeof t.pose);return t;}
 bool Projectile(uint8_t *v,const Token &token,const projectilemodel::Ray &ray,std::array<float,projectilemodel::kLayers> *passed,int exposedRotor)
 {
- Observe();auto *h=Current(v,token);if(!h)return false;const auto before=h->state.damage;
+ if(aircraftbodyclient::Owned(v))return false; // certified source lease belongs to shotcollision
+ Observe();auto *h=Current(v,token);if(!h)return false;
+ const auto before=h->state.damage;
  const auto result=airframemodel::Projectile(h->state,h->layout,ray,exposedRotor<0);if(passed)*passed=result.layerRemaining;if(!result.valid)return false;
  // A certified rotating blade can extend outside the static body COL. Its
  // actual visible surface is the contact, rather than a guessed body volume.
@@ -194,9 +204,10 @@ bool Projectile(uint8_t *v,const Token &token,const projectilemodel::Ray &ray,st
  if(Current(v,token)){SyncRotors(*h);SyncSections(*h);}return true;
 }
 
-void Perforated(uint8_t *v,const Token &token,float area){if(auto *h=Current(v,token))if(std::isfinite(area)&&area>0)h->state.holes=std::min(10.f,h->state.holes+area);}
+void Perforated(uint8_t *v,const Token &token,float area){if(aircraftbodyclient::Owned(v))return;if(auto *h=Current(v,token))if(std::isfinite(area)&&area>0)h->state.holes=std::min(10.f,h->state.holes+area);}
 bool ComponentHit(uint8_t *v,Vec3 from,Vec3 to,float entry,float &closest,Vec3 &normal)
 {
+ if(aircraftbodyclient::Owned(v))return aircraftbodyclient::Trace(v,from,to,entry,closest,normal);
  Identity id;if(!Identify(v,id)||!Eligible(id)||!std::isfinite(entry)||entry<0||entry>=closest)return false;const auto &h=gHistory[size_t(id.ref>>8)];if(!Same(h.id,id)||!h.info)return false;
  const auto delta=skinmodel::Sub(to,from);const float a[]={from.x,from.y,from.z},d[]={delta.x,delta.y,delta.z};for(int j=0;j<3;j++)if(!std::isfinite(a[j])||!std::isfinite(d[j]))return false;bool hit=false;
  for(int i=0;i<airframemodel::Count+3;i++){
@@ -217,3 +228,10 @@ bool Install()
  gReady=gCarHeliAudio&&gToyHeliAudio&&gFlying&&gAuto&&gPlane&&gHeli&&gBoat&&gFix&&gDelete&&gRestart;if(gReady){game::api.AirframeFlightUsed=FlightUsed;game::api.AirframeEffects=Read;game::api.AirframeFire=Fire;game::api.AirframeBurn=Burn;game::api.AirframeCollision=Collision;Log("airframes: independent propulsion, lifting/control surfaces, fuel, electrical and rotor components enabled");}return gReady;
 }
 }
+
+#ifdef VC_SOURCE_UUID_BYTES
+extern "C" __attribute__((visibility("default"))) void VCSourceAircraftRepair(void *vehicle)
+{
+ airframedamage::Repair(static_cast<uint8_t *>(vehicle));
+}
+#endif

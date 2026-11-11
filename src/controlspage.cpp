@@ -16,6 +16,7 @@
 #include <cmath>
 #include <cstdio>
 #include <cstring>
+#include <dlfcn.h>
 #include <string>
 #include <vector>
 
@@ -673,7 +674,12 @@ void UseThisOne(int id)
 	controls::UseJoystick(id);
 	for (const cm::Joystick &j : controls::Pads())
 		if (j.id == id) {
+			#ifdef VC_SOURCE_UUID_BYTES
+			char *name = static_cast<char *>(dlsym(RTLD_MAIN_ONLY,"gSelectedJoystickName"));
+			if (!name) continue;
+#else
 			char *name = reinterpret_cast<char *>(const_cast<void *>(hooks::ImageBase())) + kJoystickName;
+#endif
 			snprintf(name, 128, "%s", j.name.c_str());
 		}
 	if (api.SaveINIControllerSettings)

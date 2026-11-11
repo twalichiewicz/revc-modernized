@@ -8,6 +8,11 @@
 #include <mach-o/dyld.h>
 #include <mach-o/getsect.h>
 #include <mach-o/loader.h>
+#include <algorithm>
+#include <iterator>
+#ifdef VC_SOURCE_UUID_BYTES
+#include "source-calls.h"
+#endif
 
 namespace hooks {
 namespace {
@@ -153,6 +158,10 @@ void *Chain(const char *mangledName, void *replacement)
 
 volatile uint64_t *Flag(const char *name)
 {
+#ifdef VC_SOURCE_UUID_BYTES
+	auto gate = reinterpret_cast<volatile uint64_t *(*)(const char *)>(dlsym(RTLD_MAIN_ONLY, "VCSourceGate"));
+	return gate ? gate(name) : nullptr;
+#endif
 	Entry e;
 	if (!Find(name, e) || e.kind != kKindSkip)
 		return nullptr;
@@ -162,11 +171,35 @@ volatile uint64_t *Flag(const char *name)
 
 const void *ImageBase() { return gImage; }
 
+#ifdef VC_SOURCE_UUID_BYTES
+uint32_t ReturnOffset(const void *address)
+{
+	if (!gImage || !address) return UINT32_MAX;
+	const uintptr_t off = reinterpret_cast<uintptr_t>(address) - reinterpret_cast<uintptr_t>(gImage);
+	auto call = std::lower_bound(std::begin(kVCSourceReverse), std::end(kVCSourceReverse), off,
+	    [](const VCSourceCall &a, uintptr_t b) { return a.source < b; });
+	if (call != std::end(kVCSourceReverse) && call->source == off) return call->original;
+	return UINT32_MAX;
+}
+
+const void *ReturnAddress(uint32_t offset)
+{
+	if (!gImage) return nullptr;
+	auto call = std::lower_bound(std::begin(kVCSourceCalls), std::end(kVCSourceCalls), offset,
+	    [](const VCSourceCall &a, uint32_t b) { return a.original < b; });
+	if (call != std::end(kVCSourceCalls) && call->original == offset)
+		return reinterpret_cast<const uint8_t *>(gImage) + call->source;
+	return nullptr;
+}
+#endif
+
 bool IsCallTo(uint32_t retOffset, const char *mangledName)
 {
 	const auto *base = reinterpret_cast<const uint8_t *>(gImage);
 	if (!base || !mangledName || retOffset < 4)
 		return false;
+	const auto *ret = static_cast<const uint8_t *>(ReturnAddress(retOffset));
+	if (!ret) return false;
 	// Local native functions are patchable by the hashed table but invisible
 	// to dlsym. Verify their original entry through that same patched table.
 	Entry entry;
@@ -176,9 +209,9 @@ bool IsCallTo(uint32_t retOffset, const char *mangledName)
 	if (!fn)
 		return false;
 	uint32_t insn;
-	memcpy(&insn, base + retOffset - 4, 4);
+	memcpy(&insn, ret - 4, 4);
 	const int32_t imm = int32_t(insn << 6) >> 6;
-	return (insn & 0xFC000000) == 0x94000000 && base + retOffset - 4 + intptr_t(imm) * 4 == fn;
+	return (insn & 0xFC000000) == 0x94000000 && ret - 4 + intptr_t(imm) * 4 == fn;
 }
 
 void UninstallAll()

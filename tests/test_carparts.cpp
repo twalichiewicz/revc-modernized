@@ -19,6 +19,7 @@ Config gConfig;
 static std::vector<std::string> logs;
 void Log(const char *format,...){char s[256];va_list ap;va_start(ap,format);vsnprintf(s,sizeof s,format,ap);va_end(ap);logs.emplace_back(s);}
 namespace fixture {
+static void *(*extraLookup)(const char *)=nullptr;
 using Control=void (*)(uint8_t *);using Damage=void (*)(uint8_t *,float,uint16_t);using Apply=nativeparttest::Apply;
 Control control;Damage damage;Apply apply,actual;
 void (*fix)(uint8_t *);
@@ -170,6 +171,7 @@ void *Chain(const char *s,void *replacement){using namespace fixture;
 }
 }
 static void *Lookup(void *,const char *s){using namespace fixture;
+ if(extraLookup)if(auto symbol=extraLookup(s))return symbol;
  if(strstr(s,"RpClumpForAllAtomics")||strstr(s,"RpAtomicGetFrame")||strstr(s,"RwFrameGetParent")||strstr(s,"GetFrameNodeName")||strstr(s,"RpAtomicGetFlags")||strstr(s,"RpAtomicSetFlags"))return reinterpret_cast<void *>(NativeControl);
  if(strstr(s,"SetDoorDamage"))return reinterpret_cast<void *>(NativeDoor);
  if(strstr(s,"SetBumperDamage"))return reinterpret_cast<void *>(NativeBumper);

@@ -15,7 +15,7 @@ int main(int argc,char **argv){
   for(int i=1;i<argc;++i){std::string arg=argv[i];if(arg=="--physics-test")lab=true;else if(arg=="--choose-mode")chooser=true;else if(arg=="--check-launcher")check=true;else if(arg=="--lab-smoke"&&i+1<argc){lab=true;screenshot=argv[++i];}else forwarded.push_back(arg);}
   if(!check&&!lab&&(chooser||(CGEventSourceFlagsState(kCGEventSourceStateCombinedSessionState)&kCGEventFlagMaskAlternate))){
    [NSApplication sharedApplication];[NSApp setActivationPolicy:NSApplicationActivationPolicyRegular];[NSApp activateIgnoringOtherApps:YES];
-   NSAlert *alert=[NSAlert new];alert.messageText=@"Grand Theft Auto Vice City";alert.informativeText=@"Choose normal gameplay or the experimental wing geometry test.";[alert addButtonWithTitle:@"Play Vice City"];[alert addButtonWithTitle:@"Wing / building test"];[alert addButtonWithTitle:@"Cancel"];
+   NSAlert *alert=[NSAlert new];alert.messageText=@"Grand Theft Auto Vice City";alert.informativeText=@"Choose normal gameplay or the experimental aircraft / building strike.";[alert addButtonWithTitle:@"Play Vice City"];[alert addButtonWithTitle:@"Aircraft / building strike"];[alert addButtonWithTitle:@"Cancel"];
    auto response=[alert runModal];if(response==NSAlertThirdButtonReturn)return 0;lab=response==NSAlertSecondButtonReturn;
   }
   auto binary=contents/"MacOS"/(lab?"vcPhysicsHost":"macVC");std::vector<std::string> arguments{binary.string()};

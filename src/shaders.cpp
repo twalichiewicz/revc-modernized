@@ -7,6 +7,7 @@
 #include <cstring>
 #include <dlfcn.h>
 #include <type_traits>
+#include <string>
 
 using namespace game;
 
@@ -93,7 +94,7 @@ void *(*gCameraRaster)(const void *camera);
 int (*gStateGet)(int state, void *value);
 const CVector *gVectorToSun;
 const int32_t *gStoredValue;
-const int32_t *gSkyTop, *gSkyBottom, *gSunCore; // red, green, blue in a row
+const int32_t *gSkyTop[3], *gSkyBottom[3], *gSunCore[3];
 const float *gCloudCover, *gFog, *gRain;
 bool gReady;
 
@@ -106,7 +107,18 @@ bool Bind(T &out, const char *name)
 	return out != nullptr;
 }
 
-CVector Colour(const int32_t *rgb) { return {rgb[0] / 255.0f, rgb[1] / 255.0f, rgb[2] / 255.0f}; }
+bool BindColour(const int32_t *(&rgb)[3], const char *stem)
+{
+	const char *channels[] = {"Red", "Green", "Blue"};
+	bool okay = true;
+	for (int i = 0; i < 3; ++i) {
+		const std::string field = std::string(stem) + channels[i];
+		const std::string name = "_ZN10CTimeCycle" + std::to_string(field.size()) + field + "E";
+		okay = Bind(rgb[i], name.c_str()) && okay;
+	}
+	return okay;
+}
+CVector Colour(const int32_t *const (&rgb)[3]) { return {*rgb[0] / 255.0f, *rgb[1] / 255.0f, *rgb[2] / 255.0f}; }
 
 } // namespace
 
@@ -138,9 +150,9 @@ bool Install()
 	         Bind(gStateGet, "_Z16RwRenderStateGet13RwRenderStatePv") &&
 	         Bind(gVectorToSun, "_ZN10CTimeCycle13m_VectorToSunE") &&
 	         Bind(gStoredValue, "_ZN10CTimeCycle20m_CurrentStoredValueE") &&
-	         Bind(gSkyTop, "_ZN10CTimeCycle19m_nCurrentSkyTopRedE") &&
-	         Bind(gSkyBottom, "_ZN10CTimeCycle22m_nCurrentSkyBottomRedE") &&
-	         Bind(gSunCore, "_ZN10CTimeCycle20m_nCurrentSunCoreRedE") &&
+	         BindColour(gSkyTop, "m_nCurrentSkyTop") &&
+	         BindColour(gSkyBottom, "m_nCurrentSkyBottom") &&
+	         BindColour(gSunCore, "m_nCurrentSunCore") &&
 	         Bind(gCloudCover, "_ZN8CWeather13CloudCoverageE") && Bind(gFog, "_ZN8CWeather9FoggynessE") &&
 	         Bind(gRain, "_ZN8CWeather4RainE") && api.timeMs && api.theCamera;
 	return gReady;
@@ -148,7 +160,7 @@ bool Install()
 
 bool Ready() { return gReady; }
 
-int Uniform(const char *name) { return gReady ? gRegister(name, kUniformVec4, 1) : -1; }
+int Uniform(const char *name) { int id=gReady?gRegister(name,kUniformVec4,1):-1;if(gReady&&id<0)Log("shaders: uniform capacity exceeded for %s",name);return id; }
 
 void Set(int uniform, float x, float y, float z, float w)
 {
@@ -189,6 +201,10 @@ void SetMatrix(int uniform, const float *m)
 
 bool CameraMatrices(float proj[16], float view[16])
 {
+#ifdef VC_SOURCE_UUID_BYTES
+	static auto matrices = reinterpret_cast<int (*)(float *, float *)>(dlsym(RTLD_MAIN_ONLY,"VCSourceCameraMatrices"));
+	return matrices && matrices(proj,view);
+#else
 	static int found = -1;
 	const auto *base = static_cast<const uint8_t *>(hooks::ImageBase());
 	if (found < 0) {
@@ -204,6 +220,7 @@ bool CameraMatrices(float proj[16], float view[16])
 	memcpy(proj, base + kProjection, 16 * sizeof(float));
 	memcpy(view, base + kView, 16 * sizeof(float));
 	return true;
+#endif
 }
 
 bool ViewProjection(float out[16])

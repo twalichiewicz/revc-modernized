@@ -1,5 +1,5 @@
 #pragma once
-#include "types.h"
+#include "vec3.h"
 #include <algorithm>
 #include <cmath>
 #include <vector>

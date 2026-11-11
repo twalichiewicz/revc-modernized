@@ -333,8 +333,16 @@ char *Trim(char *s)
 
 std::string SupportDir()
 {
+#ifdef VC_SOURCE_UUID_BYTES
+	if (const char *profile = getenv("VC_REGULAR_PROFILE"))
+		return profile;
+#endif
 	const char *home = getenv("HOME");
-	return std::string(home ? home : "") + "/Library/Application Support/macVC";
+	#ifdef VC_SOURCE_UUID_BYTES
+ return std::string(home ? home : "") + "/Library/Application Support/macVC-source";
+#else
+ return std::string(home ? home : "") + "/Library/Application Support/macVC";
+#endif
 }
 
 void SaveValue(const char *section, const char *key, const std::string &value)
@@ -359,7 +367,11 @@ void SaveValue(const char *section, const char *key, const std::string &value)
 // macVC.ini's HeadBob1stPerson (the game's own setting): first person's bob.
 void ReadHeadBob()
 {
-	FILE *f = fopen((SupportDir() + "/macVC.ini").c_str(), "r");
+	#ifdef VC_SOURCE_UUID_BYTES
+ FILE *f = fopen((SupportDir() + "/reVC.ini").c_str(), "r");
+#else
+ FILE *f = fopen((SupportDir() + "/macVC.ini").c_str(), "r");
+#endif
 	if (!f)
 		return;
 	char line[256];

@@ -5,6 +5,7 @@
 #include "config.h"
 #include "hooks.h"
 #include "log.h"
+#include "aircraftbodyclient.h"
 #include <array>
 #include <cmath>
 #include <cstring>
@@ -32,7 +33,7 @@ bool Identify(uint8_t *v,Identity &id)
  const int ref=int(index*256)|flags[index];if(game::api.PoolsGetVehicle(ref)!=v||(game::EntityFlags(v)&7)!=2)return false;
  id={v,base,flags,ref,game::EntityModel(v),*reinterpret_cast<void **>(v)};return true;
 }
-bool Eligible(const Identity &id){return id.vtable&&id.model>=0&&id.model<6500&&id.model!=162&&id.model!=171&&
+bool Eligible(const Identity &id){return !aircraftbodyclient::Owned(id.v)&&id.vtable&&id.model>=0&&id.model<6500&&id.model!=162&&id.model!=171&&
  *reinterpret_cast<const int *>(id.v+0x348)==0&&!game::IsAircraft(id.v)&&!game::Wrecked(id.v)&&game::EntityClump(id.v)&&
  (id.v[0x297]&0x40);}
 struct History {
@@ -69,9 +70,14 @@ bool BulletCurrent(uint8_t *v,const BulletToken &token,Identity &id)
 }
 struct Controller;thread_local Controller *gController;
 struct Controller {
- Controller *previous=gController;Identity id;History *history=nullptr;void *clump=nullptr;uint8_t *handling=nullptr;uint32_t epoch=gEpoch;bool valid=false;
+ Controller *previous=gController;Identity id;History *history=nullptr;AircraftBodySnapshot body{};bool source=false;void *clump=nullptr;uint8_t *handling=nullptr;uint32_t epoch=gEpoch;bool valid=false;
  explicit Controller(uint8_t *v){
-  if(gReady&&gConfig.carMechanics&&game::api.timeMs&&Identify(v,id)&&Eligible(id)){
+  if(gReady&&Identify(v,id)&&aircraftbodyclient::Owned(v)){
+   source=true;clump=game::EntityClump(v);handling=*reinterpret_cast<uint8_t **>(v+0x160);
+   // A single committed snapshot supplies all drive/wheel consumers in this
+   // native controller. Never tick or seed a second mechanical history.
+   valid=handling&&aircraftbodyclient::Read(v,body);
+  }else if(gReady&&gConfig.carMechanics&&game::api.timeMs&&Identify(v,id)&&Eligible(id)){
    auto &h=Record(id);if(Layout(h)){history=&h;clump=game::EntityClump(v);handling=*reinterpret_cast<uint8_t **>(v+0x160);valid=handling!=nullptr;}
   }
   gController=this;
@@ -80,7 +86,9 @@ struct Controller {
 };
 bool Current(const Controller *c)
 {
- if(!gReady||!gConfig.carMechanics||!c||!c->valid||!c->history||c->epoch!=gEpoch)return false;
+ if(!gReady||!c||!c->valid||c->epoch!=gEpoch)return false;
+ if(c->source){Identity now;return Identify(c->id.v,now)&&Same(now,c->id)&&aircraftbodyclient::Owned(now.v)&&game::EntityClump(now.v)==c->clump&&*reinterpret_cast<uint8_t **>(now.v+0x160)==c->handling;}
+ if(!gConfig.carMechanics||!c->history)return false;
  Identity now;if(!Identify(c->id.v,now)||!Same(now,c->id)||!Eligible(now)||game::EntityClump(now.v)!=c->clump||*reinterpret_cast<uint8_t **>(now.v+0x160)!=c->handling)return false;
  return LayoutCurrent(*c->history,now);
 }
@@ -95,7 +103,7 @@ void Report(History &h)
 void Control(uint8_t *v)
 {
  Controller scope(v);
- if(Current(&scope)){
+ if(Current(&scope)&&!scope.source){
   auto &h=*scope.history;const uint32_t now=*game::api.timeMs;
   if(h.tickSeen&&now>=h.lastTick){const float dt=(now-h.lastTick)*.001f;const auto speed=reinterpret_cast<const CVector *>(v+0x84);
    const float magnitude=50*std::sqrt(speed->x*speed->x+speed->y*speed->y+speed->z*speed->z);
@@ -112,7 +120,10 @@ float Calculate(uint8_t *transmission,const float &gas,uint8_t &gear,float &time
  const bool owned=Current(c)&&transmission==c->handling+0x34&& &gas==reinterpret_cast<const float *>(c->id.v+0x28c)&&
   &gear==c->id.v+0x2a4&& &timer==reinterpret_cast<float *>(c->id.v+0x2a8);
  const float result=gCalculate(transmission,gas,gear,timer,speed,cheat);
- return owned&&c==gController&&Current(c)&&std::isfinite(result)?result*mechanicalmodel::Power(c->history->state):result;
+ // Aircraft propulsion is consumed by its flight controller. Its automobile
+ // wheel solver still consumes this snapshot, without charging engine loss a
+ // second time through the shared transmission.
+ return owned&&c==gController&&Current(c)&&std::isfinite(result)?result*(c->source?(game::IsAircraft(c->id.v)?1:c->body.power):mechanicalmodel::Power(c->history->state)):result;
 }
 void Wheel(uint8_t *v,CVector &f,CVector &r,CVector &speed,CVector &point,int count,float thrust,float brake,float grip,int8_t wheel,float *spin,int32_t *state,uint16_t status)
 {
@@ -121,7 +132,9 @@ void Wheel(uint8_t *v,CVector &f,CVector &r,CVector &speed,CVector &point,int co
     !std::isfinite(thrust)||!std::isfinite(brake)||!std::isfinite(grip)){
   gWheel(v,f,r,speed,point,count,thrust,brake,grip,wheel,spin,state,status);return;
  }
- const auto effect=mechanicalmodel::Wheel(c->history->state,wheel);
+ const auto old=c->source?mechanicalmodel::WheelEffect{}:mechanicalmodel::Wheel(c->history->state,wheel);
+ const auto &body=c->body.wheels[wheel];
+ const mechanicalmodel::WheelEffect effect=c->source?mechanicalmodel::WheelEffect{body.grip,body.drive,body.brake,body.toe,body.steering}:old;
  if(effect.grip==1&&effect.drive==1&&effect.brake==1&&effect.toe==0&&effect.steering==1){gWheel(v,f,r,speed,point,count,thrust,brake,grip,wheel,spin,state,status);return;}
  float turn=effect.toe;
  if(effect.steering!=1){
@@ -178,6 +191,7 @@ bool Projectile(uint8_t *v,const BulletToken &token,const projectilemodel::Ray &
 }
 firemodel::Input FireInput(const uint8_t *v)
 {
+ if(aircraftbodyclient::Owned(v)){AircraftBodySnapshot body;firemodel::Input out;if(aircraftbodyclient::Read(v,body)){out.heat=body.heat;out.fuel=body.fuel;out.engine=body.engine;out.electrical=body.electrical;out.breach=body.breach;}out.health=game::VehicleHealth(v);out.running=(v[0x295]&0x10)!=0;return out;}
  firemodel::Input out;Identity id;if(!gReady||!gConfig.carMechanics||!Identify(const_cast<uint8_t *>(v),id)||!Eligible(id))return out;
  out.health=game::VehicleHealth(v);out.running=(v[0x295]&0x10)!=0;const auto &h=gHistory[size_t(id.ref>>8)];
  if(Same(h.id,id)&&h.layoutValid&&LayoutCurrent(h,id)){out.heat=h.state.heat;out.fuel=h.state.fuel;out.engine=h.state.damage[mechanicalmodel::kEngine];out.electrical=h.state.damage[mechanicalmodel::kElectrical];out.breach=h.state.damage[mechanicalmodel::kFuel];}
@@ -185,6 +199,7 @@ firemodel::Input FireInput(const uint8_t *v)
 }
 void Burn(uint8_t *v,float dt)
 {
+ if(aircraftbodyclient::Owned(v)){aircraftbodyclient::Burn(v,dt);return;}
  Identity id;if(!gReady||!gConfig.carMechanics||!std::isfinite(dt)||dt<=0||dt>1||!Identify(v,id)||!Eligible(id)||(game::EntityFlags(v)&(1u<<26)))return;
  auto &h=Record(id);const auto revision=h.revision;if(!Layout(h))return;Identity now;if(!Identify(v,now)||!Same(id,now)||!Eligible(now)||h.revision!=revision)return;
  std::array<float,mechanicalmodel::kModules> dose{};dose[mechanicalmodel::kEngine]=.018f*dt;dose[mechanicalmodel::kCooling]=.025f*dt;
@@ -192,6 +207,7 @@ void Burn(uint8_t *v,float dt)
 }
 float LightingPower(const uint8_t *v)
 {
+ if(aircraftbodyclient::Owned(v)){AircraftBodySnapshot body;return aircraftbodyclient::Read(v,body)?body.lighting:1;}
  Identity id;if(!gReady||!gConfig.carMechanics||!Identify(const_cast<uint8_t *>(v),id)||!Eligible(id))return 1;
  const auto &h=gHistory[size_t(id.ref>>8)];
  // Rendering occurs outside ProcessControl. Validate existing history without
@@ -202,6 +218,7 @@ float LightingPower(const uint8_t *v)
 }
 void Collision(uint8_t *v,const carimpact::Collision &hit)
 {
+ if(aircraftbodyclient::Owned(v))return; // native source owns accepted contact work
  auto c=gController;if(!Current(c)||c->id.v!=v||!game::api.timeMs||(game::EntityFlags(v)&game::kEntityCollisionProof))return;
  auto &h=*c->history;const auto before=h.state.damage;auto dose=mechanicalmodel::Doses(h.layout,{hit.point,hit.inward,hit.severity,hit.piece});
  const uint32_t now=*game::api.timeMs;

@@ -3,6 +3,9 @@
 #include "game.h"
 #include "flightinput.h"
 #include "hooks.h"
+#include "jetwheels.h"
+#include "airportjetmodel.h"
+#include "aircraftbodyclient.h"
 #include "log.h"
 #include <algorithm>
 #include <array>
@@ -120,7 +123,7 @@ bool Apply(uint8_t *vehicle,int flightModel)
 	// ground classification even when it returns false; the broad COL keeps
 	// the extended tire bounds and cannot stand in for a deployed wheel.
 	const bool personalJet=owned&&EntityModel(vehicle)!=181&&gAirportOwner&&gAirportOwner(vehicle);
-	const bool wheelController=personalJet&&gAirportWheelControl;
+ const bool wheelController=owned&&gAirportWheelControl;
 	const bool wheels=owned&&(wheelController?gAirportWheelControl(vehicle):OnWheels(vehicle));
 	const bool rolling=wheelController&&wheels;
 	Controls engine=input;engine.throttle=EngineThrottle(vehicle,power>0?input.throttle:0,dt,Length(start));
@@ -152,7 +155,7 @@ bool Apply(uint8_t *vehicle,int flightModel)
 namespace {
 constexpr int kDodo=181;
 constexpr size_t kPlaneSize=0x388,kVehicleStride=0x6f0;
-constexpr CVector kParking{-1585,-1130,0},kSeat{-.32f,1.25f,.05f};
+constexpr CVector kParking{-1585,-1130,0},kSeat{-.32f,.25f,.05f};
 struct RosterNative {
 	void *(*allocate)(size_t);
 	void (*construct)(uint8_t *,int,uint8_t),(*destroy)(uint8_t *);
@@ -169,6 +172,9 @@ int32_t *gArea;
 const uint32_t *gFrameCounter;
 bool *gCutscene,gRosterReady;
 void (*orig_Control)(uint8_t *),(*orig_Seat)(uint8_t *);
+#ifdef VC_SOURCE_UUID_BYTES
+void (*orig_PreRender)(uint8_t *);
+#endif
 void (*orig_Enter)(uint8_t *,uint8_t *,uint32_t),(*orig_Exit)(uint8_t *,uint8_t *,uint32_t);
 void (*orig_Damage)(uint8_t *,uint8_t *,int,float,CVector);
 struct Plane {int ref=-1;uint8_t *entity=nullptr;void *vtable=nullptr;uint32_t boarded=0,burning=0;} gPlane;
@@ -243,7 +249,7 @@ int Reference(const uint8_t *vehicle)
 }
 struct Engine {
 	uint8_t *entity=nullptr;void *vtable=nullptr;int ref=-1,model=-1;
-	uint32_t seen=0;float throttle=0;
+	uint32_t seen=0;float throttle=0;bool integrated=false;
 };
 std::vector<Engine> gEngines;
 const uint8_t *gEngineEntries,*gEngineFlags;uint32_t gEngineClock;bool gEngineClockSeen;
@@ -264,6 +270,12 @@ float EngineThrottle(uint8_t *vehicle,float target,float dt,float speed)
 		// engine; a stopped new actor must build thrust from idle.
 		engine={vehicle,vtable,ref,model,now,speed>15?target:0};
 	}
+#ifdef VC_SOURCE_UUID_BYTES
+ // A discarded unpublished island interval can hand back to native control
+ // during this frame. Advance spool state once, even if forces are reevaluated.
+ if(engine.integrated&&engine.seen==now)return engine.throttle;
+ engine.integrated=true;
+#endif
 	const float response=1-std::exp(-dt/(target>engine.throttle?2.0f:1.0f));
 	engine.throttle+=(target-engine.throttle)*response;engine.seen=now;
 	return engine.throttle;
@@ -277,7 +289,7 @@ const uint8_t *Collision()
 }
 float BaseHeight()
 {
-	const uint8_t *col=Collision();return col?-Row(col,0x10).z:0;
+	return Collision()?-jetwheels::kDodoTireBottom:0;
 }
 bool Ground(CVector from,float &height)
 {
@@ -396,7 +408,11 @@ void Hook_Control(uint8_t *v)
 		if(elapsed>=20&&elapsed<0x80000000u)Crash(v,api.FindPlayerPed());
 	}
 	const float impact=Scalar(v,0x13c)*kHz/Scalar(v,0xcc);
-	if(!Wrecked(v)&&std::isfinite(impact)&&impact>4)
+	// Accepted native contacts already feed airframe material work and seated
+	// occupant injury. The legacy scalar-health fallback must not spend that
+	// same impact again and bypass localized structural failure with an explosion.
+	const bool materialManaged=api.AirframeContactsManaged&&api.AirframeContactsManaged(v);
+	if(!materialManaged&&!Wrecked(v)&&std::isfinite(impact)&&impact>4)
 		roster.damage(v,nullptr,39,std::min(1500.0f,(impact-4)*(impact-4)*12),EntityPos(v));
 	const uint32_t now=api.timeMs?*api.timeMs:gPrevious;
 	if(!Wrecked(v)&&VehicleHealth(v)<250&&!(api.VehicleFireManaged&&api.VehicleFireManaged(v))){
@@ -409,6 +425,23 @@ void Hook_Control(uint8_t *v)
 	roster.physical(v);
 	if(!Wrecked(v))Apply(v,5);
 }
+#ifdef VC_SOURCE_UUID_BYTES
+void Hook_PreRender(uint8_t *v){
+ orig_PreRender(v);if(!Owned(v))return;
+ airportjetmodel::Pose pose;jetwheels::Snapshot(v,pose.wheels);
+ auto player=api.FindPlayerPed?api.FindPlayerPed():nullptr;auto pad=api.GetPad?api.GetPad(0):nullptr;
+ if(player&&pad&&!Wrecked(v)&&!PadControlsDisabled(pad)&&PedInVehicle(player)&&PedVehicle(player)==v&&*reinterpret_cast<uint8_t **>(v+0x218)==player){
+  const auto axes=flightinput::Read(pad,native.pitch(pad),float(native.right(pad))-float(native.left(pad)),native.gun(pad),native.gunYaw(pad));
+  const float roll=std::clamp(native.roll(pad)/128.f,-1.f,1.f);pose.leftFlap=.25f*axes.pitch+.3f*roll;pose.rightFlap=.25f*axes.pitch-.3f*roll;pose.elevator=.3f*axes.pitch;pose.rudder=.35f*axes.yaw;
+ }
+#ifdef VC_SOURCE_UUID_BYTES
+ static auto geometryOwned=reinterpret_cast<bool(*)(const void*)>(dlsym(RTLD_MAIN_ONLY,"VCSourceWingGeometryOwned"));
+ pose.materialWing=geometryOwned&&geometryOwned(v);
+#endif
+ if(aircraftbodyclient::Owned(v)){pose.bodyOwned=true;aircraftbodyclient::Controls(v,pose.leftFlap,pose.rightFlap,pose.elevator,pose.rudder);}
+ airportjetmodel::Animate(EntityClump(v),pose);
+}
+#endif
 bool InstallRoster()
 {
 	if(gRosterReady)return true;
@@ -437,6 +470,9 @@ bool InstallRoster()
 	    chain("_ZN4CPed19SetPedPositionInCarEv",Hook_Seat,orig_Seat)&&
 	    chain("_ZN4CPed11SetEnterCarEP8CVehiclej",Hook_Enter,orig_Enter)&&chain("_ZN4CPed10SetExitCarEP8CVehiclej",Hook_Exit,orig_Exit)&&
 	    chain("_ZN8CVehicle13InflictDamageEP7CEntity11eWeaponTypef7CVector",Hook_Damage,orig_Damage);
+#ifdef VC_SOURCE_UUID_BYTES
+ if(gRosterReady&&!orig_PreRender)orig_PreRender=reinterpret_cast<decltype(orig_PreRender)>(hooks::Chain("_ZN6CPlane9PreRenderEv",reinterpret_cast<void *>(Hook_PreRender)));
+#endif
 	return gRosterReady;
 }
 }
@@ -506,9 +542,26 @@ void Frame(uint32_t now)
 	*reinterpret_cast<float *>(plane+0xcc)=2400;*reinterpret_cast<float *>(plane+0xd0)=8000;
 	*reinterpret_cast<float *>(plane+0xd8)=.0002f;
 	plane[0x295]|=8; // native CPlane::InitPlanes uses bIsLocked to prevent traffic despawn
-	*reinterpret_cast<CVector *>(plane+8)={-1,0,0};*reinterpret_cast<CVector *>(plane+0x18)={0,-1,0};*reinterpret_cast<CVector *>(plane+0x28)={0,0,1};
+	// Face the clear taxi/runway approach. The old due-south departure crossed
+	// airport building910 with the visible wing outside the undersized stock COL.
+	*reinterpret_cast<CVector *>(plane+8)={-.9659258f,.2588190f,0};*reinterpret_cast<CVector *>(plane+0x18)={-.2588190f,-.9659258f,0};*reinterpret_cast<CVector *>(plane+0x28)={0,0,1};
 	SetPosition(plane,position);gPlane={ref,plane,*reinterpret_cast<void **>(plane),0,0};roster.add(plane);
 	ReleaseRequestPins();
 	Log("plane flight: parked native Dodo ref%d near airport apron",ref);
 }
 }
+
+#ifdef VC_SOURCE_UUID_BYTES
+// Source bridge admits only the existing, generation-checked playable roster.
+extern "C" __attribute__((visibility("default"))) bool VCSourceAircraftEligible(const void *vehicle)
+{
+ return planeflight::Owns(static_cast<const uint8_t *>(vehicle));
+}
+#endif
+
+#ifdef VC_SOURCE_UUID_BYTES
+extern "C" __attribute__((visibility("default"))) bool VCSourceAircraftForces(void *vehicle)
+{
+ return planeflight::Apply(static_cast<uint8_t *>(vehicle),5);
+}
+#endif

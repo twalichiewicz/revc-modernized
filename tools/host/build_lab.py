@@ -6,6 +6,7 @@ from pathlib import Path
 import shlex
 import shutil
 import subprocess
+import sys
 from build_host import ROOT, HERE, checkout, run, capture, sha
 
 
@@ -48,16 +49,24 @@ def main():
         entry = source / "src/skel/glfw/glfw.cpp"
         text = entry.read_text(); needle = '\tRwV2d pos;\n\tRwInt32 i;'
         assert text.count(needle) == 1
-        text = text.replace(needle, '\textern int WingLab(const char *,int,const char *);\n\tif(argc>=2 && !strcmp(argv[1],"--wing-lab")) return argc<3?2:WingLab(argv[2],argc==5&&!strcmp(argv[3],"--smoke")?120:0,argc==5?argv[4]:nil);\n' + needle)
+        text = text.replace(needle, '\textern int WingStrike(const char *,int,const char *);\n\tif(argc>=2 && !strcmp(argv[1],"--wing-lab")) return argc<3?2:WingStrike(argv[2],argc==5&&!strcmp(argv[3],"--smoke")?120:0,argc==5?argv[4]:nil);\n' + needle)
         entry.write_text(text)
     if capture(["git", "-C", source, "rev-parse", "HEAD"]) != lock["engine"]["commit"]: raise RuntimeError("Engine revision changed")
     librw = source / "vendor/librw"
     if capture(["git", "-C", librw, "rev-parse", "HEAD"]) != lock["librw"]["commit"] or capture(["git", "-C", librw, "status", "--porcelain"]):
         raise RuntimeError("librw revision or working tree changed")
-    for name in ["HostWingQuery.cpp", "WingLab.cpp"]: shutil.copyfile(HERE / name, source / "src/extras" / name)
+    for name in ["HostWingQuery.cpp", "WingLab.cpp", "WingStrike.cpp", "LabDraw.cpp", "LabDraw.h", "WingPhysics.h"]: shutil.copyfile(HERE / name, source / "src/extras" / name)
     export = work / "export-lab"
     run(["xcrun", "clang++", "-std=c++17", "-O2", "-I" + str(ROOT / "src"), HERE / "export_lab.cpp", ROOT / "tools/bake/visualmodel.cpp", ROOT / "tools/bake/gamefiles.cpp", ROOT / "src/mapdata.cpp", "-lz", "-o", export], logs / "export-build.log")
     data = work / "aircraft.txt"; run([export, args.game_data, data], logs / "export.log")
+    run([sys.executable, HERE / "build_physics.py", "--work-dir", work / "physics", "--mesh", data], logs / "physics.log")
+    physics = json.loads((work / "physics/manifest.json").read_text())
+    link = source / "src/wing-physics.cmake"
+    libraries = [physics["adapter_library"], *physics["link_libraries"]]
+    link.write_text('target_link_libraries(${EXECUTABLE} PRIVATE\n' + ''.join('  "' + name + '"\n' for name in libraries) + ')\n')
+    cmake = source / "src/CMakeLists.txt"
+    if 'include(wing-physics.cmake)' not in cmake.read_text():
+        with cmake.open('a') as f: f.write('\ninclude(wing-physics.cmake)\n')
     build = work / "build"
     run(["cmake", "-S", source, "-B", build, "-DCMAKE_BUILD_TYPE=Release", "-DCMAKE_OSX_ARCHITECTURES=arm64", "-DCMAKE_OSX_DEPLOYMENT_TARGET=26.0", "-DCMAKE_EXPORT_COMPILE_COMMANDS=ON", "-DREVC_INSTALL=OFF", "-DCMAKE_PREFIX_PATH=" + str(base / "deps") + ";/opt/homebrew/opt/openal-soft;/opt/homebrew/opt/mpg123"], logs / "configure.log")
     run(["cmake", "--build", build, "--parallel", "8"], logs / "build.log")
@@ -67,6 +76,7 @@ def main():
     if dependencies != {str(f.relative_to(base)): sha(f) for f in sorted((base / "deps").rglob("*")) if f.is_file()}:
         raise RuntimeError("Static GLFW dependency changed during compilation")
     result = {"lock": lock, "binary": str(binary), "binary_sha256": sha(binary), "data": str(data), "data_sha256": sha(data), "source_diff": capture(["git", "-C", source, "diff", "--binary"]), "input_sha256": {f.name: sha(f) for f in HERE.iterdir() if f.is_file()}, "local_inputs_sha256": input_hashes, "static_dependency_sha256": dependencies, "base_manifest_sha256": sha(base / "manifest.json"), "toolchain": capture(["xcrun", "clang++", "--version"]), "linked_libraries": capture(["otool", "-L", binary])}
+    result["physics"] = physics
     (work / "build-manifest.json").write_text(json.dumps(result, indent=2) + "\n")
     print(binary)
 

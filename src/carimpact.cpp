@@ -7,6 +7,7 @@
 #include "game.h"
 #include "hooks.h"
 #include "log.h"
+#include "aircraftbodyclient.h"
 #include <algorithm>
 #include <array>
 #include <cmath>
@@ -33,7 +34,7 @@ bool Identify(uint8_t *v,Identity &id)
  id={v,base,flags,ref,game::EntityModel(v),game::EntityClump(v)};return true;
 }
 bool Current(const Identity &id){Identity now;return Identify(id.v,now)&&Same(id,now);}
-bool Eligible(const Identity &id){return id.clump&&id.model>=0&&id.model!=162&&id.model!=171&&
+bool Eligible(const Identity &id){return !aircraftbodyclient::Owned(id.v)&&id.clump&&id.model>=0&&id.model!=162&&id.model!=171&&
  *reinterpret_cast<const int *>(id.v+0x348)==0&&!game::IsAircraft(id.v)&&!game::Wrecked(id.v)&&
  (id.v[0x297]&0x40)&&!(game::EntityFlags(id.v)&(1u<<27));}
 struct Contact {bool valid=false,knownOther=true;uint8_t *other=nullptr;uint8_t piece=0;Vec3 point{},inward{};CVector normal{};float force=0;uint32_t when=0;};
@@ -42,16 +43,18 @@ std::array<History,kSlots> gHistory;
 History &Record(const Identity &id){auto &h=gHistory[size_t(id.ref>>8)];if(!Same(h.id,id)){h={};h.id=id;}return h;}
 struct Capture {Identity id;Contact hit;};
 bool Enabled(){return gConfig.carDeformation||gConfig.carMechanics;}
-bool Airframe(const Identity &id){return game::api.AirframeEffects&&game::api.AirframeCollision&&game::api.AirframeEffects(id.v).managed;}
+bool Airframe(const Identity &id){return !aircraftbodyclient::Owned(id.v)&&game::api.AirframeEffects&&game::api.AirframeCollision&&game::api.AirframeEffects(id.v).managed;}
+// Source material bodies own hull, parts and HP; occupants still feel the crash.
+bool Shock(const Identity &id){return aircraftbodyclient::Owned(id.v);}
 Capture Preview(uint8_t *v,uint8_t *other,const Point &p,bool secondary=false,bool knownOther=true)
 {
- Capture c;if(!gReady||!game::api.timeMs||!Identify(v,c.id)||(!(Enabled()&&Eligible(c.id))&&!Airframe(c.id)))return c;
+ Capture c;if(!gReady||!game::api.timeMs||!Identify(v,c.id)||(!(Enabled()&&Eligible(c.id))&&!Airframe(c.id)&&!Shock(c.id)))return c;
  const auto piece=secondary?p.pieceB:p.pieceA;if(piece>17)return c;
  const auto matrix=reinterpret_cast<const float *>(v+8);const float sign=secondary?-1.0f:1.0f;
  Vec3 point,inward;if(!dentmodel::Local(matrix,{p.p.x,p.p.y,p.p.z},false,point)||
   !dentmodel::Local(matrix,{sign*p.n.x,sign*p.n.y,sign*p.n.z},true,inward))return c;
  const float len=std::sqrt(inward.x*inward.x+inward.y*inward.y+inward.z*inward.z);
- if(!std::isfinite(len)||len<.5f||len>2||(!Airframe(c.id)&&inward.z/len>.7f))return c; // ordinary car wheel/road support remains rigid
+ if(!std::isfinite(len)||len<.5f||len>2||(!Airframe(c.id)&&!(Shock(c.id)&&game::IsAircraft(c.id.v))&&inward.z/len>.7f))return c; // ordinary car wheel/road support remains rigid; aircraft landings count
  // CColPoint's normal is the outward reaction on A, reversed for B.
  // Material compression travels into the struck body, against that reaction.
  inward={-inward.x/len,-inward.y/len,-inward.z/len};
@@ -59,9 +62,10 @@ Capture Preview(uint8_t *v,uint8_t *other,const Point &p,bool secondary=false,bo
 }
 void Save(Capture c,float force)
 {
- if(!c.hit.valid||!std::isfinite(force)||force<=0||!Current(c.id)||(!Eligible(c.id)&&!Airframe(c.id)))return;
+ if(!c.hit.valid||!std::isfinite(force)||force<=0||!Current(c.id)||(!Eligible(c.id)&&!Airframe(c.id)&&!Shock(c.id)))return;
  const float contactMass=*reinterpret_cast<const float *>(c.id.v+0xcc);
  if(std::isfinite(contactMass)&&contactMass>=100&&contactMass<=1000000)crashdamage::Contact(c.id.v,force/contactMass*50);
+ if(Shock(c.id))return;
  if(Airframe(c.id)){const float mass=*reinterpret_cast<const float *>(c.id.v+0xcc);if(std::isfinite(mass)&&mass>=100&&mass<=1000000)game::api.AirframeCollision(c.id.v,c.hit.point,c.hit.inward,force/mass*50);return;}
  auto &h=Record(c.id);const auto now=c.hit.when;
  // Native sector collision retains its first strongest record when forces tie.
@@ -145,6 +149,7 @@ bool Install()
  CHAIN(gFix,"_ZN11CAutomobile3FixEv",Fix);CHAIN(gDelete,"_ZN7CEntity14DeleteRwObjectEv",Delete);
 #undef CHAIN
  gReady=gPair&&gSingle&&gAlt&&gControl&&gDamage&&gFix&&gDelete;
+ game::api.AirframeContactsManaged=+[](const uint8_t *v){Identity id;return gReady&&Identify(const_cast<uint8_t *>(v),id)&&Airframe(id);};
  if(gReady){Log("car impacts: certified native collision damage enabled");if(gConfig.carDeformation)Log("car deformation: localized native collision dents enabled; 16 cars, 25 cm cap");}
  return gReady;
 }

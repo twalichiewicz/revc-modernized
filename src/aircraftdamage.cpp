@@ -2,6 +2,7 @@
 #include "config.h"
 #include "game.h"
 #include "hooks.h"
+#include "aircraftbodyclient.h"
 #include <array>
 #include <cmath>
 #include <cstring>
@@ -34,6 +35,7 @@ bool Vehicle(uint8_t *v,Identity &id)
 }
 bool Admitted(uint8_t *v,Identity &id)
 {
+ if(aircraftbodyclient::Owned(v))return false;
  if(api.timeMs){const uint32_t now=*api.timeMs;if(gClockSeen&&now<gClock){gLeases.clear();gEntries=gFlags=nullptr;}gClock=now;gClockSeen=true;}
  if(!Vehicle(v,id))return false;
  Lease &lease=gLeases[size_t(id.ref>>8)];

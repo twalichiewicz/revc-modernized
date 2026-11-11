@@ -5,6 +5,7 @@
 #include "game.h"
 #include "hooks.h"
 #include "log.h"
+#include "aircraftbodyclient.h"
 #include <array>
 #include <cmath>
 #include <cstdint>
@@ -46,7 +47,7 @@ bool Current(const Identity &id){Identity now;return Identify(id.vehicle,now)&&S
 bool BaseEligible(const Identity &id)
 {
  uint8_t *v=id.vehicle;
- return id.clump&&id.model>=0&&id.model!=171&&id.model!=162&&
+ return !aircraftbodyclient::Owned(v)&&id.clump&&id.model>=0&&id.model!=171&&id.model!=162&&
         *reinterpret_cast<const int *>(v+0x348)==0&&!game::IsAircraft(v)&&!game::Wrecked(v)&&
         (v[0x297]&0x40);
 }
@@ -58,7 +59,7 @@ bool AutoHeli(const Identity &id)
 }
 bool BallisticEligible(const Identity &id)
 {
- return BaseEligible(id)||(gConfig.heliDamage&&AutoHeli(id)&&id.clump&&!game::Wrecked(id.vehicle)&&(id.vehicle[0x297]&0x40));
+ return !aircraftbodyclient::Owned(id.vehicle)&&(BaseEligible(id)||(gConfig.heliDamage&&AutoHeli(id)&&id.clump&&!game::Wrecked(id.vehicle)&&(id.vehicle[0x297]&0x40)));
 }
 struct History {Identity id;std::array<partsmodel::Episode,partsmodel::kParts> parts{};std::array<float,partsmodel::kParts> strain{};std::array<int,partsmodel::kParts> stages{};uint64_t revision=0;};
 std::array<History,kSlots> gHistory;
@@ -168,7 +169,7 @@ void *HideRotor(void *atomic,void *data)
 }
 void PreRender(uint8_t *v)
 {
- gPreRender(v);Identity id;if(!gReady||!gConfig.carParts||!gConfig.heliDamage||!Identify(v,id)||!AutoHeli(id)||!id.clump)return;
+ gPreRender(v);Identity id;if(aircraftbodyclient::Owned(v)||!gReady||!gConfig.carParts||!gConfig.heliDamage||!Identify(v,id)||!AutoHeli(id)||!id.clump)return;
  const unsigned mask=(gDoorStatus(v+kDamage,0)==3?1u:0u)|(gDoorStatus(v+kDamage,1)==3?2u:0u);if(mask)gAtomics(id.clump,HideRotor,const_cast<unsigned *>(&mask));
 }
 void Fix(uint8_t *v)

@@ -3,12 +3,15 @@
 #include "carmechanics.h"
 #include "carparts.h"
 #include "airframedamage.h"
+#include "aircraftbodyclient.h"
 #include "nativebullet.h"
 #include "game.h"
 #include "hooks.h"
 #include <algorithm>
 #include <cmath>
 #include <cstring>
+#include <cstdio>
+#include <cstdlib>
 #include <dlfcn.h>
 
 namespace shotcollision { namespace {
@@ -75,6 +78,8 @@ struct Snapshot {
 };
 Snapshot Capture(uint8_t *car,int ref){Snapshot s;s.car=car;s.ref=ref;s.model=game::EntityModel(car);s.clump=game::EntityClump(car);s.vtable=*reinterpret_cast<void **>(car);std::memcpy(s.matrix.data(),car+8,sizeof s.matrix);return s;}
 struct Pending {
+ uint64_t sourceGeneration=0;
+ float sourceLimit=1;
  airframedamage::Token airToken;std::array<const void *,projectilemodel::kLayers> atomics{};std::array<CVector,projectilemodel::kLayers> normals{};
  Snapshot actor;carmechanics::BulletToken token;carparts::BulletToken partToken;int rotor=-1,component=0;float opening=-1;Point point{};CVector from{},to{};std::array<projectilemodel::Layer,projectilemodel::kLayers> layers{};size_t count=0;
  bool buildings=true,peds=true,objects=true,dummies=true,see=false,some=false,shoot=true;
@@ -201,7 +206,8 @@ void *TestAtomic(void *atomic,void *data)
  if(nv<=0||nv>65536||nt<0||nt>100000||nm<=0||nm>65536||q.triangles+unsigned(nt)>250000){q.valid=false;return nullptr;}
  q.triangles+=unsigned(nt);const auto *tri=rw.triangles(geometry);void *morph=rw.morph(geometry,0);const auto *v=morph?rw.vertices(morph):nullptr;Basis basis;
  if(!v||(nt&&!tri)||!CurrentBasis(frame,q.car,basis)){q.valid=false;return nullptr;}
- const CVector a=basis.Local(q.line.a),d=Sub(basis.Local(q.line.b),a);const uint8_t piece=q.rawMesh?0:Piece(frame,game::IsAircraft(q.car)?nullptr:q.car);
+ const CVector a=basis.Local(q.line.a),d=Sub(basis.Local(q.line.b),a);const bool automobile=*reinterpret_cast<const int *>(q.car+0x348)==0&&!game::IsAircraft(q.car);
+ const uint8_t piece=q.rawMesh?0:Piece(frame,automobile?q.car:nullptr);
  for(int i=0;i<nt;i++){
   const Triangle &f=tri[i];if(f.v[0]>=nv||f.v[1]>=nv||f.v[2]>=nv||f.material>=nm){q.valid=false;return nullptr;}
   if(!Finite(v[f.v[0]])||!Finite(v[f.v[1]])||!Finite(v[f.v[2]])){q.valid=false;return nullptr;}
@@ -239,12 +245,21 @@ bool Hook_Narrow(const Line &line,const void *matrix,void *model,Point &point,fl
   return gNarrow(line,matrix,model,point,closest,a,b);
  const uintptr_t address=reinterpret_cast<uintptr_t>(matrix);auto *car=address>=8?reinterpret_cast<uint8_t *>(address-8):nullptr;
  const int ref=Ref(car,gVehiclePool,0x6f0,game::api.PoolsGetVehicle);
- if(ref<0||(game::EntityFlags(car)&7)!=2||((*reinterpret_cast<int *>(car+0x348)!=0||game::IsAircraft(car))&&!airframedamage::Enabled(car))||!game::EntityClump(car)||rw.objectType(game::EntityClump(car))!=2)
+ const bool source=ref>=0&&aircraftbodyclient::Owned(car);
+ if(ref<0||(game::EntityFlags(car)&7)!=2||(!source&&(*reinterpret_cast<int *>(car+0x348)!=0||game::IsAircraft(car))&&!airframedamage::Enabled(car))||!game::EntityClump(car)||rw.objectType(game::EntityClump(car))!=2)
   return gNarrow(line,matrix,model,point,closest,a,b);
- MeshQuery q{line,closest,car};q.ignoreSee=a;q.collect=!gShot->readOnly&&(carmechanics::Enabled()||carparts::Enabled()||airframedamage::Enabled(car)||projectilemodel::Armored(game::EntityModel(car)));
- if(q.collect){q.pending.actor=Capture(car,ref);q.pending.token=carmechanics::BeginBullet(car);q.pending.partToken=carparts::BeginBullet(car);q.pending.airToken=airframedamage::BeginBullet(car);}
+ MeshQuery q{line,closest,car};q.ignoreSee=a;q.collect=!gShot->readOnly&&(source||carmechanics::Enabled()||carparts::Enabled()||airframedamage::Enabled(car)||projectilemodel::Armored(game::EntityModel(car)));
+ if(q.collect){q.pending.actor=Capture(car,ref);if(source){AircraftBodySnapshot snapshot;if(aircraftbodyclient::Read(car,snapshot))q.pending.sourceGeneration=snapshot.generation;}else{q.pending.token=carmechanics::BeginBullet(car);q.pending.partToken=carparts::BeginBullet(car);q.pending.airToken=airframedamage::BeginBullet(car);}}
  rw.atomics(game::EntityClump(car),TestAtomic,&q);
  if(!q.valid||!q.count||!q.triangles)return gNarrow(line,matrix,model,point,closest,a,b);
+ if(source){
+  Basis basis;if(basis.Set(reinterpret_cast<const float *>(car+8))){const auto start=basis.Local(line.a),end=basis.Local(line.b);float fraction=std::min(q.closest,q.glassClosest);Vec3 normal;
+   if(aircraftbodyclient::Trace(car,{start.x,start.y,start.z},{end.x,end.y,end.z},0,fraction,normal)){
+    const auto n=basis.Normal({normal.x,normal.y,normal.z});const float length=std::sqrt(Dot(n,n));
+    if(length>1e-7f){q.hit=true;q.closest=fraction;q.pending.component=0;q.pending.rotor=-1;q.hitAtomic=q.hitFrame=nullptr;q.point={};q.point.p=Add(line.a,Mul(Sub(line.b,line.a),fraction));q.point.n=Mul(n,1/length);q.point.surfaceB=6;}
+   }
+  }
+ }
  if(airframedamage::Enabled(car)||q.pending.token.revision){
   float opening=std::min(q.closest,q.glassClosest);if(carglass::Opening(car,{line.a.x,line.a.y,line.a.z},{line.b.x,line.b.y,line.b.z},opening)){
    Basis basis;if(basis.Set(reinterpret_cast<const float *>(car+8))){const auto a=basis.Local(line.a),b=basis.Local(line.b);float fraction=std::min(q.closest,q.glassClosest);Vec3 normal;
@@ -274,7 +289,11 @@ bool Hook_Narrow(const Line &line,const void *matrix,void *model,Point &point,fl
  if(!q.hit)return false;
  closest=q.closest;point=q.point;gQuery->car=car;gQuery->carRef=ref;gQuery->ped=victim;gQuery->pedRef=victimRef;gQuery->point=point;
  gQuery->glass=victim&&crossedGlass;gQuery->glassPoint=q.glassPoint;gQuery->face=(crossedGlass||(!victim&&q.glass&&q.closest==q.glassClosest))?q.face:GlassFace{};
- if(!victim&&q.collect&&q.pathValid&&q.pending.actor.Current()&&(q.pending.count||q.pending.airToken.revision||q.pending.token.revision)){q.pending.point=point;q.pending.from=line.a;q.pending.to=line.b;gQuery->pending=q.pending;}
+ if((!victim||(source&&crossedGlass))&&q.collect&&(source||q.pathValid)&&q.pending.actor.Current()&&(q.pending.count||q.pending.sourceGeneration||q.pending.airToken.revision||q.pending.token.revision)){
+  q.pending.point=victim?q.glassPoint:point;q.pending.from=line.a;q.pending.to=line.b;
+  if(victim)q.pending.sourceLimit=q.closest;
+  gQuery->pending=q.pending;
+ }
  return true;
 }
 bool Hook_World(const CVector &a,const CVector &b,Point &point,uint8_t *&entity,bool buildings,bool vehicles,bool peds,bool objects,bool dummies,bool see,bool some,bool shoot)
@@ -296,7 +315,8 @@ bool Hook_World(const CVector &a,const CVector &b,Point &point,uint8_t *&entity,
  if(hit&&entity==q.car&&q.car&&Ref(q.car,gVehiclePool,0x6f0,game::api.PoolsGetVehicle)==q.carRef&&!std::memcmp(&point,&q.point,sizeof point)){
   if(q.ped&&Ref(q.ped,gPedPool,0x8d0,game::api.PoolsGetPed)==q.pedRef){
    if(q.glass&&!readOnly){gShot->glass={q.car,q.ped,q.carRef,q.pedRef,q.glassPoint,point,q.face};
-    gShot->occupantCar=Capture(q.car,q.carRef);gShot->armoredPed=q.ped;gShot->armoredPedRef=q.pedRef;gShot->occupantRatio=SurfaceRatio(q.car,q.glassPoint,a,b,Budget());}
+    gShot->occupantCar=Capture(q.car,q.carRef);gShot->armoredPed=q.ped;gShot->armoredPedRef=q.pedRef;gShot->occupantRatio=SurfaceRatio(q.car,q.glassPoint,a,b,Budget());
+    if(q.pending.sourceGeneration&&q.pending.actor.Current()){q.pending.buildings=buildings;q.pending.peds=peds;q.pending.objects=objects;q.pending.dummies=dummies;q.pending.see=see;q.pending.some=some;q.pending.shoot=shoot;gShot->pending=q.pending;}}
    entity=q.ped;
   }
   else if(!q.ped&&!readOnly){gShot->last={q.car,q.carRef,point,q.face,a,b};if(q.pending.actor.Current()){
@@ -337,6 +357,11 @@ bool ZeroPosition(uint8_t *car,int weapon,uint8_t *by)
   (DeferredCurrent()&&weapon==gShot->deferredType&&by==gShot->deferredCreator));
 }
 struct Delivery {Pending hit;carmechanics::BulletToken token;projectilemodel::Ray ray;bool ready=false;};
+bool SourceCurrent(const Pending &hit)
+{
+ AircraftBodySnapshot snapshot;
+ return hit.sourceGeneration&&hit.actor.Current()&&aircraftbodyclient::Owned(hit.actor.car)&&aircraftbodyclient::Read(hit.actor.car,snapshot)&&snapshot.generation==hit.sourceGeneration;
+}
 bool OccupantCover(const Snapshot &actor,const Line &line,uint8_t *ignored,Point &point,float &closest)
 {
  bool hit=false;
@@ -358,10 +383,10 @@ bool OccupantCover(const Snapshot &actor,const Line &line,uint8_t *ignored,Point
 }
 void Prepare(const Pending &hit,float budget,Delivery &delivery)
 {
- if((!carmechanics::Enabled()&&!hit.airToken.revision)||!std::isfinite(budget)||budget<=0||!hit.actor.Current()||(!hit.count&&!hit.airToken.revision&&!hit.token.revision)||!game::api.ignoreEntity)return;
+ if((!carmechanics::Enabled()&&!hit.airToken.revision&&!hit.sourceGeneration)||!std::isfinite(budget)||budget<=0||!hit.actor.Current()||(!hit.count&&!hit.airToken.revision&&!hit.token.revision&&!hit.sourceGeneration)||!game::api.ignoreEntity)return;
  // Lease the actor when its mesh was sampled: a repair/restart before this
  // later native impact must retire the pending round, not issue a new lease.
- const auto token=hit.token;if((!token.revision&&!hit.airToken.revision)||!hit.actor.Current())return;
+ const auto token=hit.token;if((!token.revision&&!hit.airToken.revision&&!hit.sourceGeneration)||!hit.actor.Current()||(hit.sourceGeneration&&!SourceCurrent(hit)))return;
  Basis basis;if(!basis.Set(hit.actor.matrix.data()))return;
  const CVector d=Sub(hit.to,hit.from);const float length=std::sqrt(Dot(d,d));if(!std::isfinite(length)||length<1e-6f)return;
  const float entry=hit.opening>=0?hit.opening:Dot(Sub(hit.point.p,hit.from),d)/(length*length);if(entry<0||entry>=1)return;
@@ -382,7 +407,7 @@ void Prepare(const Pending &hit,float budget,Delivery &delivery)
   }
  }
  if(!hit.actor.Current())return;
- float limit=1;if(blocked){if(!Finite(cover.p))return;limit=std::clamp(Dot(Sub(cover.p,hit.from),d)/(length*length),entry,1.f);}
+ float limit=std::min(hit.sourceLimit,entry+reach/length);if(blocked){if(!Finite(cover.p))return;limit=std::clamp(Dot(Sub(cover.p,hit.from),d)/(length*length),entry,limit);}
  delivery.hit=hit;delivery.token=token;const auto a=basis.Local(hit.from),b=basis.Local(hit.to);
  delivery.ray={{a.x,a.y,a.z},{b.x,b.y,b.z},entry,limit,budget,delivery.hit.layers.data(),delivery.hit.count};delivery.ready=true;
 }
@@ -405,12 +430,13 @@ void Hook_VehicleDamage(uint8_t *car,uint8_t *by,int weapon,float damage,CVector
 {
  Delivery delivery;Pending receipt;bool certified=false;Pending *pending=PendingHit();
  const bool zero=at.x==0&&at.y==0&&at.z==0;
+ if(std::getenv("VC_REGULAR_SMOKE")&&aircraftbodyclient::Owned(car))std::fprintf(stderr,"[vehicle-shot] native model=%d weapon=%d damage=%.2f shot=%d active=%d pending=%d generation=%llu metadata=%d zero=%d\n",game::EntityModel(car),weapon,damage,gShot!=nullptr,gShot&&gShot->active,pending!=nullptr,(unsigned long long)(pending?pending->sourceGeneration:0),gShot&&DamageMetadata(weapon,by),zero);
  if(gShot&&gShot->active&&!gShot->readOnly&&gShot->materialConsumed.car==car&&gShot->materialConsumed.Current()&&DamageMetadata(weapon,by)&&((zero&&ZeroPosition(car,weapon,by))||!std::memcmp(&at,&gShot->consumedPoint,sizeof at)))return;
  if(gReady&&gShot&&gShot->active&&!gShot->readOnly&&DamageMetadata(weapon,by)&&pending&&pending->actor.car==car&&pending->actor.Current()&&
     ((!zero&&!std::memcmp(&at,&pending->point.p,sizeof at))||(zero&&ZeroPosition(car,weapon,by)))){
   receipt=*pending;certified=true;*pending={};Prepare(receipt,damage,delivery);
  }
- if(certified&&delivery.ready&&(receipt.airToken.revision||receipt.token.revision)){
+ if(certified&&(receipt.sourceGeneration||(delivery.ready&&(receipt.airToken.revision||receipt.token.revision)))){
   gShot->materialConsumed=receipt.actor;gShot->consumedPoint=receipt.point.p;
   // Native5217 writes last weapon/source only after its proof, mission and
   // aggressor vetoes (27d9e4), even for zero hull damage. Use that acceptance
@@ -420,7 +446,13 @@ void Hook_VehicleDamage(uint8_t *car,uint8_t *by,int weapon,float damage,CVector
   if(!receipt.actor.Current())return;
   const bool accepted=car[0x2dc]==uint8_t(weapon)&&*reinterpret_cast<uint8_t **>(car+0x2e0)==by;
   if(car[0x2dc]==0xff)car[0x2dc]=oldWeapon;
+  if(std::getenv("VC_REGULAR_SMOKE")&&receipt.sourceGeneration)std::fprintf(stderr,"[vehicle-shot] acceptance model=%d accepted=%d ready=%d current=%d\n",game::EntityModel(car),accepted,delivery.ready,SourceCurrent(receipt));
+  if(std::getenv("VC_REGULAR_SMOKE")&&receipt.sourceGeneration)std::fprintf(stderr,"[vehicle-shot] source ray model=%d flags=%x budget=%.4f entry=%.7f limit=%.7f from=%.6f/%.6f/%.6f to=%.6f/%.6f/%.6f\n",game::EntityModel(car),game::EntityFlags(car),delivery.ray.budget,delivery.ray.entry,delivery.ray.limit,delivery.ray.from.x,delivery.ray.from.y,delivery.ray.from.z,delivery.ray.to.x,delivery.ray.to.y,delivery.ray.to.z);
   if(!accepted)return;
+  if(receipt.sourceGeneration){
+   if(delivery.ready&&SourceCurrent(receipt)&&!(game::EntityFlags(car)&game::kEntityBulletProof)&&aircraftbodyclient::Bullet(car,delivery.ray.from,delivery.ray.to,delivery.ray.budget,delivery.ray.limit)&&game::api.RearmVehicleFire)game::api.RearmVehicleFire(car);
+   return;
+  }
   std::array<float,projectilemodel::kLayers> passed{};
   const bool applied=receipt.airToken.revision?airframedamage::Projectile(car,receipt.airToken,delivery.ray,&passed,receipt.rotor):carmechanics::Projectile(car,delivery.token,delivery.ray,&passed);
   if(applied&&receipt.actor.Current()){
@@ -473,20 +505,37 @@ void Hook_Burst(uint8_t *car,uint8_t piece,bool random)
  }
  const int before=delivery.ready?gWheelStatus(car+0x34c,wheel):-1;
  gBurst(car,piece,random);
- if(delivery.ready&&delivery.hit.actor.Current()&&before==0&&gWheelStatus(car+0x34c,wheel)!=0)
-  carmechanics::Projectile(car,delivery.token,delivery.ray);
+ if(delivery.ready&&delivery.hit.actor.Current()&&before==0&&gWheelStatus(car+0x34c,wheel)!=0){
+  if(delivery.hit.sourceGeneration){
+   if(SourceCurrent(delivery.hit)&&!(game::EntityFlags(car)&game::kEntityBulletProof))aircraftbodyclient::Bullet(car,delivery.ray.from,delivery.ray.to,delivery.ray.budget,delivery.ray.limit);
+  }else carmechanics::Projectile(car,delivery.token,delivery.ray);
+ }
 }
 bool Hook_PedDamage(uint8_t *ped,uint8_t *by,int weapon,float damage,int piece,uint8_t direction)
 {
  const GlassContact hit=gShot?gShot->glass:GlassContact{};
+ Delivery source;
+ if(gReady&&gShot&&gShot->active&&!gShot->readOnly&&hit.ped==ped&&DamageMetadata(weapon,by)&&gShot->pending.sourceGeneration&&gShot->pending.actor.car==hit.car&&
+    Ref(ped,gPedPool,0x8d0,game::api.PoolsGetPed)==hit.pedRef){
+  const auto pending=gShot->pending;gShot->pending={};Prepare(pending,damage,source);
+ }
  if(gReady&&gShot&&gShot->active&&!gShot->readOnly&&hit.ped==ped&&hit.face.atomic&&
     Ref(hit.car,gVehiclePool,0x6f0,game::api.PoolsGetVehicle)==hit.carRef&&
     Ref(ped,gPedPool,0x8d0,game::api.PoolsGetPed)==hit.pedRef){
   gShot->glass={};const Point &p=hit.glass;
-  carglass::Bullet(hit.car,hit.face.atomic,hit.face.triangle,{p.p.x,p.p.y,p.p.z},{p.n.x,p.n.y,p.n.z});
+  if(!aircraftbodyclient::Owned(hit.car))carglass::Bullet(hit.car,hit.face.atomic,hit.face.triangle,{p.p.x,p.p.y,p.p.z},{p.n.x,p.n.y,p.n.z});
  }
  if(gShot&&gShot->active&&!gShot->readOnly&&DamageMetadata(weapon,by)&&gShot->armoredPed==ped&&gShot->occupantCar.Current()&&Ref(ped,gPedPool,0x8d0,game::api.PoolsGetPed)==gShot->armoredPedRef)damage*=gShot->occupantRatio;
- return gPedDamage(ped,by,weapon,damage,piece,direction);
+ const bool accepted=gPedDamage(ped,by,weapon,damage,piece,direction);
+ if(accepted&&source.ready&&SourceCurrent(source.hit)&&!(game::EntityFlags(hit.car)&game::kEntityBulletProof)){
+  const uint8_t oldWeapon=hit.car[0x2dc];hit.car[0x2dc]=0xff;gVehicleDamage(hit.car,by,weapon,0,hit.glass.p);
+  if(source.hit.actor.Current()){
+   const bool bodyAccepted=hit.car[0x2dc]==uint8_t(weapon)&&*reinterpret_cast<uint8_t **>(hit.car+0x2e0)==by;
+   if(hit.car[0x2dc]==0xff)hit.car[0x2dc]=oldWeapon;
+   if(bodyAccepted&&SourceCurrent(source.hit))aircraftbodyclient::Bullet(hit.car,source.ray.from,source.ray.to,source.ray.budget,source.ray.limit);
+  }
+ }
+ return accepted;
 }
 void Hook_Occupant(uint8_t **entity,Point *point,int weapon,const CVector &a,const CVector &b)
 {
@@ -497,6 +546,9 @@ void Hook_Occupant(uint8_t **entity,Point *point,int weapon,const CVector &a,con
     Ref(glass.car,gVehiclePool,0x6f0,game::api.PoolsGetVehicle)==glass.carRef&&
     Ref(glass.ped,gPedPool,0x8d0,game::api.PoolsGetPed)==glass.pedRef&&
     !std::memcmp(point,&glass.body,sizeof *point)){
+  // The precise query already chose this occupant. Keep its accepted native
+  // ped-damage boundary as the receipt for the source glass crossing.
+  if(aircraftbodyclient::Owned(glass.car))return;
   gShot->glass={};uint8_t *car=glass.car;Point hit=glass.glass;
   carglass::Bullet(car,glass.face.atomic,glass.face.triangle,{hit.p.x,hit.p.y,hit.p.z},{hit.n.x,hit.n.y,hit.n.z});
   // The predecessor owns panel progression/visibility, shatter and audio.
@@ -506,6 +558,7 @@ void Hook_Occupant(uint8_t **entity,Point *point,int weapon,const CVector &a,con
  const Certified saved=gShot?gShot->last:Certified{};
  const bool exact=gReady&&gShot&&gShot->active&&!gShot->readOnly&&entity&&point&&*entity==saved.car&&saved.car&&Ref(saved.car,gVehiclePool,0x6f0,game::api.PoolsGetVehicle)==saved.ref&&!std::memcmp(point,&saved.point,sizeof *point);
  if(exact&&SurfaceRatio(saved.car,saved.point,a,b,Budget())==0)return;
+ if(exact&&aircraftbodyclient::Owned(saved.car))return;
  if(exact&&saved.face.atomic&&saved.point.surfaceB==7){
   gShot->last={};const auto &p=saved.point;
   carglass::Bullet(saved.car,saved.face.atomic,saved.face.triangle,{p.p.x,p.p.y,p.p.z},{p.n.x,p.n.y,p.n.z});

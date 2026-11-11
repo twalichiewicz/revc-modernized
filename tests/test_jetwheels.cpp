@@ -24,7 +24,8 @@ Config gConfig;void Log(const char *,...){}
 namespace {
 alignas(16) uint8_t v[0x6f0]{},ped[0x900]{},pad[0x200]{},pool[0x20]{},handling[0xdc]{};
 uint8_t *poolPtr=pool,flags[1]{1};uint32_t clockMs=1000;float step=1;
-bool owner=true,mission=false,cutscene=false,ground=true,recycleRay=false;int fails=0,queries=0,wheelCalls=0,nativeCalls=0;
+bool owner=true,mission=false,cutscene=false,ground=true,recycleRay=false,dodoOwner=false;int fails=0,queries=0,wheelCalls=0,nativeCalls=0;
+int airportModel=248;
 float gas=0,brake=0,steer=0,gear=1;void (*control)(uint8_t *);
 CVector &V(uint8_t *p,int o){return *reinterpret_cast<CVector *>(p+o);}float &F(uint8_t *p,int o){return *reinterpret_cast<float *>(p+o);}
 CVector Plus(CVector a,CVector b){return {a.x+b.x,a.y+b.y,a.z+b.z};}CVector Minus(CVector a,CVector b){return {a.x-b.x,a.y-b.y,a.z-b.z};}CVector Times(CVector a,float n){return {a.x*n,a.y*n,a.z*n};}
@@ -95,9 +96,9 @@ void Step(){
  clockMs+=uint32_t(step*20);
 }
 }
-namespace airportjets {float GearDown(const uint8_t *p){return owner&&p==v?gear:0;}bool Owns(const uint8_t *p){return owner&&p==v&&game::EntityModel(p)==248&&*reinterpret_cast<const int32_t *>(p+0x348)==4;}}
+namespace airportjets {float GearDown(const uint8_t *p){return owner&&p==v?gear:0;}bool Owns(const uint8_t *p){return owner&&p==v&&game::EntityModel(p)==airportModel&&*reinterpret_cast<const int32_t *>(p+0x348)==4;}}
 #ifndef JETWHEELS_NATIVE_FLIGHT
-namespace planeflight {void SetAirportWheelControl(bool (*)(const uint8_t *)) {}}
+namespace planeflight {void SetAirportWheelControl(bool (*)(const uint8_t *)) {}bool Owns(const uint8_t *p){return dodoOwner&&p==v&&game::EntityModel(p)==181;}}
 #endif
 namespace hooks {void *Chain(const char *name,void *hook){if(std::strstr(name,"CPlane14ProcessControl")){auto old=control;control=reinterpret_cast<decltype(control)>(hook);return reinterpret_cast<void *>(old);}return nullptr;}}
 [[maybe_unused]] static void *WheelSymbol(void *,const char *name){

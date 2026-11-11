@@ -1,0 +1,13 @@
+# Shared material bodies for the vehicle roster
+
+The user authorized rollout of the working Dodo body to all vehicles in the normal game, including traffic and mission actors. Native class motion, suspension, buoyancy, propulsion, animation, script protection and save behavior remain integration contracts. The installed application is the deliverable.
+
+Use the existing source host and material kernel. Replace the single Dodo owner with generation-checked per-actor leases. Admit each resident asset's visible geometry and class-specific local layout before its first collision query. Cache immutable measured prototypes across equivalent traffic actors. Delaying admission until an old proxy reports damage would miss the very first wing or door contact outside that proxy. Actual measured bounds, wheel anchors and named modules define components. Steel/aluminum effective parameters and existing armor apply to material interaction. Dodo compatibility remains explicit rather than scaling its coordinates onto unrelated assets.
+
+Render fragments, contact witnesses, LOS and vertical queries consume one committed private geometry revision. Native suspension lines remain available without retaining solid legacy shell proxies through holes. Native accepted impulses and accepted weapon receipts queue material work once. Legacy glass/part/deformation/mechanical writers yield; existing propulsion, tire, lighting and fire consumers read canonical state. Publication is transactional; resource exhaustion defers the candidate. Clump replacement, explicit repair, destruction and pool reuse preserve or retire the appropriate generation.
+
+This is an extension of the established source integration, not a new solver. Native rigid motion remains exclusive; reduced section bending, bounded polygon cutting and connected-component transfer retain their documented numerical limitations. No claim of arbitrary shell FEM, edge-edge CCD, complete aerodynamic coupling or material save serialization is made.
+
+Alternative blanket model-ID unguarding is rejected because it applies Dodo geometry/components to unrelated vehicles. Keeping independent class damage engines would retain the overlapping writers the user reported. A general replacement rigid/shell solver would expand beyond the demonstrated integration work and is unnecessary here.
+
+Verification covers actual complete asset inventory, pure geometry/material regressions, native class controllers and query agreement across representative classes, concurrent actors and lifecycle reuse, protected missions, many-actor timing, preserved existing physics tests, reproducible release and installation with profile snapshots.

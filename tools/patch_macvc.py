@@ -173,6 +173,7 @@ DEFAULT_HOOKS = [
     # Player aircraft forces, rotor world contacts/repair, and scoped native Dodo ownership.
     "_ZN8CVehicle13FlyingControlE12eFlightModel",
     "_ZN11CAutomobile14ProcessControlEv",
+    "_ZN5CBike14ProcessControlEv",
     "_ZN11CAutomobile13VehicleDamageEft",
     "_ZN14CDamageManager11ApplyDamageE10tComponentff",
     "_ZN13cTransmission26CalculateDriveAccelerationERKfRhRfS1_b",
@@ -442,6 +443,16 @@ def reserve_slots(m, count):
     fixup target. This layout and its 5818 rebases were audited for this SHA only.
     """
     data_vm, data_size, data_file, data_bytes = m.segments["__DATA"]
+    explicit = [section for section in m.sections if section[:2] == ("__DATA", "__vchooks")]
+    if explicit:
+        if len(explicit) != 1:
+            raise PatchError("ambiguous source hook storage")
+        _, _, address, size, offset = explicit[0]
+        if (address % 8 or size < 8 * count or offset < data_file or
+                offset + size > data_file + data_bytes or offset + size > len(m.data) or
+                address != data_vm + offset - data_file or any(m.data[offset:offset + size])):
+            raise PatchError("invalid or occupied source hook storage")
+        return address
     end = max(a + s for g, _, a, s, _ in m.sections if g == "__DATA")
     base = (end + 7) & ~7
     if base + 8 * count <= data_vm + data_size:

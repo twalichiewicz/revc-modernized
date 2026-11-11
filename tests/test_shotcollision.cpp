@@ -37,7 +37,7 @@ bool Projectile(uint8_t *,const BulletToken &t,const projectilemodel::Ray &r,std
 }
 namespace carparts {bool enabled=false;int hits=0,component=0;bool Enabled(){return enabled;}BulletToken BeginBullet(uint8_t *){return {enabled?1u:0u};}void Projectile(uint8_t *,const BulletToken &t,int c,float,Vec3,Vec3){if(t.revision){++hits;component=c;}}}
 namespace airframedamage {bool ComponentHit(uint8_t *,Vec3,Vec3,float,float &fraction,Vec3 &normal){if(!carglass::opening)return false;fraction=.4f;normal={-1,0,0};return true;}bool enabled=false;int hits=0,lastRotor=-1;bool Enabled(const uint8_t *){return enabled;}Token BeginBullet(uint8_t *){Token t;if(enabled)t.revision=1;return t;}bool Projectile(uint8_t *,const Token &t,const projectilemodel::Ray &,std::array<float,projectilemodel::kLayers> *passed,int rotor){lastRotor=rotor;if(!t.revision)return false;++hits;if(passed)passed->fill(20);return true;}void Perforated(uint8_t *,const Token &,float){}}
-namespace fixture { void *Lookup(void *,const char *); void *Native(const char *); std::map<std::string,void *> entry; }
+namespace fixture { void *Lookup(void *,const char *); void *Native(const char *); std::map<std::string,void *> entry;static void *(*extraLookup)(const char *)=nullptr; }
 namespace hooks {void *Chain(const char *s,void *p){fixture::entry[s]=p;return fixture::Native(s);}}
 #define dlsym fixture::Lookup
 #ifndef SHOTCOLLISION_IMPLEMENTATION
@@ -171,6 +171,7 @@ void *Native(const char *s){
  return reinterpret_cast<void *>(NativeFire);
 }
 void *Lookup(void *,const char *s){
+ if(extraLookup)if(auto symbol=extraLookup(s))return symbol;
  if(!strcmp(s,"gaBulletInfo"))return deferredBullets.data();
  if(strstr(s,"GetWheelStatus"))return reinterpret_cast<void *>(+[](void *v,int w)->int{return static_cast<uint8_t *>(v)[5+w];});
 #define BIND(n,v) if(!strcmp(s,n))return reinterpret_cast<void *>(v)
@@ -380,6 +381,8 @@ int main(int argc,char **argv){const bool assets=argc>1&&!std::strcmp(argv[1],"-
  Setup();Panel(-.8f);noPeds=true;*reinterpret_cast<void **>(cars.data()+0x218)=nullptr;carmechanics::enabled=doDamage=repairBeforeImpact=true;FireShot();Check(carmechanics::deliveries==0,"repair between mesh query and native impact retires the pending round");
  Setup();Panel(-.8f);noPeds=true;*reinterpret_cast<void **>(cars.data()+0x218)=nullptr;carmechanics::enabled=doDamage=coverWall=true;FireShot();
  Check(carmechanics::deliveries==1&&std::fabs(carmechanics::lastRay.limit-.5f)<.001f&&ignore==nullptr,"nearer real cover clips internal ray and restores ignored entity");
+ Setup();Panel(-.8f);noPeds=true;*reinterpret_cast<void **>(cars.data()+0x218)=nullptr;carmechanics::enabled=doDamage=true;to={97,0,.5f};FireShot();
+ Check(carmechanics::deliveries==1&&carmechanics::lastRay.limit<.27f&&carmechanics::lastRay.limit>.25f,"material damage cannot extend beyond the cover query certified distance");
  Setup();Panel(-.8f);noPeds=true;*reinterpret_cast<void **>(cars.data()+0x218)=nullptr;carmechanics::enabled=doDamage=throwCover=true;try{FireShot();}catch(int){}Check(ignore==nullptr&&!gShot&&!gQuery,"cover exception restores ignored entity and both shot/query scopes");
  Setup();Panel(-.8f);carmechanics::enabled=true;{uint8_t gun[32]{};int t=17;memcpy(gun,&t,4);Shot query(gun,peds.data()+0x8d0*2);WorldEntry()(from,to,result,victim,true,true,true,true,true,false,false,true);}Check(carmechanics::deliveries==0,"read-only obstruction query cannot deliver module damage");
 

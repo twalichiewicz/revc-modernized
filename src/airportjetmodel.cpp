@@ -383,6 +383,7 @@ void ClipPackedGear(void *clump,void *root){
  }
 }
 bool Complete(void *root){if(!Find(root,"jet_cabin_basis"))return false;for(const char *name:kPackingBasis)if(!Find(root,name))return false;for(const char *name:{"jet_baydoor_nl","jet_baydoor_nr","jet_baydoor_ml","jet_baydoor_mr","jet_baydoor_mli","jet_baydoor_mri","jet_baydoor_mli_b","jet_baydoor_mri_b","jet_fairing_l","jet_fairing_r","jet_link_l","jet_link_r","jet_knee_l","jet_knee_r","jet_gear_n","jet_gear_l","jet_gear_r","jet_wheel_n","jet_wheel_l","jet_wheel_r","jet_glass","jet_tire_n","jet_tire_l","jet_tire_r","jet_flap_l","jet_flap_r","jet_cabin","jet_dashboard","jet_window_trim","jet_lenses","jet_elevator_l","jet_elevator_r","jet_rudder","jet_strut_n","jet_strut_l","jet_strut_r","jet_door","jet_lining","jet_steps","jet_step_1","jet_step_2","jet_step_3","jet_cabin_rear"})if(!Find(root,name))return false;return true;}
+#include "dodomesh.h"
 }
 bool Install(){
 #define B(field,symbol) Bind(rw.field,symbol)
@@ -396,6 +397,7 @@ bool Install(){
 }
 bool Prepare(void *clump,void *policeMaverickClump){
  if(!ready||!clump)return false;void *root=rw.root(clump);if(!root)return false;if(Complete(root))return true;
+ if(DodoComplete(root)||FindAtomic(clump,"wheel_front"))return PrepareDodo(clump,policeMaverickClump);
  Source input;rw.each(clump,First,&input);if(input.count!=1||!input.atomic)return false;void *source=input.atomic;std::vector<Face> original;if(!Read(source,original))return false;
  std::vector<int> wheels;if(!Wheels(original,wheels))return false;
  Materials materials;void *glass=materials.Make({170,195,210,28});if(!glass)return false;
@@ -476,6 +478,7 @@ bool Prepare(void *clump,void *policeMaverickClump){
 }
 void Animate(void *clump,const Pose &pose){
  if(!ready||!clump)return;void *root=rw.root(clump);if(!root)return;
+ if(DodoComplete(root)){AnimateDodo(root,pose);return;}
  auto safe=[](float a){return std::isfinite(a)?a:0.0f;};
  const float down=std::isfinite(pose.gearDown)?std::clamp(pose.gearDown,0.0f,1.0f):1.0f,extension=std::clamp((down-.18f)/.82f,0.0f,1.0f),retract=1-extension;
  // Original belly patches seal the openings when extension reaches zero.
@@ -503,6 +506,16 @@ void Animate(void *clump,const Pose &pose){
  const float door=std::clamp(safe(pose.doorOpen),0.0f,1.0f),angle=-2.268928028f*door;for(const char *name:{"jet_door","jet_steps","jet_step_1","jet_step_2","jet_step_3"})if(void *frame=Find(root,name))Matrix(frame,kDoorPivot,{0,1,0},angle);
 
  rw.update(root);ClipPackedGear(clump,root);
+}
+extern "C" __attribute__((visibility("default"))) void VCSourceDodoSurfacePose(void *clump,float left,float right,float elevator,float rudder){
+ if(!clump)return;Pose pose;pose.leftFlap=left;pose.rightFlap=right;pose.elevator=elevator;pose.rudder=rudder;auto root=rw.root(clump);if(root){AnimateDodoSurfaces(root,pose);rw.update(root);}
+}
+extern "C" __attribute__((visibility("default"))) bool VCSourcePrepareDodo(void *clump,void *donor){if(!ready&&!Install())return false;return PrepareDodo(clump,donor);}
+extern "C" __attribute__((visibility("default"))) void VCSourceNeutralDodoWing(void *clump){if(ready&&clump)NeutralDodo(rw.root(clump));}
+extern "C" __attribute__((visibility("default"))) bool VCSourceDodoGrips(void *clump,CVector *left,CVector *right,CVector *up){
+ if(!ready||!clump||!left||!right||!up)return false;auto root=rw.root(clump);if(!root||!DodoComplete(root))return false;
+ auto a=rw.ltm(Find(root,"dodo_grip_l")),b=rw.ltm(Find(root,"dodo_grip_r")),yoke=rw.ltm(Find(root,"dodo_yoke"));if(!a||!b||!yoke)return false;
+ *left={a[12],a[13],a[14]};*right={b[12],b[13],b[14]};*up=Unit({yoke[8],yoke[9],yoke[10]});return Finite(*left)&&Finite(*right)&&Finite(*up);
 }
 void Animate(void *clump,const std::array<jetwheels::WheelPose,3> &wheels,float leftFlap,float rightFlap){Pose pose;pose.wheels=wheels;pose.leftFlap=leftFlap;pose.rightFlap=rightFlap;Animate(clump,pose);}
 }

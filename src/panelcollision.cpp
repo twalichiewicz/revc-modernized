@@ -3,6 +3,7 @@
 #include "config.h"
 #include "game.h"
 #include "hooks.h"
+#include "aircraftbodyclient.h"
 #include <algorithm>
 #include <array>
 #include <cmath>
@@ -27,7 +28,7 @@ int Collision(uint8_t *a,uint8_t *b,uint8_t *out,Pair native){Scope scope{active
 int Physical(uint8_t *a,uint8_t *b,uint8_t *out){return Collision(a,b,out,physical);}int Automobile(uint8_t *a,uint8_t *b,uint8_t *out){return Collision(a,b,out,automobile);}int Ped(uint8_t *a,uint8_t *b,uint8_t *out){return Collision(a,b,out,ped);}
 struct Column {alignas(16) std::array<uint8_t,0x68> bytes{};~Column(){if(*reinterpret_cast<void **>(bytes.data()+0x60))removePlanes(bytes.data());}};
 bool Matrix(const uint8_t *m,const Actor &source){if(!m)return false;for(int row:{0,4,8,12})for(int j=0;j<3;j++){const float f=reinterpret_cast<const float *>(m)[row+j];if(!std::isfinite(f)||std::fabs(f-source.pose[row+j])>1e-5f)return false;}return true;}
-bool Source(const Actor &a){return a.type==2&&a.kind==0&&!game::IsAircraft(a.v)&&(game::EntityFlags(a.v)&game::kEntityUsesCollision);}
+bool Source(const Actor &a){return a.type==2&&a.kind==0&&!aircraftbodyclient::Owned(a.v)&&!game::IsAircraft(a.v)&&(game::EntityFlags(a.v)&game::kEntityUsesCollision);}
 int Supplement(const Scope &scope,const Actor &source,const Actor &receiver,const uint8_t *panelMatrix,const uint8_t *receiverMatrix,uint8_t *receiverCol,uint8_t *out,int count,bool flip){
  if(!Current(source,true)||!Current(receiver,false)||!Source(source)||!Matrix(panelMatrix,source))return count;
  const int spheres=*reinterpret_cast<int16_t *>(receiverCol+0x28);if(spheres<1||spheres>64||!*reinterpret_cast<void **>(receiverCol+0x38))return count;

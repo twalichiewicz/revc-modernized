@@ -96,7 +96,7 @@ uint32_t gMoneyNewsAt;
 template <size_t N>
 Site Find(const CallSite (&sites)[N], const void *ret)
 {
-	const intptr_t off = static_cast<const uint8_t *>(ret) - gText;
+	const intptr_t off = hooks::ReturnOffset(ret);
 	for (const CallSite &s : sites)
 		if (off == s.ret)
 			return s.site;
@@ -314,7 +314,7 @@ __attribute__((noinline)) void Hook_DrawUV(const CSprite2d *sprite, const float 
 		return;
 	}
 	// The full crosshair only while aiming; otherwise a small dot where it points.
-	const intptr_t site = static_cast<const uint8_t *>(__builtin_return_address(0)) - gText;
+	const intptr_t site = hooks::ReturnOffset(__builtin_return_address(0));
 	if (gCrosshairReady && (site == kCrosshairSites[0] || site == kCrosshairSites[1]) && fpshoot::Firing()) {
 		const float cx = (rect[0] + rect[2]) / 2, cy = (rect[1] + rect[3]) / 2;
 		reticle::Draw(cx, cy, fpshoot::SpreadShown());

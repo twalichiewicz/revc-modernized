@@ -1,0 +1,1679 @@
+diff --git a/src/CMakeLists.txt b/src/CMakeLists.txt
+index 363aa2d..c6d3feb 100644
+--- a/src/CMakeLists.txt
++++ b/src/CMakeLists.txt
+@@ -356,3 +356,8 @@ if(${PROJECT}_INSTALL)
+ endif()
+ 
+ reVC_platform_target(${EXECUTABLE} INSTALL)
++
++include(gameplay-physics.cmake)
++
++# Material geometry code is value-only C++17; native game ABI flags stay intact.
++set_source_files_properties(extras/AircraftBody.cpp extras/aircraftbodymodel.cpp extras/airframemodel.cpp extras/mechanicalmodel.cpp PROPERTIES COMPILE_OPTIONS "-std=c++17")
+diff --git a/src/collision/Collision.cpp b/src/collision/Collision.cpp
+index 5056164..203782e 100644
+--- a/src/collision/Collision.cpp
++++ b/src/collision/Collision.cpp
+@@ -1637,7 +1637,7 @@ enum {
+ 	MAXNUMSPHERES = 128,
+ 	MAXNUMBOXES = 32,
+ 	MAXNUMLINES = 16,
+-	MAXNUMTRIS = 600
++	MAXNUMTRIS = 16384
+ };
+ 
+ #ifdef VU_COLLISION
+diff --git a/src/control/CarAI.cpp b/src/control/CarAI.cpp
+index c8230d4..344d3a5 100644
+--- a/src/control/CarAI.cpp
++++ b/src/control/CarAI.cpp
+@@ -39,6 +39,8 @@ float CCarAI::FindSwitchDistanceFar(CVehicle* pVehicle)
+ 	return FindSwitchDistanceFarNormalVehicle(pVehicle);
+ }
+ 
++extern "C" __attribute__((noinline)) void VCSourceFireCrewLeave(CVehicle *v){CCarAI::TellOccupantsToLeaveCar(v);asm volatile("":::"memory");}
++
+ void CCarAI::BackToCruisingIfNoWantedLevel(CVehicle* pVehicle)
+ {
+ 	if (FindPlayerPed()->m_pWanted->m_bIgnoredByEveryone || pVehicle->bIsLawEnforcer &&
+@@ -217,7 +219,7 @@ void CCarAI::UpdateCarAI(CVehicle* pVehicle)
+ 				if (pVehicle->bIsFireTruckOnDuty) {
+ 					float distance = 30.0f;
+ 					if (gFireManager.FindNearestFire(pVehicle->AutoPilot.m_vecDestinationCoors, &distance)) {
+-						TellOccupantsToLeaveCar(pVehicle);
++						VCSourceFireCrewLeave(pVehicle);
+ 						pVehicle->AutoPilot.m_nCarMission = MISSION_STOP_FOREVER;
+ 					}
+ 					else {
+@@ -580,7 +582,7 @@ void CCarAI::AddFiretruckOccupants(CVehicle* pVehicle)
+ 	pVehicle->SetupPassenger(0);
+ }
+ 
+-void CCarAI::TellOccupantsToLeaveCar(CVehicle* pVehicle)
++__attribute__((noinline)) void CCarAI::TellOccupantsToLeaveCar(CVehicle* pVehicle)
+ {
+ 	if (pVehicle->pDriver){
+ 		pVehicle->pDriver->SetObjective(OBJECTIVE_LEAVE_CAR, pVehicle);
+diff --git a/src/core/CdStream_posix.cpp b/src/core/CdStream_posix.cpp
+index dc4fcb1..9e04798 100644
+--- a/src/core/CdStream_posix.cpp
++++ b/src/core/CdStream_posix.cpp
+@@ -1,3 +1,4 @@
++#include "PrivateSemaphore.h"
+ #ifndef _WIN32
+ #include "common.h"
+ #ifdef GTA_PC || GTA_MOBILE
+@@ -66,12 +67,7 @@ re3_sem_close(sem_t* sem)
+ sem_t*
+ re3_sem_open(const char* format, ...)
+ {
+-    char semName[21];
+-    va_list va;
+-    va_start(va, format);
+-    vsprintf(semName, format, va);
+-
+-    return sem_open(semName, O_CREAT, 0644, 1);
++    return CreatePrivateSemaphore();
+ }
+ 
+ #define RE3_SEM_CLOSE re3_sem_close
+@@ -80,12 +76,7 @@ re3_sem_close(sem_t* sem, const char* format, ...)
+ {
+     sem_close(sem);
+ 
+-    char semName[21];
+-    va_list va;
+-    va_start(va, format);
+-    vsprintf(semName, format, va);
+ 
+-    sem_unlink(semName);
+ }
+ 
+ #endif
+@@ -613,7 +604,15 @@ CdStreamAddImage(char const *path)
+ 	ASSERT(path != nil);
+ 	ASSERT(gNumImages < MAX_CDIMAGES);
+ 
++#ifdef __APPLE__
++	// A generated texture archive belongs to the writable source profile.
++	// Resolve it before open, even if an old cache exists in the game root.
++	char *resolved = casepath(path, false);
++	gImgFiles[gNumImages] = open(resolved ? resolved : path, _gdwCdStreamFlags);
++	free(resolved);
++#else
+ 	gImgFiles[gNumImages] = open(path, _gdwCdStreamFlags);
++#endif
+ 
+ 	// Fix case sensitivity and backslashes.
+ 	if (gImgFiles[gNumImages] == -1) {
+diff --git a/src/core/FileMgr.cpp b/src/core/FileMgr.cpp
+index 7eaeb32..de44f05 100644
+--- a/src/core/FileMgr.cpp
++++ b/src/core/FileMgr.cpp
+@@ -190,6 +190,9 @@ FindGameRoot(char *path, size_t pathSize)
+ {
+ 	char executableDir[FILEMGR_PATH_SIZE];
+ 	if(GetExecutableDir(executableDir, sizeof(executableDir))){
++		char embedded[FILEMGR_PATH_SIZE];
++		int n=snprintf(embedded,sizeof(embedded),"%s/../Resources/GameData",executableDir);
++		if(n>0 && n<(int)sizeof(embedded) && SetGameRoot(embedded,path,pathSize))return true;
+ 		if(SetGameRoot(executableDir, path, pathSize))
+ 			return true;
+ 
+diff --git a/src/core/Fire.cpp b/src/core/Fire.cpp
+index 57315b1..7d23d38 100644
+--- a/src/core/Fire.cpp
++++ b/src/core/Fire.cpp
+@@ -1,4 +1,5 @@
+ #include "common.h"
++#include "AircraftBody.h"
+ 
+ #include "Vector.h"
+ #include "PlayerPed.h"
+@@ -105,6 +106,7 @@ CFire::ProcessFire(void)
+ 			}
+ 		}
+ 	}
++	if(m_pEntity&&m_pEntity->IsVehicle())AircraftBodyFirePosition(m_pEntity,m_vecPos);
+ 	if (!FindPlayerVehicle() &&
+ #ifdef FIX_BUGS
+ 		FindPlayerPed() &&
+diff --git a/src/core/Frontend.h b/src/core/Frontend.h
+index 38f92ef..b838fc1 100644
+--- a/src/core/Frontend.h
++++ b/src/core/Frontend.h
+@@ -236,6 +236,7 @@ enum eMenuScreen
+ #endif
+ 
+ 	MENUPAGE_OUTRO, // Originally 34, but CFO needs last screen to be empty to count number of menu pages
++	MENUPAGE_MOD_RESERVED = 44,
+ 	MENUPAGES
+ };
+ 
+diff --git a/src/core/MenuScreensCustom.cpp b/src/core/MenuScreensCustom.cpp
+index ca3db58..bf6382a 100644
+--- a/src/core/MenuScreensCustom.cpp
++++ b/src/core/MenuScreensCustom.cpp
+@@ -387,7 +387,7 @@ void ControllerTypeAfterChange(int8 before, int8 after)
+ }
+ #endif
+ 
+-CMenuScreenCustom aScreens[] = {
++CMenuScreenCustom aScreens[MENUPAGES] = {
+ 	// MENUPAGE_STATS = 0
+ 	{ "FEH_STA", MENUPAGE_NONE, nil, nil,
+ 		MENUACTION_GOBACK, "FEDS_TB", {nil, SAVESLOT_NONE, MENUPAGE_NONE}, 190, 320, MENUALIGN_RIGHT,
+diff --git a/src/core/World.cpp b/src/core/World.cpp
+index 549c2cc..1a361f5 100644
+--- a/src/core/World.cpp
++++ b/src/core/World.cpp
+@@ -1,3 +1,7 @@
++#include "GameplayWing.h"
++#include "DodoRig.h"
++#include "AircraftBody.h"
++#include "DodoSmoke.h"
+ #include "common.h"
+ #include "Camera.h"
+ #include "CarCtrl.h"
+@@ -65,6 +69,7 @@ CWorld::Initialise()
+ void
+ CWorld::Add(CEntity *ent)
+ {
++	SourceCollisionResident(ent,true);
+ 	if(ent->IsVehicle() || ent->IsPed()) DMAudio.SetEntityStatus(((CPhysical *)ent)->m_audioEntityId, TRUE);
+ 
+ 	if(ent->bIsBIGBuilding)
+@@ -75,11 +80,13 @@ CWorld::Add(CEntity *ent)
+ 	if(ent->IsBuilding() || ent->IsDummy()) return;
+ 
+ 	if(!ent->GetIsStatic()) ((CPhysical *)ent)->AddToMovingList();
++	AircraftBodyAdded(ent);
+ }
+ 
+ void
+ CWorld::Remove(CEntity *ent)
+ {
++	SourceCollisionResident(ent,false);
+ 	if(ent->IsVehicle() || ent->IsPed()) DMAudio.SetEntityStatus(((CPhysical *)ent)->m_audioEntityId, FALSE);
+ 
+ 	if(ent->bIsBIGBuilding)
+@@ -365,7 +372,7 @@ CWorld::ProcessLineOfSightSectorList(CPtrList &list, const CColLine &line, CColP
+ 					colmodel = nil;
+ 
+ 			} else if(e->bUsesCollision)
+-				colmodel = CModelInfo::GetColModel(e->GetModelIndex());
++				colmodel = e->GetColModel();
+ 
+ 			if(colmodel && CCollision::ProcessLineOfSight(line, e->GetMatrix(), *colmodel, point, mindist,
+ 			                                              ignoreSeeThrough, ignoreShootThrough))
+@@ -465,7 +472,7 @@ CWorld::ProcessVerticalLineSectorList(CPtrList &list, const CColLine &line, CCol
+ 		if(e->m_scanCode != GetCurrentScanCode() && e->bUsesCollision) {
+ 			e->m_scanCode = GetCurrentScanCode();
+ 
+-			colmodel = CModelInfo::GetColModel(e->GetModelIndex());
++			colmodel = e->GetColModel();
+ 			if(CCollision::ProcessVerticalLine(line, e->GetMatrix(), *colmodel, point, mindist,
+ 			                                   ignoreSeeThrough, false, poly))
+ 				entity = e;
+@@ -666,7 +673,7 @@ CWorld::GetIsLineOfSightSectorListClear(CPtrList &list, const CColLine &line, bo
+ 
+ 			if(e != pIgnoreEntity && !(ignoreSomeObjects && CameraToIgnoreThisObject(e))) {
+ 
+-				colmodel = CModelInfo::GetColModel(e->GetModelIndex());
++				colmodel = e->GetColModel();
+ 
+ 				if(CCollision::TestLineOfSight(line, e->GetMatrix(), *colmodel, ignoreSeeThrough, false))
+ 					return false;
+@@ -971,7 +978,7 @@ CWorld::TestSphereAgainstSectorList(CPtrList &list, CVector spherePos, float rad
+ 				float distance = diff.Magnitude();
+ 
+ 				if(e->GetBoundRadius() + radius > distance) {
+-					CColModel *eCol = CModelInfo::GetColModel(e->GetModelIndex());
++					CColModel *eCol = e->GetColModel();
+ 					int collidedSpheres =
+ 					    CCollision::ProcessColModels(sphereMat, OurColModel, e->GetMatrix(), *eCol,
+ 					                                 gaTempSphereColPoints, nil, nil);
+@@ -1661,6 +1668,9 @@ CWorld::AddParticles(void)
+ void
+ CWorld::ShutDown(void)
+ {
++	AircraftBodyShutdown();
++	GameplayWingShutdown();
++	DodoRigShutdown();
+ 	for(int i = 0; i < NUMSECTORS_X * NUMSECTORS_Y; i++) {
+ 		CSector *pSector = GetSector(i % NUMSECTORS_X, i / NUMSECTORS_Y);
+ 		for(CPtrNode *pNode = pSector->m_lists[ENTITYLIST_BUILDINGS].first; pNode; pNode = pNode->next) {
+@@ -1696,9 +1706,10 @@ CWorld::ShutDown(void)
+ #endif
+ 	}
+ 	for(int32 i = 0; i < NUM_LEVELS; i++) {
+-		for(CPtrNode *pNode = ms_bigBuildingsList[i].first; pNode; pNode = pNode->next) {
+-			CEntity *pEntity = (CEntity *)pNode->item;
+-			// Maybe remove from world here?
++		while(ms_bigBuildingsList[i].first) {
++			CEntity *pEntity = (CEntity *)ms_bigBuildingsList[i].first->item;
++			// Private vehicle collision must leave its world lists before it is freed.
++			Remove(pEntity);
+ 			delete pEntity;
+ 		}
+ 		ms_bigBuildingsList[i].Flush();
+@@ -1746,6 +1757,9 @@ CWorld::ShutDown(void)
+ void
+ CWorld::ClearForRestart(void)
+ {
++	AircraftBodyShutdown();
++	GameplayWingShutdown();
++	DodoRigShutdown();
+ 	if(CCutsceneMgr::HasLoaded()) CCutsceneMgr::DeleteCutsceneData();
+ 	CProjectileInfo::RemoveAllProjectiles();
+ 	CObject::DeleteAllTempObjects();
+@@ -1921,6 +1935,10 @@ CWorld::RemoveStaticObjects()
+ void
+ CWorld::Process(void)
+ {
++	DodoSmokeInput();
++	DodoRigFrame();
++	AircraftBodyFrame();
++	GameplayWingFrame();
+ 	if(!(CTimer::GetFrameCounter() & 63)) CReferences::PruneAllReferencesInWorld();
+ 
+ 	if(bProcessCutsceneOnly) {
+@@ -1964,7 +1982,7 @@ CWorld::Process(void)
+ 			if(movingEnt->bRemoveFromWorld) {
+ 				RemoveEntityInsteadOfProcessingIt(movingEnt);
+ 			} else {
+-				movingEnt->ProcessControl();
++				if(!GameplayWingSkipNativeThisPass(movingEnt))movingEnt->ProcessControl();
+ 				if(movingEnt->GetIsStatic()) { movingEnt->RemoveFromMovingList(); }
+ 			}
+ 		}
+@@ -1975,7 +1993,7 @@ CWorld::Process(void)
+ 				if(movingEnt->bRemoveFromWorld) {
+ 					RemoveEntityInsteadOfProcessingIt(movingEnt);
+ 				} else {
+-					movingEnt->ProcessControl();
++					if(!GameplayWingSkipNativeThisPass(movingEnt))movingEnt->ProcessControl();
+ 					if(movingEnt->GetIsStatic()) { movingEnt->RemoveFromMovingList(); }
+ 				}
+ 			}
+@@ -1992,7 +2010,7 @@ CWorld::Process(void)
+ 			bNoMoreCollisionTorque = false;
+ 			for(CPtrNode *node = ms_listMovingEntityPtrs.first; node; node = node->next) {
+ 				CEntity *movingEnt = (CEntity *)node->item;
+-				if(!movingEnt->bIsInSafePosition) {
++				if(!movingEnt->bIsInSafePosition && !GameplayWingSkipNativeThisPass(movingEnt)) {
+ 					movingEnt->ProcessCollision();
+ 					movingEnt->GetMatrix().UpdateRW();
+ 					movingEnt->UpdateRwFrame();
+@@ -2002,7 +2020,7 @@ CWorld::Process(void)
+ 			for(int i = 0; i < 4; i++) {
+ 				for(CPtrNode *node = ms_listMovingEntityPtrs.first; node; node = node->next) {
+ 					CEntity *movingEnt = (CEntity *)node->item;
+-					if(!movingEnt->bIsInSafePosition) {
++					if(!movingEnt->bIsInSafePosition && !GameplayWingSkipNativeThisPass(movingEnt)) {
+ 						movingEnt->ProcessCollision();
+ 						movingEnt->GetMatrix().UpdateRW();
+ 						movingEnt->UpdateRwFrame();
+@@ -2011,32 +2029,32 @@ CWorld::Process(void)
+ 			}
+ 			for(CPtrNode *node = ms_listMovingEntityPtrs.first; node; node = node->next) {
+ 				CEntity *movingEnt = (CEntity *)node->item;
+-				if(!movingEnt->bIsInSafePosition) {
++				if(!movingEnt->bIsInSafePosition && !GameplayWingSkipNativeThisPass(movingEnt)) {
+ 					movingEnt->bIsStuck = true;
+ 					movingEnt->ProcessCollision();
+ 					movingEnt->GetMatrix().UpdateRW();
+ 					movingEnt->UpdateRwFrame();
+-					if(!movingEnt->bIsInSafePosition) { movingEnt->bIsStuck = true; }
++					if(!movingEnt->bIsInSafePosition && !GameplayWingSkipNativeThisPass(movingEnt)) { movingEnt->bIsStuck = true; }
+ 				}
+ 			}
+ 			bSecondShift = false;
+ 			for(CPtrNode *node = ms_listMovingEntityPtrs.first; node; node = node->next) {
+ 				CEntity *movingEnt = (CEntity *)node->item;
+-				if(!movingEnt->bIsInSafePosition) {
++				if(!movingEnt->bIsInSafePosition && !GameplayWingSkipNativeThisPass(movingEnt)) {
+ 					movingEnt->ProcessShift();
+ 					movingEnt->GetMatrix().UpdateRW();
+ 					movingEnt->UpdateRwFrame();
+-					if(!movingEnt->bIsInSafePosition) { movingEnt->bIsStuck = true; }
++					if(!movingEnt->bIsInSafePosition && !GameplayWingSkipNativeThisPass(movingEnt)) { movingEnt->bIsStuck = true; }
+ 				}
+ 			}
+ 			bSecondShift = true;
+ 			for(CPtrNode *node = ms_listMovingEntityPtrs.first; node; node = node->next) {
+ 				CPhysical *movingEnt = (CPhysical *)node->item;
+-				if(!movingEnt->bIsInSafePosition) {
++				if(!movingEnt->bIsInSafePosition && !GameplayWingSkipNativeThisPass(movingEnt)) {
+ 					movingEnt->ProcessShift();
+ 					movingEnt->GetMatrix().UpdateRW();
+ 					movingEnt->UpdateRwFrame();
+-					if(!movingEnt->bIsInSafePosition) {
++					if(!movingEnt->bIsInSafePosition && !GameplayWingSkipNativeThisPass(movingEnt)) {
+ 						movingEnt->bIsStuck = true;
+ 						if(movingEnt->GetStatus() == STATUS_PLAYER) {
+ 							printf("STUCK: Final Step: Player Entity %d Is Stuck\n", movingEnt->GetModelIndex());
+@@ -2199,7 +2217,7 @@ CWorld::TriggerExplosionSectorList(CPtrList &list, const CVector &position, floa
+ 							CCarCtrl::SwitchVehicleToRealPhysics(pVehicle);
+ 						}
+ 						pVehicle->InflictDamage(pCreator, WEAPONTYPE_EXPLOSION,
+-						                        1100.0f * fDamageMultiplier);
++						                        1100.0f * fDamageMultiplier,position);
+ 						if(bProcessVehicleBombTimer) {
+ 							if(pVehicle->m_nBombTimer) pVehicle->m_nBombTimer /= 10;
+ 						}
+diff --git a/src/core/main.cpp b/src/core/main.cpp
+index a412a98..4a10cf8 100644
+--- a/src/core/main.cpp
++++ b/src/core/main.cpp
+@@ -1692,6 +1692,7 @@ Idle(void *arg)
+ 	if (gbShowTimebars)
+ 		tbDisplay();
+ 
++	extern void RegularGameSmokeTick(void); RegularGameSmokeTick();
+ 	DoRWStuffEndOfFrame();
+ 
+ 	POP_MEMID();	// MEMID_RENDER
+diff --git a/src/entities/Entity.cpp b/src/entities/Entity.cpp
+index 428f19a..9b4997c 100644
+--- a/src/entities/Entity.cpp
++++ b/src/entities/Entity.cpp
+@@ -1,4 +1,7 @@
++#include "AircraftBody.h"
++#include "GameplayWing.h"
+ #include "common.h"
++#include <cmath>
+ 
+ #include "VuVector.h"
+ #include "General.h"
+@@ -88,10 +91,12 @@ CEntity::CEntity(void)
+ 	m_area = AREA_MAIN_MAP;
+ 	m_randomSeed = CGeneral::GetRandomNumber();
+ 	m_pFirstReference = nil;
++	SourceCollisionConstructed(this);
+ }
+ 
+ CEntity::~CEntity(void)
+ {
++	SourceCollisionDestroyed(this);
+ 	DeleteRwObject();
+ 	ResolveReferences();
+ }
+@@ -99,16 +104,18 @@ CEntity::~CEntity(void)
+ void
+ CEntity::SetModelIndex(uint32 id)
+ {
++	bool resident=SourceCollisionIsResident(this);if(resident)CWorld::Remove(this);GameplayWingDeleting(this);ClearInstanceCollision();
+ 	m_modelIndex = id;
+ 	bHasPreRenderEffects = HasPreRenderEffects();
+-	CreateRwObject();
++	CreateRwObject();if(resident)CWorld::Add(this);
+ }
+ 
+ void
+ CEntity::SetModelIndexNoCreate(uint32 id)
+ {
++	bool resident=SourceCollisionIsResident(this);if(resident)CWorld::Remove(this);GameplayWingDeleting(this);ClearInstanceCollision();
+ 	m_modelIndex = id;
+-	bHasPreRenderEffects = HasPreRenderEffects();
++	bHasPreRenderEffects = HasPreRenderEffects();if(resident)CWorld::Add(this);
+ }
+ 
+ void
+@@ -119,6 +126,7 @@ CEntity::CreateRwObject(void)
+ 	mi = CModelInfo::GetModelInfo(m_modelIndex);
+ 
+ 	PUSH_MEMID(MEMID_WORLD);
++	AircraftBodyPrepareClump(this);
+ 	m_rwObject = mi->CreateInstance();
+ 	POP_MEMID();
+ 
+@@ -131,6 +139,7 @@ CEntity::CreateRwObject(void)
+ 			GetMatrix().AttachRW(RwFrameGetMatrix(RpClumpGetFrame((RpClump *)m_rwObject)), false);
+ 
+ 		mi->AddRef();
++		AircraftBodyClumpCreated(this);
+ 	}
+ }
+ 
+@@ -180,6 +189,7 @@ AtomicRemoveAnimFromSkinCB(RpAtomic *atomic, void *data)
+ void
+ CEntity::DeleteRwObject(void)
+ {
++	GameplayWingDeleting(this);
+ 	RwFrame *f;
+ 
+ 	GetMatrix().Detach();
+@@ -205,7 +215,7 @@ CEntity::GetBoundRect(void)
+ {
+ 	CRect rect;
+ 	CVector v;
+-	CColModel *col = CModelInfo::GetColModel(m_modelIndex);
++	CColModel *col = GetColModel();
+ 
+ 	rect.ContainPoint(GetMatrix() * col->boundingBox.min);
+ 	rect.ContainPoint(GetMatrix() * col->boundingBox.max);
+@@ -224,27 +234,27 @@ CEntity::GetBoundRect(void)
+ CVector
+ CEntity::GetBoundCentre(void)
+ {
+-	return GetMatrix() * CModelInfo::GetColModel(m_modelIndex)->boundingSphere.center;
++	return GetMatrix() * GetColModel()->boundingSphere.center;
+ }
+ 
+ #ifdef GTA_PS2
+ void
+ CEntity::GetBoundCentre(CVuVector &out)
+ {
+-	TransformPoint(out, GetMatrix(), CModelInfo::GetColModel(m_modelIndex)->boundingSphere.center);
++	TransformPoint(out, GetMatrix(), GetColModel()->boundingSphere.center);
+ }
+ #else
+ void
+ CEntity::GetBoundCentre(CVector &out)
+ {
+-	out = GetMatrix() * CModelInfo::GetColModel(m_modelIndex)->boundingSphere.center;
++	out = GetMatrix() * GetColModel()->boundingSphere.center;
+ }
+ #endif
+ 
+ float
+ CEntity::GetBoundRadius(void)
+ {
+-	return CModelInfo::GetColModel(m_modelIndex)->boundingSphere.radius;
++	return GetColModel()->boundingSphere.radius;
+ }
+ 
+ void
+@@ -470,7 +480,7 @@ CEntity::GetIsOnScreenComplex(void)
+ 		return true;
+ 
+ 	CRect rect = GetBoundRect();
+-	CColModel *colmodel = CModelInfo::GetColModel(m_modelIndex);
++	CColModel *colmodel = GetColModel();
+ 	float z = GetPosition().z;
+ 	float minz = z + colmodel->boundingBox.min.z;
+ 	float maxz = z + colmodel->boundingBox.max.z;
+@@ -625,7 +635,7 @@ CEntity::Remove(void)
+ float
+ CEntity::GetDistanceFromCentreOfMassToBaseOfModel(void)
+ {
+-	return -CModelInfo::GetColModel(m_modelIndex)->boundingBox.min.z;
++	return -GetColModel()->boundingBox.min.z;
+ }
+ 
+ void
+diff --git a/src/entities/Entity.h b/src/entities/Entity.h
+index e66c247..2cb76af 100644
+--- a/src/entities/Entity.h
++++ b/src/entities/Entity.h
+@@ -34,6 +34,13 @@ enum eEntityStatus
+ 	STATUS_GHOST
+ };
+ 
++class CEntity;
++CColModel *SourceInstanceCollision(const CEntity *);
++bool SourceCollisionIsResident(const CEntity *);
++void SourceCollisionConstructed(CEntity *);
++void SourceCollisionDestroyed(CEntity *);
++void SourceCollisionResident(CEntity *,bool);
++
+ class CEntity : public CPlaceable
+ {
+ public:
+@@ -104,7 +111,11 @@ public:
+ 	void SetType(uint8 type) { m_type = type; }
+ 	uint8 GetStatus() const { return m_status; }
+ 	void SetStatus(uint8 status) { m_status = status; }
+-	CColModel *GetColModel(void) { return CModelInfo::GetModelInfo(m_modelIndex)->GetColModel(); }
++	CColModel *GetColModel(void) { CColModel *local=SourceInstanceCollision(this);return local?local:CModelInfo::GetModelInfo(m_modelIndex)->GetColModel(); }
++	void ClearInstanceCollision();
++	bool CanReplaceInstanceCollision(CColModel *model) const;
++	bool ReplaceInstanceCollision(CColModel *model);
++	uint64 InstanceCollisionRevision() const;
+ 	bool GetIsStatic(void) const { return bIsStatic || bIsStaticWaitingForCollision; }
+ 	void SetIsStatic(bool state) { bIsStatic = state; }
+ #ifdef COMPATIBLE_SAVES
+diff --git a/src/entities/Physical.cpp b/src/entities/Physical.cpp
+index 22e822f..4b15b32 100644
+--- a/src/entities/Physical.cpp
++++ b/src/entities/Physical.cpp
+@@ -1,3 +1,5 @@
++#include "GameplayWing.h"
++#include "AircraftBody.h"
+ #include "common.h"
+ 
+ #include "World.h"
+@@ -334,7 +336,8 @@ CPhysical::PlacePhysicalRelativeToOtherPhysical(CPhysical *other, CPhysical *phy
+ int32
+ CPhysical::ProcessEntityCollision(CEntity *ent, CColPoint *colpoints)
+ {
+-	int32 numSpheres = CCollision::ProcessColModels(
++	int32 bodyContacts = AircraftBodyContacts(this,ent,colpoints);
++	int32 numSpheres = bodyContacts>=0?bodyContacts:CCollision::ProcessColModels(
+ 		GetMatrix(), *GetColModel(),
+ 		ent->GetMatrix(), *ent->GetColModel(),
+ 		colpoints,
+@@ -352,6 +355,7 @@ CPhysical::ProcessEntityCollision(CEntity *ent, CColPoint *colpoints)
+ void
+ CPhysical::ProcessControl(void)
+ {
++	if(GameplayWingRejectNative(this,"ProcessControl"))return;
+ 	if(!IsPed())
+ 		bIsInWater = false;
+ 	bHasContacted = false;
+@@ -419,6 +423,7 @@ CPhysical::GetSpeed(const CVector &r)
+ void
+ CPhysical::ApplyMoveSpeed(void)
+ {
++	if(GameplayWingRejectNative(this,"ApplyMoveSpeed"))return;
+ 	if(bIsFrozen)
+ 		m_vecMoveSpeed = CVector(0.0f, 0.0f, 0.0f);
+ 	else
+@@ -428,6 +433,7 @@ CPhysical::ApplyMoveSpeed(void)
+ void
+ CPhysical::ApplyTurnSpeed(void)
+ {
++	if(GameplayWingRejectNative(this,"ApplyTurnSpeed"))return;
+ 	if(bIsFrozen){
+ 		m_vecTurnSpeed = CVector(0.0f, 0.0f, 0.0f);
+ 	}else{
+@@ -443,12 +449,14 @@ CPhysical::ApplyTurnSpeed(void)
+ void
+ CPhysical::ApplyMoveForce(float jx, float jy, float jz)
+ {
++	if(GameplayWingCaptureMove(this,CVector(jx,jy,jz)))return;
+ 	m_vecMoveSpeed += CVector(jx, jy, jz)*(1.0f/m_fMass);
+ }
+ 
+ void
+ CPhysical::ApplyTurnForce(float jx, float jy, float jz, float px, float py, float pz)
+ {
++	if(GameplayWingCaptureTurn(this,CVector(jx,jy,jz),CVector(px,py,pz)))return;
+ 	CVector com = Multiply3x3(GetMatrix(), m_vecCentreOfMass);
+ 	CVector turnimpulse = CrossProduct(CVector(px, py, pz)-com, CVector(jx, jy, jz));
+ 	m_vecTurnSpeed += turnimpulse*(1.0f/m_fTurnMass);
+@@ -457,12 +465,14 @@ CPhysical::ApplyTurnForce(float jx, float jy, float jz, float px, float py, floa
+ void
+ CPhysical::ApplyFrictionMoveForce(float jx, float jy, float jz)
+ {
++	GameplayWingReleaseForExternal(this);
+ 	m_vecMoveFriction += CVector(jx, jy, jz)*(1.0f/m_fMass);
+ }
+ 
+ void
+ CPhysical::ApplyFrictionTurnForce(float jx, float jy, float jz, float px, float py, float pz)
+ {
++	GameplayWingReleaseForExternal(this);
+ 	CVector com = Multiply3x3(GetMatrix(), m_vecCentreOfMass);
+ 	CVector turnimpulse = CrossProduct(CVector(px, py, pz)-com, CVector(jx, jy, jz));
+ 	m_vecTurnFriction += turnimpulse*(1.0f/m_fTurnMass);
+@@ -556,6 +566,7 @@ CPhysical::ApplyGravity(void)
+ void
+ CPhysical::ApplyFriction(void)
+ {
++	GameplayWingReleaseForExternal(this);
+ 	m_vecMoveSpeed += m_vecMoveFriction;
+ 	m_vecTurnSpeed += m_vecTurnFriction;
+ 	m_vecMoveFriction = CVector(0.0f, 0.0f, 0.0f);
+@@ -579,6 +590,13 @@ CPhysical::ApplyAirResistance(void)
+ bool
+ CPhysical::ApplyCollision(CPhysical *B, CColPoint &colpoint, float &impulseA, float &impulseB)
+ {
++	GameplayWingReleaseForExternal(this);GameplayWingReleaseForExternal(B);
++ const CVector bodyPoint=colpoint.point-GetPosition();
++ const float closingA=DotProduct((AircraftBodySurfaceSpeed(B,colpoint.point)-GetSpeed(bodyPoint))*50,colpoint.normal);
++ const float closingB=closingA;
++ const float share=IsVehicle()&&B->IsVehicle()?.5f:1.f;
++ auto accepted=[&](){AircraftBodyAcceptedImpulse(this,B,colpoint,impulseA*share,Max(0.f,closingA),DotProduct((GetSpeed(bodyPoint)-AircraftBodySurfaceSpeed(B,colpoint.point))*50,colpoint.normal));CColPoint reverse=colpoint;reverse.normal=-reverse.normal;AircraftBodyAcceptedImpulse(B,this,reverse,impulseB*share,Max(0.f,closingB),DotProduct((GetSpeed(bodyPoint)-AircraftBodySurfaceSpeed(B,colpoint.point))*50,colpoint.normal));return true;};
++
+ 	float eA, eB;
+ 	CPhysical *A = this;
+ 	CObject *Bobj = (CObject*)B;
+@@ -634,7 +652,7 @@ CPhysical::ApplyCollision(CPhysical *B, CColPoint &colpoint, float &impulseA, fl
+ 							CGlass::WindowRespondsToSoftCollision(B, impulseA);
+ 						if(!A->bInfiniteMass)
+ 							A->ApplyMoveForce(colpoint.GetNormal() * (1.0f + A->m_fElasticity) * impulseA);
+-						return true;
++						return accepted();
+ 					}
+ 				}else if(!B->bInfiniteMass)
+ 					B->SetIsStatic(false);
+@@ -644,7 +662,7 @@ CPhysical::ApplyCollision(CPhysical *B, CColPoint &colpoint, float &impulseA, fl
+ 					impulseB = 0.0f;
+ 					if(!A->bInfiniteMass)
+ 						A->ApplyMoveForce(colpoint.normal*(1.0f + A->m_fElasticity)*impulseA);
+-					return true;
++					return accepted();
+ 				}
+ 			}
+ 		}else{
+@@ -696,7 +714,7 @@ CPhysical::ApplyCollision(CPhysical *B, CColPoint &colpoint, float &impulseA, fl
+ 							if(!A->IsVehicle() || !CWorld::bNoMoreCollisionTorque)
+ 								A->ApplyTurnForce(f, pointposA);
+ 						}
+-						return true;
++						return accepted();
+ 					}
+ 				}else if(!B->bInfiniteMass){
+ 					B->SetIsStatic(false);
+@@ -748,7 +766,7 @@ CPhysical::ApplyCollision(CPhysical *B, CColPoint &colpoint, float &impulseA, fl
+ 				if(!B->bInfiniteMass)
+ 					B->ApplyMoveForce(colpoint.normal*-impulseB);
+ 			}
+-			return true;
++			return accepted();
+ 		}
+ 	}else if(A->bPedPhysics){
+ 		CVector pointposB = colpoint.point - B->GetPosition();
+@@ -787,7 +805,7 @@ CPhysical::ApplyCollision(CPhysical *B, CColPoint &colpoint, float &impulseA, fl
+ 				B->ApplyMoveForce(fB);
+ 				B->ApplyTurnForce(fB, pointposB);
+ 			}
+-			return true;
++			return accepted();
+ 		}
+ 	}else if(B->bPedPhysics){
+ 		CVector pointposA = colpoint.point - A->GetPosition();
+@@ -827,7 +845,7 @@ CPhysical::ApplyCollision(CPhysical *B, CColPoint &colpoint, float &impulseA, fl
+ 				}
+ 				B->ApplyMoveForce(fB);
+ 			}
+-			return true;
++			return accepted();
+ 		}
+ 	}else{
+ 		CVector pointposA = colpoint.point - A->GetPosition();
+@@ -889,7 +907,7 @@ CPhysical::ApplyCollision(CPhysical *B, CColPoint &colpoint, float &impulseA, fl
+ 				B->ApplyMoveForce(fB);
+ 				B->ApplyTurnForce(fB, pointposB);
+ 			}
+-			return true;
++			return accepted();
+ 		}
+ 	}
+ 	return false;
+@@ -898,13 +916,17 @@ CPhysical::ApplyCollision(CPhysical *B, CColPoint &colpoint, float &impulseA, fl
+ bool
+ CPhysical::ApplyCollision(CColPoint &colpoint, float &impulse)
+ {
++	GameplayWingReleaseForExternal(this);
++ const CVector bodyPoint=colpoint.point-GetPosition();const float closing=-DotProduct(GetSpeed(bodyPoint)*50,colpoint.normal);
++ auto accepted=[&](){AircraftBodyAcceptedImpulse(this,nil,colpoint,impulse,Max(0.f,closing),DotProduct(GetSpeed(bodyPoint)*50,colpoint.normal));return true;};
++
+ 	float speed;
+ 	if(bPedPhysics){
+ 		speed = DotProduct(m_vecMoveSpeed, colpoint.normal);
+ 		if(speed < 0.0f){
+ 			impulse = -speed * m_fMass;
+ 			ApplyMoveForce(colpoint.normal*impulse);
+-			return true;
++			return accepted();
+ 		}
+ 	}else{
+ 		CVector pointpos = colpoint.point - GetPosition();
+@@ -925,7 +947,7 @@ CPhysical::ApplyCollision(CColPoint &colpoint, float &impulse)
+ 				if(!IsVehicle() || !CWorld::bNoMoreCollisionTorque)
+ 					ApplyTurnForce(f, pointpos);
+ 			}
+-			return true;
++			return accepted();
+ 		}
+ 	}
+ 
+@@ -935,6 +957,10 @@ CPhysical::ApplyCollision(CColPoint &colpoint, float &impulse)
+ bool
+ CPhysical::ApplyCollisionAlt(CEntity *B, CColPoint &colpoint, float &impulse, CVector &moveSpeed, CVector &turnSpeed)
+ {
++	GameplayWingReleaseForExternal(this);GameplayWingReleaseForExternal(B);
++ const CVector bodyPoint=colpoint.point-GetPosition();const float closing=DotProduct((AircraftBodySurfaceSpeed(B,colpoint.point)-GetSpeed(bodyPoint))*50,colpoint.normal);const CVector deltaBefore=moveSpeed,turnBefore=turnSpeed;
++ auto accepted=[&](){CVector delta=moveSpeed-deltaBefore+CrossProduct(turnSpeed-turnBefore,bodyPoint-Multiply3x3(GetMatrix(),m_vecCentreOfMass));AircraftBodyAcceptedImpulse(this,B,colpoint,impulse,Max(0.f,closing),DotProduct((GetSpeed(bodyPoint)+delta-AircraftBodySurfaceSpeed(B,colpoint.point))*50,colpoint.normal));return true;};
++
+ 	float normalSpeed;
+ 	CVector speed;
+ 	CVector vImpulse;
+@@ -947,7 +973,7 @@ CPhysical::ApplyCollisionAlt(CEntity *B, CColPoint &colpoint, float &impulse, CV
+ 		if(normalSpeed < 0.0f){
+ 			impulse = -normalSpeed * m_fMass;
+ 			ApplyMoveForce(colpoint.normal * impulse);
+-			return true;
++			return accepted();
+ 		}
+ 	}else{
+ 		CVector pointpos = colpoint.point - GetPosition();
+@@ -1000,7 +1026,9 @@ CPhysical::ApplyCollisionAlt(CEntity *B, CColPoint &colpoint, float &impulse, CV
+ 				impulse = -(m_fElasticity + 1.0f) * normalSpeed * mass;
+ 
+ 			// ApplyMoveForce
+-			vImpulse = colpoint.normal*impulse;
++			// A material vehicle's struck part carries at most its yield force against
++			// the static world; callers and damage still see the native impulse.
++			vImpulse = colpoint.normal*AircraftBodyYieldImpulse(this,B,colpoint,impulse);
+ 			if(IsVehicle()){
+ 				if(!bHasHitWall ||
+ 				   !(m_vecMoveSpeed.MagnitudeSqr() > 0.1 || !(B->IsBuilding() || ((CPhysical*)B)->bInfiniteMass)))
+@@ -1016,7 +1044,7 @@ CPhysical::ApplyCollisionAlt(CEntity *B, CColPoint &colpoint, float &impulse, CV
+ 			CVector turnimpulse = CrossProduct(pointpos-com, vImpulse);
+ 			turnSpeed += turnimpulse*(1.0f/m_fTurnMass);
+ 
+-			return true;
++			return accepted();
+ 		}
+ 	}
+ 	return false;
+@@ -1025,6 +1053,7 @@ CPhysical::ApplyCollisionAlt(CEntity *B, CColPoint &colpoint, float &impulse, CV
+ bool
+ CPhysical::ApplyFriction(CPhysical *B, float adhesiveLimit, CColPoint &colpoint)
+ {
++	GameplayWingReleaseForExternal(this);GameplayWingReleaseForExternal(B);
+ 	CVector speedA, speedB;
+ 	float normalSpeedA, normalSpeedB;
+ 	CVector vOtherSpeedA, vOtherSpeedB;
+@@ -1174,6 +1203,7 @@ CPhysical::ApplyFriction(CPhysical *B, float adhesiveLimit, CColPoint &colpoint)
+ bool
+ CPhysical::ApplyFriction(float adhesiveLimit, CColPoint &colpoint)
+ {
++	GameplayWingReleaseForExternal(this);
+ 	CVector speed;
+ 	float normalSpeed;
+ 	CVector vOtherSpeed;
+@@ -1303,7 +1333,7 @@ CPhysical::ProcessShiftSectorList(CPtrList *lists)
+ 						Aobj->m_pCollidingEntity = nil;
+ 				}else if(Aobj->m_pCollidingEntity != B){
+ 					CMatrix inv;
+-					CVector size = CModelInfo::GetColModel(A->GetModelIndex())->boundingBox.GetSize();
++					CVector size = A->GetColModel()->boundingBox.GetSize();
+ 					size = A->GetMatrix() * size;
+ 					if(size.z < B->GetPosition().z ||
+ 					   (Invert(B->GetMatrix(), inv) * size).z < 0.0f){
+@@ -1321,7 +1351,7 @@ CPhysical::ProcessShiftSectorList(CPtrList *lists)
+ 						Bobj->m_pCollidingEntity = nil;
+ 				}else if(Bobj->m_pCollidingEntity != A){
+ 					CMatrix inv;
+-					CVector size = CModelInfo::GetColModel(B->GetModelIndex())->boundingBox.GetSize();
++					CVector size = B->GetColModel()->boundingBox.GetSize();
+ 					size = B->GetMatrix() * size;
+ 					if(size.z < A->GetPosition().z ||
+ 					   (Invert(A->GetMatrix(), inv) * size).z < 0.0f)
+@@ -1645,7 +1675,7 @@ CPhysical::ProcessCollisionSectorList(CPtrList *lists)
+ 						skipCollision = true;
+ 					else if(Aobj->m_nCollisionDamageEffect < DAMAGE_EFFECT_SMASH_COMPLETELY){
+ 						CMatrix inv;
+-						CVector size = CModelInfo::GetColModel(A->GetModelIndex())->boundingBox.GetSize();
++						CVector size = A->GetColModel()->boundingBox.GetSize();
+ 						size = A->GetMatrix() * size;
+ 						if(size.z < B->GetPosition().z ||
+ 						   (Invert(B->GetMatrix(), inv) * size).z < 0.0f){
+@@ -1664,7 +1694,7 @@ CPhysical::ProcessCollisionSectorList(CPtrList *lists)
+ 						skipCollision = true;
+ 					else if(Bobj->m_nCollisionDamageEffect < DAMAGE_EFFECT_SMASH_COMPLETELY){
+ 						CMatrix inv;
+-						CVector size = CModelInfo::GetColModel(B->GetModelIndex())->boundingBox.GetSize();
++						CVector size = B->GetColModel()->boundingBox.GetSize();
+ 						size = B->GetMatrix() * size;
+ 						if(size.z < A->GetPosition().z ||
+ 						   (Invert(A->GetMatrix(), inv) * size).z < 0.0f){
+@@ -1713,12 +1743,14 @@ CPhysical::ProcessCollisionSectorList(CPtrList *lists)
+ 				CVector turnSpeed = CVector(0.0f, 0.0f, 0.0f);
+ 				float maxImpulseA = 0.0f;
+ 				numResponses = 0;
++				int yieldedResponses = 0;
+ 				if(A->bHasContacted){
+ 					for(i = 0; i < numCollisions; i++){
+ 						if(!A->ApplyCollisionAlt(B, aColPoints[i], impulseA, moveSpeed, turnSpeed))
+ 							continue;
+ 
+ 						numResponses++;
++						if(AircraftBodyYielded()) yieldedResponses++;
+ 						if(impulseA > maxImpulseA) maxImpulseA = impulseA;
+ 
+ 						if(A->IsVehicle()){
+@@ -1755,6 +1787,7 @@ CPhysical::ProcessCollisionSectorList(CPtrList *lists)
+ 							continue;
+ 
+ 						numResponses++;
++						if(AircraftBodyYielded()) yieldedResponses++;
+ 						if(impulseA > maxImpulseA) maxImpulseA = impulseA;
+ 						float adhesion = CSurfaceTable::GetAdhesiveLimit(aColPoints[i]) / numCollisions;
+ 
+@@ -1792,7 +1825,7 @@ CPhysical::ProcessCollisionSectorList(CPtrList *lists)
+ 							else if(A->GetUp().z > 0.3f)
+ 								adhesion = 0.0f;
+ 							else
+-								adhesion *= Min(5.0f, 0.03f*impulseA + 1.0f);
++								adhesion *= Min(5.0f, 0.03f*AircraftBodyAppliedImpulse(impulseA) + 1.0f);	// friction follows the transmitted (yield-capped) load
+ 						}else{
+ 							if(impulseA > A->m_fDamageImpulse)
+ 								A->SetDamagedPieceRecord(aColPoints[i].pieceA, impulseA, B, aColPoints[i].normal);
+@@ -1811,6 +1844,7 @@ CPhysical::ProcessCollisionSectorList(CPtrList *lists)
+ 				if(numResponses){
+ 					m_vecMoveSpeed += moveSpeed / numResponses;
+ 					m_vecTurnSpeed += turnSpeed / numResponses;
++					AircraftBodySmokeMomentum(this,0,moveSpeed / numResponses);
+ 					if(!CWorld::bNoMoreCollisionTorque &&
+ 					   A->GetStatus() == STATUS_PLAYER && A->IsVehicle() &&
+ 					   Abs(A->m_vecMoveSpeed.x) > 0.2f &&
+@@ -1823,9 +1857,13 @@ CPhysical::ProcessCollisionSectorList(CPtrList *lists)
+ 					if(B->IsObject() && Bobj->m_nCollisionDamageEffect && maxImpulseA > 20.0f)
+ 						Bobj->ObjectDamage(maxImpulseA);
+ 
+-					if(!CWorld::bSecondShift)
+-						return true;
+-					ret = true;
++					// Responses that yielded applied their capped impulse; only rigid ones
++					// report a collision, so yielding never holds A stuck for ProcessShift.
++					if(AircraftBodyRigid(numResponses, yieldedResponses)){
++						if(!CWorld::bSecondShift)
++							return true;
++						ret = true;
++					}
+ 				}
+ 			}else{
+ 
+@@ -1967,7 +2005,7 @@ CPhysical::ProcessCollisionSectorList(CPtrList *lists)
+ 						Bobj->ObjectDamage(maxImpulseB);
+ 					else if(Bobj->m_nCollisionDamageEffect >= DAMAGE_EFFECT_SMASH_COMPLETELY){
+ 						CMatrix inv;
+-						CVector size = CModelInfo::GetColModel(B->GetModelIndex())->boundingBox.GetSize();
++						CVector size = B->GetColModel()->boundingBox.GetSize();
+ 						size = B->GetMatrix() * size;
+ 						if(size.z < A->GetPosition().z ||
+ 						   (Invert(A->GetMatrix(), inv) * size).z < 0.0f)
+@@ -1982,7 +2020,7 @@ CPhysical::ProcessCollisionSectorList(CPtrList *lists)
+ 					else if(Bobj->m_nCollisionDamageEffect >= DAMAGE_EFFECT_SMASH_COMPLETELY){
+ #endif
+ 						CMatrix inv;
+-						CVector size = CModelInfo::GetColModel(A->GetModelIndex())->boundingBox.GetSize();
++						CVector size = A->GetColModel()->boundingBox.GetSize();
+ 						size = A->GetMatrix() * size;
+ 						if(size.z < B->GetPosition().z ||
+ 						   (Invert(B->GetMatrix(), inv) * size).z < 0.0f)
+@@ -2038,6 +2076,8 @@ float PHYSICAL_SHIFT_SPEED_DAMP = 0.707f;
+ void
+ CPhysical::ProcessShift(void)
+ {
++	AircraftBodyOverlapQuery overlapQuery(this);
++	if(GameplayWingRejectNative(this,"ProcessShift"))return;
+ 	m_fDistanceTravelled = 0.0f;
+ 	if(GetStatus() == STATUS_SIMPLE){
+ 		bIsStuck = false;
+@@ -2047,7 +2087,9 @@ CPhysical::ProcessShift(void)
+ 		CPhysical *surf;
+ 		if(bHasHitWall && (IsPed() && (surf = ((CPed*)this)->m_pCurrentPhysSurface, surf == nil || !surf->bInfiniteMass || surf->m_phy_flagA08) ||
+ 		   CWorld::bSecondShift)){
++			const CVector shiftBefore = m_vecMoveSpeed;
+ 			m_vecMoveSpeed *= Pow(PHYSICAL_SHIFT_SPEED_DAMP, CTimer::GetTimeStep());
++			AircraftBodySmokeMomentum(this,1,m_vecMoveSpeed - shiftBefore);
+ 			m_vecTurnSpeed *= Pow(PHYSICAL_SHIFT_SPEED_DAMP, CTimer::GetTimeStep());
+ 		}
+ 
+@@ -2098,6 +2140,7 @@ float HIGHSPEED_ELASTICITY_MULT_COPCAR = 2.0f;
+ void
+ CPhysical::ProcessCollision(void)
+ {
++	if(GameplayWingRejectNative(this,"ProcessCollision"))return;
+ 	int i;
+ 	CPed *ped = (CPed*)this;
+ 
+diff --git a/src/extras/InstanceCollision.cpp b/src/extras/InstanceCollision.cpp
+new file mode 100644
+index 0000000..1e6ed8f
+--- /dev/null
++++ b/src/extras/InstanceCollision.cpp
+@@ -0,0 +1,32 @@
++// Source-host per-instance geometry without changing native object layouts.
++#include "common.h"
++#include "Entity.h"
++#include "World.h"
++#include <unordered_map>
++#include <cmath>
++namespace {
++struct Record {CColModel *col=nil;uint64 revision=0;bool resident=false;int model=-1;};
++// Process-lifetime registry avoids static destruction order with engine globals.
++std::unordered_map<const CEntity*,Record> &Records(){static auto *store=new std::unordered_map<const CEntity*,Record>;return *store;}
++}
++CColModel *SourceInstanceCollision(const CEntity *entity){auto it=Records().find(entity);return it!=Records().end()&&it->second.model==entity->GetModelIndex()?it->second.col:nil;}
++void SourceCollisionConstructed(CEntity *entity){auto it=Records().find(entity);if(it!=Records().end()){assert(!it->second.col);Records().erase(it);}Records().emplace(entity,Record{});}
++void SourceCollisionDestroyed(CEntity *entity){auto it=Records().find(entity);if(it==Records().end())return;assert(!it->second.col||!it->second.resident);delete it->second.col;Records().erase(it);}
++bool SourceCollisionIsResident(const CEntity *entity){auto it=Records().find(entity);return it!=Records().end()&&it->second.resident;}
++void SourceCollisionResident(CEntity *entity,bool resident){Records()[entity].resident=resident;}
++bool CEntity::CanReplaceInstanceCollision(CColModel *model) const{
++ auto &state=Records()[this];
++ if(m_modelIndex<0||m_modelIndex>=MODELINFOSIZE||!CModelInfo::GetModelInfo(m_modelIndex)||!model||!model->ownsCollisionVolumes||model==const_cast<CEntity*>(this)->GetColModel()||state.revision==~uint64(0))return false;
++ const auto lo=model->boundingBox.min,hi=model->boundingBox.max;
++ if(!std::isfinite(lo.x)||!std::isfinite(lo.y)||!std::isfinite(lo.z)||!std::isfinite(hi.x)||!std::isfinite(hi.y)||!std::isfinite(hi.z)||lo.x>hi.x||lo.y>hi.y||lo.z>hi.z)return false;
++ return true;
++}
++bool CEntity::ReplaceInstanceCollision(CColModel *model){
++ if(!CanReplaceInstanceCollision(model))return false;auto &state=Records()[this];
++ bool resident=state.resident;if(resident)CWorld::Remove(this);
++ auto old=state.col;state.col=model;state.model=m_modelIndex;++state.revision;
++ if(resident)CWorld::Add(this);delete old;return true;
++}
++uint64 CEntity::InstanceCollisionRevision()const{auto it=Records().find(this);return it==Records().end()?0:it->second.revision;}
++
++void CEntity::ClearInstanceCollision(){auto it=Records().find(this);if(it==Records().end()||!it->second.col)return;bool resident=it->second.resident;if(resident)CWorld::Remove(this);auto old=it->second.col;it->second.col=nil;it->second.model=-1;if(it->second.revision!=~uint64(0))++it->second.revision;if(resident)CWorld::Add(this);delete old;}
+diff --git a/src/fakerw/fake.cpp b/src/fakerw/fake.cpp
+index 208c934..51c840b 100644
+--- a/src/fakerw/fake.cpp
++++ b/src/fakerw/fake.cpp
+@@ -21,7 +21,7 @@ void *RwCalloc(size_t numObj, size_t sizeObj) {
+ 		memset(mem, 0, numObj*sizeObj);
+ 	return mem;
+ }
+-void  RwFree(void *mem) { engine->memfuncs.rwfree(mem); }
++void  RwFree(void *mem) { if(mem) engine->memfuncs.rwfree(mem); }
+ 
+ 
+ //RwReal RwV3dNormalize(RwV3d * out, const RwV3d * in);
+diff --git a/src/peds/PlayerPed.cpp b/src/peds/PlayerPed.cpp
+index cd8da42..4124303 100644
+--- a/src/peds/PlayerPed.cpp
++++ b/src/peds/PlayerPed.cpp
+@@ -1,3 +1,4 @@
++#include "SourceGates.h"
+ #include "common.h"
+ 
+ #include "RwHelper.h"
+@@ -1267,8 +1268,8 @@ CPlayerPed::ProcessPlayerWeapon(CPad *padUsed)
+ 	if (!m_pFire) {
+ 		eWeaponType weapon = GetWeapon()->m_eWeaponType;
+ 		if (weapon == WEAPONTYPE_ROCKETLAUNCHER || weapon == WEAPONTYPE_SNIPERRIFLE ||
+-			weapon == WEAPONTYPE_LASERSCOPE || weapon == WEAPONTYPE_M4 ||
+-			weapon == WEAPONTYPE_RUGER || weapon == WEAPONTYPE_M60 ||
++			weapon == WEAPONTYPE_LASERSCOPE || (!SourceSkip("skip:rifle_first_person") && (weapon == WEAPONTYPE_M4 ||
++			weapon == WEAPONTYPE_RUGER || weapon == WEAPONTYPE_M60)) ||
+ 			weapon == WEAPONTYPE_CAMERA) {
+ 
+ 			if (padUsed->TargetJustDown() || TheCamera.m_bJustJumpedOutOf1stPersonBecauseOfTarget) {
+diff --git a/src/renderer/Hud.cpp b/src/renderer/Hud.cpp
+index d7d8050..61cb413 100644
+--- a/src/renderer/Hud.cpp
++++ b/src/renderer/Hud.cpp
+@@ -1,3 +1,4 @@
++#include "SourceGates.h"
+ #include "common.h"
+ 
+ #include "Camera.h"
+@@ -565,7 +566,7 @@ void CHud::Draw()
+ 			CFont::SetDropShadowPosition(2);
+ 			CFont::SetDropColor(CRGBA(0, 0, 0, 255));
+ 
+-			if (m_ItemToFlash == ITEM_HEALTH && FRAMECOUNTER & 8
++			if (!SourceSkip("skip:hud_health")) if (m_ItemToFlash == ITEM_HEALTH && FRAMECOUNTER & 8
+ 				|| m_ItemToFlash != ITEM_HEALTH
+ 				|| playerPed->m_fHealth < 10
+ 				&& FRAMECOUNTER & 8) {
+@@ -595,7 +596,7 @@ void CHud::Draw()
+ 			/*
+ 				DrawArmour
+ 			*/
+-			if (m_ItemToFlash == ITEM_ARMOUR && FRAMECOUNTER & 8 || m_ItemToFlash != ITEM_ARMOUR) {
++			if (!SourceSkip("skip:hud_armour")) if (m_ItemToFlash == ITEM_ARMOUR && FRAMECOUNTER & 8 || m_ItemToFlash != ITEM_ARMOUR) {
+ 				CFont::SetScale(SCREEN_SCALE_X(HUD_TEXT_SCALE_X), SCREEN_SCALE_Y(HUD_TEXT_SCALE_Y));
+ 				if (playerPed->m_fArmour > 1.0f) {
+ 					AsciiToUnicode("<", sPrintIcon);
+diff --git a/src/renderer/Renderer.cpp b/src/renderer/Renderer.cpp
+index 8cc7034..378c79a 100644
+--- a/src/renderer/Renderer.cpp
++++ b/src/renderer/Renderer.cpp
+@@ -1,3 +1,4 @@
++#include "AircraftBody.h"
+ #define WITHD3D
+ #include "common.h"
+ 
+@@ -123,6 +124,8 @@ CRenderer::PreRender(void)
+ 
+ 	CHeli::SpecialHeliPreRender();
+ 	CShadows::RenderExtraPlayerShadows();
++
++	AircraftBodyRenderBoundary();
+ }
+ 
+ void
+diff --git a/src/rw/VisibilityPlugins.cpp b/src/rw/VisibilityPlugins.cpp
+index 01f2c8e..c48ced7 100644
+--- a/src/rw/VisibilityPlugins.cpp
++++ b/src/rw/VisibilityPlugins.cpp
+@@ -1,3 +1,4 @@
++#include "AircraftBody.h"
+ #include "common.h"
+ 
+ #include "RwHelper.h"
+@@ -269,7 +270,7 @@ CVisibilityPlugins::RenderWheelAtomicCB(RpAtomic *atomic)
+ 	len = Sqrt(DistToCameraSq);
+ 	lodatm = mi->GetAtomicFromDistance(len * TheCamera.LODDistMultiplier / VEHICLE_LODDIST_MULTIPLIER);
+ 	if(lodatm){
+-		if(RpAtomicGetGeometry(lodatm) != RpAtomicGetGeometry(atomic))
++		if(!AircraftBodyOwnsAtomic(atomic)&&RpAtomicGetGeometry(lodatm) != RpAtomicGetGeometry(atomic))
+ 			RpAtomicSetGeometry(atomic, RpAtomicGetGeometry(lodatm), rpATOMICSAMEBOUNDINGSPHERE);
+ 		RENDERCALLBACK(atomic);
+ 	}
+@@ -368,14 +369,16 @@ CVisibilityPlugins::RenderFadingAtomic(RpAtomic *atomic, float camdist)
+ RpAtomic*
+ CVisibilityPlugins::RenderVehicleHiDetailCB(RpAtomic *atomic)
+ {
++ const bool materialOwned=AircraftBodyOwnsAtomic(atomic);
++
+ 	RwFrame *clumpframe;
+ 	float dot;
+ 	uint32 flags;
+ 
+ 	clumpframe = RpClumpGetFrame(RpAtomicGetClump(atomic));
+-	if(DistToCameraSq < ms_vehicleLod0Dist){
++	if(materialOwned||DistToCameraSq < ms_vehicleLod0Dist){
+ 		flags = GetAtomicId(atomic);
+-		if(DistToCameraSq > ms_cullCompsDist && (flags & ATOMIC_FLAG_NOCULL) == 0 && PitchToCamera < 0.2f){
++		if(!materialOwned&&DistToCameraSq > ms_cullCompsDist && (flags & ATOMIC_FLAG_NOCULL) == 0 && PitchToCamera < 0.2f){
+ 			dot = GetDotProductWithCameraVector(RwFrameGetLTM(RpAtomicGetFrame(atomic)),
+ 				RwFrameGetLTM(clumpframe), flags);
+ 			if(dot > 0.0f && ((flags & ATOMIC_FLAG_ANGLECULL) || 0.1f*DistToCameraSq < dot*dot))
+@@ -389,16 +392,18 @@ CVisibilityPlugins::RenderVehicleHiDetailCB(RpAtomic *atomic)
+ RpAtomic*
+ CVisibilityPlugins::RenderVehicleHiDetailAlphaCB(RpAtomic *atomic)
+ {
++ const bool materialOwned=AircraftBodyOwnsAtomic(atomic);
++
+ 	RwFrame *clumpframe;
+ 	float dot;
+ 	uint32 flags;
+ 
+ 	clumpframe = RpClumpGetFrame(RpAtomicGetClump(atomic));
+-	if(DistToCameraSq < ms_vehicleLod0Dist){
++	if(materialOwned||DistToCameraSq < ms_vehicleLod0Dist){
+ 		flags = GetAtomicId(atomic);
+ 		dot = GetDotProductWithCameraVector(RwFrameGetLTM(RpAtomicGetFrame(atomic)),
+ 			RwFrameGetLTM(clumpframe), flags);
+-		if(DistToCameraSq > ms_cullCompsDist && (flags & ATOMIC_FLAG_NOCULL) == 0 && PitchToCamera < 0.2f)
++		if(!materialOwned&&DistToCameraSq > ms_cullCompsDist && (flags & ATOMIC_FLAG_NOCULL) == 0 && PitchToCamera < 0.2f)
+ 			if(dot > 0.0f && ((flags & ATOMIC_FLAG_ANGLECULL) || 0.1f*DistToCameraSq < dot*dot))
+ 				return atomic;
+ 
+@@ -417,14 +422,16 @@ CVisibilityPlugins::RenderVehicleHiDetailAlphaCB(RpAtomic *atomic)
+ RpAtomic*
+ CVisibilityPlugins::RenderVehicleHiDetailCB_BigVehicle(RpAtomic *atomic)
+ {
++ const bool materialOwned=AircraftBodyOwnsAtomic(atomic);
++
+ 	RwFrame *clumpframe;
+ 	float dot;
+ 	uint32 flags;
+ 
+ 	clumpframe = RpClumpGetFrame(RpAtomicGetClump(atomic));
+-	if(DistToCameraSq < ms_bigVehicleLod0Dist){
++	if(materialOwned||DistToCameraSq < ms_bigVehicleLod0Dist){
+ 		flags = GetAtomicId(atomic);
+-		if(DistToCameraSq > ms_cullCompsDist && (flags & ATOMIC_FLAG_NOCULL) == 0 && PitchToCamera < 0.2f){
++		if(!materialOwned&&DistToCameraSq > ms_cullCompsDist && (flags & ATOMIC_FLAG_NOCULL) == 0 && PitchToCamera < 0.2f){
+ 			dot = GetDotProductWithCameraVector(RwFrameGetLTM(RpAtomicGetFrame(atomic)),
+ 				RwFrameGetLTM(clumpframe), flags);
+ 			if(dot > 0.0f)
+@@ -438,16 +445,18 @@ CVisibilityPlugins::RenderVehicleHiDetailCB_BigVehicle(RpAtomic *atomic)
+ RpAtomic*
+ CVisibilityPlugins::RenderVehicleHiDetailAlphaCB_BigVehicle(RpAtomic *atomic)
+ {
++ const bool materialOwned=AircraftBodyOwnsAtomic(atomic);
++
+ 	RwFrame *clumpframe;
+ 	float dot;
+ 	uint32 flags;
+ 
+ 	clumpframe = RpClumpGetFrame(RpAtomicGetClump(atomic));
+-	if(DistToCameraSq < ms_bigVehicleLod0Dist){
++	if(materialOwned||DistToCameraSq < ms_bigVehicleLod0Dist){
+ 		flags = GetAtomicId(atomic);
+ 		dot = GetDotProductWithCameraVector(RwFrameGetLTM(RpAtomicGetFrame(atomic)),
+ 			RwFrameGetLTM(clumpframe), flags);
+-		if(DistToCameraSq > ms_cullCompsDist && (flags & ATOMIC_FLAG_NOCULL) == 0 && PitchToCamera < 0.2f)
++		if(!materialOwned&&DistToCameraSq > ms_cullCompsDist && (flags & ATOMIC_FLAG_NOCULL) == 0 && PitchToCamera < 0.2f)
+ 			if(dot > 0.0f && ((flags & ATOMIC_FLAG_ANGLECULL) || 0.1f*DistToCameraSq < dot*dot))
+ 				return atomic;
+ 
+@@ -460,7 +469,9 @@ CVisibilityPlugins::RenderVehicleHiDetailAlphaCB_BigVehicle(RpAtomic *atomic)
+ RpAtomic*
+ CVisibilityPlugins::RenderVehicleHiDetailCB_Boat(RpAtomic *atomic)
+ {
+-	if(DistToCameraSq < ms_vehicleLod0Dist)
++ const bool materialOwned=AircraftBodyOwnsAtomic(atomic);
++
++	if(materialOwned||DistToCameraSq < ms_vehicleLod0Dist)
+ 		RENDERCALLBACK(atomic);
+ 	return atomic;
+ }
+@@ -468,7 +479,9 @@ CVisibilityPlugins::RenderVehicleHiDetailCB_Boat(RpAtomic *atomic)
+ RpAtomic*
+ CVisibilityPlugins::RenderVehicleHiDetailAlphaCB_Boat(RpAtomic *atomic)
+ {
+-	if(DistToCameraSq < ms_vehicleLod0Dist){
++ const bool materialOwned=AircraftBodyOwnsAtomic(atomic);
++
++	if(materialOwned||DistToCameraSq < ms_vehicleLod0Dist){
+ 		if(GetAtomicId(atomic) & ATOMIC_FLAG_DRAWLAST){
+ 			if(!InsertAtomicIntoBoatSortedList(atomic, DistToCameraSq))
+ 				RENDERCALLBACK(atomic);
+@@ -543,6 +556,8 @@ CVisibilityPlugins::RenderVehicleLowDetailAlphaCB_BigVehicle(RpAtomic *atomic)
+ RpAtomic*
+ CVisibilityPlugins::RenderVehicleReallyLowDetailCB(RpAtomic *atomic)
+ {
++ if(AircraftBodyOwnsClump(RpAtomicGetClump(atomic)))return atomic;
++
+ 	RpClump *clump;
+ 	int32 alpha;
+ 
+@@ -561,6 +576,8 @@ CVisibilityPlugins::RenderVehicleReallyLowDetailCB(RpAtomic *atomic)
+ RpAtomic*
+ CVisibilityPlugins::RenderVehicleReallyLowDetailCB_BigVehicle(RpAtomic *atomic)
+ {
++ if(AircraftBodyOwnsClump(RpAtomicGetClump(atomic)))return atomic;
++
+ 	if(DistToCameraSq >= ms_bigVehicleLod1Dist)
+ 		RENDERCALLBACK(atomic);
+ 	return atomic;
+diff --git a/src/skel/crossplatform.cpp b/src/skel/crossplatform.cpp
+index 5af59d8..fa930b3 100644
+--- a/src/skel/crossplatform.cpp
++++ b/src/skel/crossplatform.cpp
+@@ -3,6 +3,7 @@
+ #include "FileMgr.h"
+ 
+ #ifdef __APPLE__
++#include "GameCache.h"
+ #include <errno.h>
+ #include <pwd.h>
+ #include <sys/stat.h>
+@@ -34,6 +35,7 @@ CreateDirectoryTree(const char *path)
+ const char *
+ GetMacOSUserFilesFolder()
+ {
++	if(const char *override = getenv("VC_REGULAR_PROFILE")){ CreateDirectoryTree(override); return override; }
+ 	static char path[PATH_MAX];
+ 	const char *home = getenv("HOME");
+ 	if(home == nil || home[0] == '\0'){
+@@ -46,7 +48,7 @@ GetMacOSUserFilesFolder()
+ #ifdef USE_MY_DOCUMENTS
+ 	const char *relativePath = "Library/Application Support/Grand Theft Auto - Vice City/p_drive/Documents/GTA Vice City User Files";
+ #else
+-	const char *relativePath = "Library/Application Support/reVC";
++	const char *relativePath = "Library/Application Support/macVC-source";
+ #endif
+ 	int length = snprintf(path, sizeof(path), "%s/%s", home, relativePath);
+ 	if(length < 0 || length >= (int)sizeof(path))
+@@ -243,6 +245,15 @@ int _caserename(const char *old_filename, const char *new_filename)
+ // Returned string should freed manually (if exists)
+ char* casepath(char const* path, bool checkPathFirst)
+ {
++#ifdef __APPLE__
++    auto cache = HostGameCachePath(path, CFileMgr::GetRootDirName(), "");
++    if(!cache.empty()){
++        cache = std::string(GetMacOSUserFilesFolder()) + cache;
++        auto separator = cache.find_last_of('/');
++        CreateDirectoryTree(cache.substr(0, separator).c_str());
++        return strdup(cache.c_str());
++    }
++#endif
+     if (checkPathFirst && access(path, F_OK) != -1) {
+         // File path is correct
+         return nil;
+diff --git a/src/skel/glfw/glfw.cpp b/src/skel/glfw/glfw.cpp
+index 9cbfc75..c311627 100644
+--- a/src/skel/glfw/glfw.cpp
++++ b/src/skel/glfw/glfw.cpp
+@@ -1,3 +1,4 @@
++#include "ControllerButtons.h"
+ #if defined RW_GL3 && !defined LIBRW_SDL2
+ 
+ #ifdef _WIN32
+@@ -47,6 +48,7 @@ long _dwOperatingSystemVersion;
+ #include "Game.h"
+ #include "PCSave.h"
+ #include "MemoryCard.h"
++#include "GenericGameStorage.h"
+ #include "Sprite2d.h"
+ #include "AnimViewer.h"
+ #include "Font.h"
+@@ -1947,6 +1949,8 @@ int
+ main(int argc, char *argv[])
+ {
+ #endif
++	extern int HostWingQueryTest(const char *);
++	if(argc>=3 && !strcmp(argv[1], "--host-wing-query")) return HostWingQueryTest(argv[2]);
+ 	RwV2d pos;
+ 	RwInt32 i;
+ 
+@@ -2314,6 +2318,7 @@ main(int argc, char *argv[])
+ 					{
+ 						if(!WindowIconified)
+ 							RsEventHandler(rsFRONTENDIDLE, nil);
++						if(getenv("VC_REGULAR_SMOKE")){static bool requested=false;if(!requested){requested=true;FrontEndMenuManager.DoSettingsBeforeStartingAGame();if(const char *slot=getenv("VC_REGULAR_SAVE_SLOT")){FrontEndMenuManager.m_nCurrSaveSlot=atoi(slot);FrontEndMenuManager.m_bWantToLoad=CheckSlotDataValid(atoi(slot));}}}
+ 
+ #ifdef PS2_MENU
+ 						if ( !FrontEndMenuManager.m_bMenuActive || TheMemoryCard.m_bWantToLoad )
+@@ -2555,8 +2560,7 @@ void CapturePad(RwInt32 padID)
+ 		ControlsManager.m_NewState.mappedButtons[15] = ControlsManager.m_NewState.mappedButtons[16] = 0;
+ 	}
+ 
+-	memcpy(ControlsManager.m_NewState.buttons, buttons, sizeof(ControlsManager.m_NewState.buttons));
+-	ControlsManager.m_NewState.numButtons = numButtons;
++	ControlsManager.m_NewState.numButtons = CopyControllerButtons(ControlsManager.m_NewState.buttons, sizeof(ControlsManager.m_NewState.buttons), buttons, numButtons);
+ 	ControlsManager.m_NewState.id = glfwPad;
+ 	ControlsManager.m_NewState.isGamepad = glfwGetGamepadState(glfwPad, &gamepadState);
+ 	if (ControlsManager.m_NewState.isGamepad) {
+diff --git a/src/vehicles/Automobile.cpp b/src/vehicles/Automobile.cpp
+index 281b71e..bcdea66 100644
+--- a/src/vehicles/Automobile.cpp
++++ b/src/vehicles/Automobile.cpp
+@@ -1,3 +1,5 @@
++#include "AircraftBody.h"
++#include "SourceGates.h"
+ #include "common.h"
+ #include "main.h"
+ 
+@@ -356,11 +358,11 @@ CAutomobile::ProcessControl(void)
+ 
+ 	// Set Center of Mass to make car more stable
+ 	if(strongGrip1 || bCheat3)
+-		m_vecCentreOfMass.z = 0.3f*m_aSuspensionSpringLength[0] + -1.0f*m_fHeightAboveRoad;
++		m_vecCentreOfMass.z = AircraftBodyCOMOffset(this).z + 0.3f*m_aSuspensionSpringLength[0] + -1.0f*m_fHeightAboveRoad;
+ 	else if(pHandling->Flags & HANDLING_NONPLAYER_STABILISER && GetStatus() == STATUS_PHYSICS)
+-		m_vecCentreOfMass.z = pHandling->CentreOfMass.z - 0.2f*pHandling->Dimension.z;
++		m_vecCentreOfMass.z = AircraftBodyCOMOffset(this).z + pHandling->CentreOfMass.z - 0.2f*pHandling->Dimension.z;
+ 	else
+-		m_vecCentreOfMass = pHandling->CentreOfMass;
++		m_vecCentreOfMass = AircraftBodyComposeCOM(this,pHandling->CentreOfMass);
+ 
+ 	// Park car
+ 	if(bCanPark && !bParking && VehicleCreatedBy != MISSION_VEHICLE && AutoPilot.m_nCarMission == MISSION_CRUISE &&
+@@ -419,12 +421,12 @@ CAutomobile::ProcessControl(void)
+ 					// positive when on left wheels, negative on right wheels
+ 					if(GetRight().z <= 0.0f)
+ 						tweak *= -1.0f;
+-					m_vecCentreOfMass.z = pHandling->CentreOfMass.z +
++					m_vecCentreOfMass.z = AircraftBodyCOMOffset(this).z + pHandling->CentreOfMass.z +
+ 						CPad::GetPad(0)->GetSteeringLeftRight()/128.0f *
+ 						CAR_BALANCE_MULT * tweak * colModel->boundingBox.max.z;
+ 				}
+ 			}else
+-				m_vecCentreOfMass.z = pHandling->CentreOfMass.z;
++				m_vecCentreOfMass.z = AircraftBodyCOMOffset(this).z + pHandling->CentreOfMass.z;
+ 
+ 			if(bHoverCheat)
+ 				DoHoverSuspensionRatios();
+@@ -1559,7 +1561,7 @@ CAutomobile::ProcessControl(void)
+ 	damagePos = GetMatrix()*damagePos;
+ 	damagePos.z += 0.15f;
+ 
+-	if(m_fHealth < 250.0f && GetStatus() != STATUS_WRECKED){
++	if(!SourceSkip("skip:car_fire_countdown") && m_fHealth < 250.0f && GetStatus() != STATUS_WRECKED){
+ 		// Car is on fire
+ 
+ 		CParticle::AddParticle(PARTICLE_CARFLAME, damagePos,
+@@ -2982,31 +2984,36 @@ CAutomobile::Render(void)
+ 		int blurAlpha = Max(1.5f*m_aWheelSpeed[1]/0.22f - 0.4f, 0.0f)*150.0f;
+ 		blurAlpha = Min(blurAlpha, 150);
+ 
++		// Stock blade/blur crossfade; a material rotor fades its blur disc by the
++		// surviving blade material and exposes what remains (aircraftbodybridge.h).
++		int rearRotorAlpha = rotorAlpha, rearBlurAlpha = blurAlpha;
++		AircraftBodySnapshot material;if(VCSourceAircraftBodyRead(this,&material))AircraftBodyRotorAlpha(material,rotorAlpha,blurAlpha,rearRotorAlpha,rearBlurAlpha);
++
+ 		// Top rotor
+ 		if(m_aCarNodes[CAR_BONNET]){
+ 			RwFrameForAllObjects(m_aCarNodes[CAR_BONNET], GetCurrentAtomicObjectCB, &atomic);
+ 			if(atomic)
+ 				SetComponentAtomicAlpha(atomic, rotorAlpha);
+ 		}
+ 		atomic = nil;
+ 		// Rear rotor
+ 		if(m_aCarNodes[CAR_BOOT]){
+ 			RwFrameForAllObjects(m_aCarNodes[CAR_BOOT], GetCurrentAtomicObjectCB, &atomic);
+ 			if(atomic)
+-				SetComponentAtomicAlpha(atomic, rotorAlpha);
++				SetComponentAtomicAlpha(atomic, rearRotorAlpha);
+ 		}
+ 		atomic = nil;
+ 		// Blurred top rotor
+ 		if(m_aCarNodes[CAR_WINDSCREEN]){
+ 			RwFrameForAllObjects(m_aCarNodes[CAR_WINDSCREEN], GetCurrentAtomicObjectCB, &atomic);
+ 			if(atomic)
+ 				SetComponentAtomicAlpha(atomic, blurAlpha);
+ 		}
+ 		atomic = nil;
+ 		// Blurred rear rotor
+ 		if(m_aCarNodes[CAR_BUMP_REAR]){
+ 			RwFrameForAllObjects(m_aCarNodes[CAR_BUMP_REAR], GetCurrentAtomicObjectCB, &atomic);
+ 			if(atomic)
+-				SetComponentAtomicAlpha(atomic, blurAlpha);
++				SetComponentAtomicAlpha(atomic, rearBlurAlpha);
+ 		}
+ 	}
+@@ -3054,6 +3061,9 @@ CAutomobile::ProcessEntityCollision(CEntity *ent, CColPoint *colpoints)
+ 		ent->GetMatrix(), *ent->GetColModel(),
+ 		colpoints,
+ 		m_aWheelColPoints, m_aSuspensionSpringRatio);
++	int materialContacts=AircraftBodyContacts(this,ent,colpoints);if(materialContacts>=0)numCollisions=materialContacts;
++
++	AircraftBodySnapshot materialWheels;if(VCSourceAircraftBodyRead(this,&materialWheels))for(int wheel=0;wheel<4;++wheel){int materialIndex=wheel;if(!materialWheels.wheelPresent[materialIndex])m_aSuspensionSpringRatio[wheel]=prevRatios[wheel];}
+ 
+ 	// m_aSuspensionSpringRatio are now set to the point where the tyre touches ground.
+ 	// In ProcessControl these will be re-normalized to ignore the tyre radius.
+@@ -3871,7 +3881,7 @@ CAutomobile::DoDriveByShootings(void)
+ 		return;
+ 
+ 	CWeapon *weapon = pDriver->GetWeapon();
+-	if(CWeaponInfo::GetWeaponInfo(weapon->m_eWeaponType)->m_nWeaponSlot != WEAPONSLOT_SUBMACHINEGUN)
++	if(!SourceSkip("skip:driveby_pistol_car") && CWeaponInfo::GetWeaponInfo(weapon->m_eWeaponType)->m_nWeaponSlot != WEAPONSLOT_SUBMACHINEGUN)
+ 		return;
+ 
+ 	weapon->Update(pDriver->m_audioEntityId, nil);
+@@ -4093,6 +4103,11 @@ CAutomobile::PlaceOnRoadProperly(void)
+ void
+ CAutomobile::VehicleDamage(float impulse, uint16 damagedPiece)
+ {
++ // Native wanted/rumble/speech/contact feedback remains, while the material
++ // owner alone persists vehicle injury. Never advance a second part/HP pool.
++ const bool materialOwned=VCSourceAircraftBodyOwned(this);
++ struct RestoreVehicleInjury {CAutomobile &vehicle;CDamageManager state;float health;bool owned;RestoreVehicleInjury(CAutomobile &v,bool source):vehicle(v),state(v.Damage),health(v.m_fHealth),owned(source){}~RestoreVehicleInjury(){if(owned){vehicle.Damage=state;vehicle.m_fHealth=health;}}} restoreInjury(*this,materialOwned);
++
+ 	int i;
+ 	float damageMultiplier = 0.333f;
+ 
+@@ -4120,7 +4135,7 @@ CAutomobile::VehicleDamage(float impulse, uint16 damagedPiece)
+ 	if(GetUp().z < 0.0f && this != FindPlayerVehicle()){
+ 		if(bNotDamagedUpsideDown || GetStatus() == STATUS_PLAYER_REMOTE || bIsInWater)
+ 			return;
+-		if(GetStatus() != STATUS_WRECKED)
++		if(!SourceSkip("skip:car_rollover_drain") && GetStatus() != STATUS_WRECKED)
+ 			m_fHealth = Max(m_fHealth - 4.0f*CTimer::GetTimeStep(), 0.0f);
+ 	}
+ 
+@@ -4304,7 +4319,7 @@ CAutomobile::VehicleDamage(float impulse, uint16 damagedPiece)
+ 			}
+ 	}
+ 
+-	if(m_fHealth < 250.0f){
++	if(!materialOwned&&m_fHealth < 250.0f){
+ 		// Car is on fire
+ 		if(Damage.GetEngineStatus() < ENGINE_STATUS_ON_FIRE){
+ 			// Set engine on fire and remember who did this
+@@ -5364,7 +5379,7 @@ CAutomobile::ProcessSwingingDoor(int32 component, eDoors door)
+ 	mat.UpdateRW();
+ 
+ 	// make wind rip off bonnet
+-	if(door == DOOR_BONNET && Doors[door].m_nDoorState == DOORST_OPEN &&
++	if(!VCSourceAircraftBodyOwned(this)&&door == DOOR_BONNET && Doors[door].m_nDoorState == DOORST_OPEN &&
+ 	   DotProduct(m_vecMoveSpeed, GetForward()) > 0.4f){
+ #ifdef FIX_BUGS
+ 		CObject *comp = SpawnFlyingComponent(CAR_BONNET, COMPGROUP_BONNET);
+@@ -5606,7 +5621,7 @@ CAutomobile::RemoveBonnetInPedCollision(void)
+ {
+ 	CObject *obj;
+ 
+-	if(Damage.GetDoorStatus(DOOR_BONNET) == DOOR_STATUS_SWINGING &&
++	if(!VCSourceAircraftBodyOwned(this)&&Damage.GetDoorStatus(DOOR_BONNET) == DOOR_STATUS_SWINGING &&
+ 	   Doors[DOOR_BONNET].RetAngleWhenOpen()*0.4f < Doors[DOOR_BONNET].m_fAngle){
+ #ifdef FIX_BUGS
+ 		obj = SpawnFlyingComponent(CAR_BONNET, COMPGROUP_BONNET);
+@@ -5624,6 +5639,7 @@ CAutomobile::RemoveBonnetInPedCollision(void)
+ void
+ CAutomobile::SetPanelDamage(int32 component, ePanels panel, bool noFlyingComponents)
+ {
++ if(VCSourceAircraftBodyOwned(this))return;
+ 	int status = Damage.GetPanelStatus(panel);
+ 	if(m_aCarNodes[component] == nil)
+ 		return;
+@@ -5645,6 +5661,7 @@ CAutomobile::SetPanelDamage(int32 component, ePanels panel, bool noFlyingCompone
+ void
+ CAutomobile::SetBumperDamage(int32 component, ePanels panel, bool noFlyingComponents)
+ {
++ if(VCSourceAircraftBodyOwned(this))return;
+ 	int status = Damage.GetPanelStatus(panel);
+ 	if(m_aCarNodes[component] == nil){
+ 		printf("Trying to damage component %d of %s\n",
+@@ -5665,6 +5682,7 @@ CAutomobile::SetBumperDamage(int32 component, ePanels panel, bool noFlyingCompon
+ void
+ CAutomobile::SetDoorDamage(int32 component, eDoors door, bool noFlyingComponents)
+ {
++ if(VCSourceAircraftBodyOwned(this))return;
+ 	int status = Damage.GetDoorStatus(door);
+ 	if(m_aCarNodes[component] == nil){
+ 		printf("Trying to damage component %d of %s\n",
+diff --git a/src/vehicles/Bike.cpp b/src/vehicles/Bike.cpp
+index a65b64d..b215d8f 100644
+--- a/src/vehicles/Bike.cpp
++++ b/src/vehicles/Bike.cpp
+@@ -1,3 +1,6 @@
++#include <dlfcn.h>
++#include "AircraftBody.h"
++#include "SourceGates.h"
+ #include "common.h"
+ #include "General.h"
+ #include "Pad.h"
+@@ -245,7 +248,7 @@ CBike::ProcessControl(void)
+ 			ProcessControlInputs(0);
+ 
+ 			if(m_fLeanInput < 0.0f){
+-				m_vecCentreOfMass.y = pHandling->CentreOfMass.y + pBikeHandling->fLeanBakCOM*m_fLeanInput;
++				m_vecCentreOfMass.y = AircraftBodyCOMOffset(this).y + pHandling->CentreOfMass.y + pBikeHandling->fLeanBakCOM*m_fLeanInput;
+ 				CVector com = m_vecCentreOfMass;
+ #ifdef FIX_BUGS
+ 				// center of mass has to have world space orientation. unfortunately we can't do wheelies
+@@ -265,7 +268,7 @@ CBike::ProcessControl(void)
+ 					}
+ 				}
+ 			}else{
+-				m_vecCentreOfMass.y = pHandling->CentreOfMass.y + pBikeHandling->fLeanFwdCOM*m_fLeanInput;
++				m_vecCentreOfMass.y = AircraftBodyCOMOffset(this).y + pHandling->CentreOfMass.y + pBikeHandling->fLeanFwdCOM*m_fLeanInput;
+ 				CVector com = m_vecCentreOfMass;
+ #ifdef FIX_BUGS
+ 				// see above
+@@ -444,10 +447,10 @@ CBike::ProcessControl(void)
+ 		ApplyTurnForce(res, GetForward() + Multiply3x3(GetMatrix(), m_vecCentreOfMass));
+ 
+ 		if(GetStatus() != STATUS_PLAYER)
+-			m_vecCentreOfMass = pHandling->CentreOfMass;
++			m_vecCentreOfMass = AircraftBodyComposeCOM(this,pHandling->CentreOfMass);
+ 	}else{
+-		m_vecCentreOfMass = pHandling->CentreOfMass;
+-		m_vecCentreOfMass.z = pBikeHandling->fNoPlayerCOMz;
++		m_vecCentreOfMass = AircraftBodyComposeCOM(this,pHandling->CentreOfMass);
++		m_vecCentreOfMass.z = AircraftBodyCOMOffset(this).z + pBikeHandling->fNoPlayerCOMz;
+ 	}
+ 
+ 	// Skip physics if object is found to have been static recently
+@@ -721,6 +724,7 @@ CBike::ProcessControl(void)
+ 			gripCheat = false;
+ 		acceleration = pHandling->Transmission.CalculateDriveAcceleration(m_fGasPedal, m_nCurrentGear, m_fChangeGearTime, fwdSpeed, gripCheat);
+ 		acceleration /= m_fForceMultiplier;
++		AircraftBodySnapshot material;if(VCSourceAircraftBodyRead(this,&material))acceleration*=material.power;
+ 
+ 		brake = m_fBrakePedal * pHandling->fBrakeDeceleration * CTimer::GetTimeStep();
+ 		bool neutralHandling = GetStatus() != STATUS_PLAYER && GetStatus() != STATUS_PLAYER_REMOTE && (pHandling->Flags & HANDLING_NEUTRALHANDLING);
+@@ -1765,6 +1769,9 @@ CBike::ProcessEntityCollision(CEntity *ent, CColPoint *colpoints)
+ 		ent->GetMatrix(), *ent->GetColModel(),
+ 		colpoints,
+ 		m_aWheelColPoints, m_aSuspensionSpringRatio);
++	int materialContacts=AircraftBodyContacts(this,ent,colpoints);if(materialContacts>=0)numCollisions=materialContacts;
++
++	AircraftBodySnapshot materialWheels;if(VCSourceAircraftBodyRead(this,&materialWheels))for(int wheel=0;wheel<4;++wheel){int materialIndex=wheel/2;if(!materialWheels.wheelPresent[materialIndex])m_aSuspensionSpringRatio[wheel]=prevRatios[wheel];}
+ 
+ 	// m_aSuspensionSpringRatio are now set to the point where the tyre touches ground.
+ 	// In ProcessControl these will be re-normalized to ignore the tyre radius.
+@@ -2013,7 +2020,7 @@ CBike::DoDriveByShootings(void)
+ 		return;
+ 
+ 	CWeapon *weapon = pDriver->GetWeapon();
+-	if(CWeaponInfo::GetWeaponInfo(weapon->m_eWeaponType)->m_nWeaponSlot != 5)
++	if(!SourceSkip("skip:driveby_pistol_bike") && CWeaponInfo::GetWeaponInfo(weapon->m_eWeaponType)->m_nWeaponSlot != 5)
+ 		return;
+ 
+ 	weapon->Update(pDriver->m_audioEntityId, nil);
+@@ -2148,6 +2155,9 @@ CBike::VehicleDamage(void)
+ 		}
+ 	}
+ 
++	// Rider injury above remains native; vehicle material damage is source-owned.
++	if(VCSourceAircraftBodyOwned(this))return;
++
+ 	if(impulse > 25.0f && GetStatus() != STATUS_WRECKED){
+ 		float damage = (impulse-25.0f)*pHandling->fCollisionDamageMultiplier;
+ 		if(damage > 0.0f){
+@@ -2927,6 +2937,7 @@ CBike::Fix(void)
+ 	bIsOnFire = false;
+ 	m_wheelStatus[0] = WHEEL_STATUS_OK;
+ 	m_wheelStatus[1] = WHEEL_STATUS_OK;
++ if(VCSourceAircraftBodyOwned(this)){static auto repaired=reinterpret_cast<void(*)(void*)>(dlsym(RTLD_DEFAULT,"VCSourceAircraftRepair"));if(repaired)repaired(this);else VCSourceAircraftBodyRepair(this);}
+ }
+ 
+ void
+diff --git a/src/vehicles/Boat.cpp b/src/vehicles/Boat.cpp
+index 5da8e1c..308cdcf 100644
+--- a/src/vehicles/Boat.cpp
++++ b/src/vehicles/Boat.cpp
+@@ -1,3 +1,5 @@
++#include "AircraftBody.h"
++#include "SourceGates.h"
+ #include "common.h"
+ 
+ #include "main.h"
+@@ -289,7 +291,7 @@ CBoat::ProcessControl(void)
+ 		smokePos = GetMatrix() * smokePos;
+ 
+ 		// On fire
+-		if(m_fHealth < 250.0f){
++		if(!SourceSkip("skip:aircraft_boat_fire") && m_fHealth < 250.0f){
+ 			CParticle::AddParticle(PARTICLE_CARFLAME, smokePos,
+ 				CVector(0.0f, 0.0f, CGeneral::GetRandomNumberInRange(2.25f/200.0f, 0.09f)),
+ 				nil, 0.9f);
+@@ -414,6 +416,7 @@ CBoat::ProcessControl(void)
+ 
+ 					CVector forceDir = Multiply3x3(GetMatrix(), CVector(-steerSin, steerCos, -Abs(m_fSteerAngle)));
+ 					CVector force = propellerDepth * m_fGasPedal * 40.0f * pHandling->Transmission.fEngineAcceleration * pHandling->fMass * forceDir;
++					AircraftBodySnapshot material;if(VCSourceAircraftBodyRead(this,&material))force*=material.power;
+ 					if(force.z > 0.2f)
+ 						force.z = SQR(1.2f - force.z) + 0.2f;
+ 					if(onLand){
+@@ -1418,7 +1421,7 @@ CBoat::DoDriveByShootings(void)
+ 		return;
+ 
+ 	CWeapon *weapon = pDriver->GetWeapon();
+-	if(CWeaponInfo::GetWeaponInfo(weapon->m_eWeaponType)->m_nWeaponSlot != 5)
++	if(!SourceSkip("skip:driveby_pistol_boat") && CWeaponInfo::GetWeaponInfo(weapon->m_eWeaponType)->m_nWeaponSlot != 5)
+ 		return;
+ 
+ 	weapon->Update(pDriver->m_audioEntityId, nil);
+diff --git a/src/vehicles/Floater.cpp b/src/vehicles/Floater.cpp
+index 08688a3..65d95e9 100644
+--- a/src/vehicles/Floater.cpp
++++ b/src/vehicles/Floater.cpp
+@@ -1,3 +1,4 @@
++#include "AircraftBody.h"
+ #include "common.h"
+ 
+ #include "Timer.h"
+@@ -136,6 +137,7 @@ cBuoyancy::PreCalcSetup(CPhysical *phys, float buoyancy)
+ 	colModel = phys->GetColModel();
+ 	m_dimMin = colModel->boundingBox.min;
+ 	m_dimMax = colModel->boundingBox.max;
++	AircraftBodyBuoyancyBounds(phys,m_dimMin,m_dimMax);
+ 
+ 	if(m_isBoat){
+ 		switch(phys->GetModelIndex()){
+diff --git a/src/vehicles/Plane.cpp b/src/vehicles/Plane.cpp
+index 0b40ca7..5f36b6c 100644
+--- a/src/vehicles/Plane.cpp
++++ b/src/vehicles/Plane.cpp
+@@ -1,3 +1,4 @@
++#include "AircraftBody.h"
+ #include "common.h"
+ #include "main.h"
+ 
+@@ -558,7 +559,9 @@ CPlane::ProcessControl(void)
+ 
+ 	// Handle streaming and such
+ 	CVehicleModelInfo *mi = (CVehicleModelInfo*)CModelInfo::GetModelInfo(GetModelIndex());
+-	if(m_isFarAway){
++	if(m_isFarAway&&VCSourceAircraftBodyOwned(this)){
++		// The material owner retains its high-detail clump and private COL.
++	}else if(m_isFarAway){
+ 		// Switch to LOD model
+ 		if(m_rwObject && RwObjectGetType(m_rwObject) == rpCLUMP){
+ 			DeleteRwObject();
+diff --git a/src/vehicles/Vehicle.cpp b/src/vehicles/Vehicle.cpp
+index d105419..1f3395d 100644
+--- a/src/vehicles/Vehicle.cpp
++++ b/src/vehicles/Vehicle.cpp
+@@ -1,3 +1,5 @@
++#include "AircraftBody.h"
++#include "SourceGates.h"
+ #include "common.h"
+ #include "main.h"
+ 
+@@ -935,6 +937,8 @@ void
+ CVehicle::ProcessBikeWheel(CVector &wheelFwd, CVector &wheelRight, CVector &wheelContactSpeed, CVector &wheelContactPoint,
+ 	int32 wheelsOnGround, float thrust, float brake, float adhesion, float destabTraction, int8 wheelId, float *wheelSpeed, tWheelState *wheelState, eBikeWheelSpecial special, uint16 wheelStatus)
+ {
++ AircraftBodySnapshot material;if(VCSourceAircraftBodyRead(this,&material)){int index=wheelId==0?0:1;auto w=material.wheels[index];thrust*=w.drive;brake*=w.brake;adhesion*=w.grip;}
++
+ 	// BUG: using statics here is probably a bad idea
+ 	static bool bAlreadySkidding = false;	// this is never reset
+ 	static bool bBraking;
+@@ -1199,6 +1203,8 @@ CVehicle::InflictDamage(CEntity *damagedBy, eWeaponType weaponType, float damage
+ 	if(bFrightensDriver && GetStatus() == STATUS_PLAYER && m_fHealth < 250.0f)
+ 		return;
+ 
++	AircraftBodyAcceptedWeapon(this,int(weaponType),damage,pos.MagnitudeSqr()==0&&damagedBy?damagedBy->GetPosition():pos);
++
+ 	// Pop tires
+ 	if(damagedBy && damagedBy->IsPed() && (IsCar() || IsBike())){
+ 		int accuracy = 0;
+@@ -1305,7 +1311,7 @@ CVehicle::InflictDamage(CEntity *damagedBy, eWeaponType weaponType, float damage
+ 				}
+ 			}
+ 		}
+-		else {
++		else if (!SourceSkip("skip:car_ordinary_lethal")) {
+ 			m_fHealth = 0.0f;
+ 			if (weaponType == WEAPONTYPE_EXPLOSION) {
+ 				// between 1000 and 3047. Also not very nice: can't be saved by respray or cheat
+diff --git a/src/weapons/Weapon.cpp b/src/weapons/Weapon.cpp
+index cada168..4d5d6b5 100644
+--- a/src/weapons/Weapon.cpp
++++ b/src/weapons/Weapon.cpp
+@@ -1,3 +1,4 @@
++#include "AircraftBody.h"
+ #include "common.h"
+ 
+ #include "Weapon.h"
+@@ -740,7 +741,11 @@ CWeapon::FireMelee(CEntity *shooter, CVector &fireSource)
+ 		}
+ 	}
+ 	CVehicle *nearVeh = (CVehicle*)CWorld::TestSphereAgainstWorld(fireSource, info->m_fRadius, nil, false, true, false, false, false, false);
+-	if (nearVeh && nearVeh->IsCar())
++	if(nearVeh&&VCSourceAircraftBodyOwned(nearVeh)){
++  AircraftBodyAcceptedMelee(nearVeh,shooterPed,int(m_eWeaponType),float(info->m_nDamage),gaTempSphereColPoints[0].point);
++  m_eWeaponState=WEAPONSTATE_MELEE_MADECONTACT;
++  if(shooterPed==FindPlayerPed()){if(nearVeh->IsLawEnforcementVehicle())FindPlayerPed()->SetWantedLevelNoDrop(1);CEventList::RegisterEvent(EVENT_ASSAULT,EVENT_ENTITY_VEHICLE,nearVeh,shooterPed,2000);}
++ }else if (nearVeh && nearVeh->IsCar())
+ 	{
+ 		CAutomobile *nearCar = (CAutomobile*)nearVeh;
+ 		m_eWeaponState = WEAPONSTATE_MELEE_MADECONTACT;
+diff --git a/src/core/World.h b/src/core/World.h
+index e0abb4d..28f0433 100644
+--- a/src/core/World.h
++++ b/src/core/World.h
+@@ -128,8 +128,12 @@ public:
+ 
+ 	static float GetSectorX(float f) { return ((f - WORLD_MIN_X)/SECTOR_SIZE_X); }
+ 	static float GetSectorY(float f) { return ((f - WORLD_MIN_Y)/SECTOR_SIZE_Y); }
+-	static int GetSectorIndexX(float f) { return (int)GetSectorX(f); }
+-	static int GetSectorIndexY(float f) { return (int)GetSectorY(f); }
++	// Sector registration (CPhysical::Add/RemoveAndAdd, CDummy::Add) indexes
++	// ms_aSectors directly and GetSector clamps only the upper bound. Anything
++	// past the grid edge (skyline planes south of y=-2000, a vehicle flung off
++	// the map) wrote outside the array. Clamp to the edge sector instead.
++	static int GetSectorIndexX(float f) { float s = GetSectorX(f); return !(s >= 0.0f) ? 0 : s >= NUMSECTORS_X ? NUMSECTORS_X - 1 : (int)s; }
++	static int GetSectorIndexY(float f) { float s = GetSectorY(f); return !(s >= 0.0f) ? 0 : s >= NUMSECTORS_Y ? NUMSECTORS_Y - 1 : (int)s; }
+ 	static float GetWorldX(int x) { return x*SECTOR_SIZE_X + WORLD_MIN_X; }
+ 	static float GetWorldY(int y) { return y*SECTOR_SIZE_Y + WORLD_MIN_Y; }
+ 

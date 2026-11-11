@@ -579,7 +579,7 @@ bool Install()
   Bind(gGetFog,"_Z22RwCameraGetFogDistancePKN2rw6CameraE")&&Bind(gWaterColour,"_ZN10CTimeCycle18m_fCurrentWaterRedE")&&
   api.theCamera&&api.FindPlayerPed&&api.timeMs&&api.modelInfoPtrs&&api.RequestModel;
  if(!bound){Log("airworld: native bindings/callers unavailable; flight terrain remains native");return false;}
- gFarReturn=base+0x141fd0;gFogReturn=base+0x141fe4;
+ gFarReturn=reinterpret_cast<uintptr_t>(hooks::ReturnAddress(0x141fd0));gFogReturn=reinterpret_cast<uintptr_t>(hooks::ReturnAddress(0x141fe4));
  orig_EntityVisibility=reinterpret_cast<decltype(orig_EntityVisibility)>(hooks::Chain("_ZN9CRenderer21SetupEntityVisibilityEP7CEntity",reinterpret_cast<void *>(Hook_EntityVisibility)));
  gReady=orig_EntityVisibility&&hooks::Install("_ZN9CRenderer19ConstructRenderListEv",Hook_Construct,orig_Construct)&&
   hooks::Install("_ZN9CRenderer26SetupBigBuildingVisibilityEP7CEntity",Hook_BigVisibility,orig_BigVisibility)&&

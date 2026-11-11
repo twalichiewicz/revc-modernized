@@ -4,12 +4,14 @@
 #include "common.h"
 #include "Plane.h"
 #include "Physical.h"
+#include "Object.h"
 #include "World.h"
 #include "Pools.h"
 #include "Collision.h"
 #include "TxdStore.h"
 #include <cstdio>
 #include <vector>
+#include <memory>
 #include <cmath>
 
 namespace {
@@ -57,9 +59,9 @@ void Query(CPlane *plane,CVector local,bool expected,const char *stage){
  Check(vertical==expected&&(!vertical||entity==plane),stage);
  const bool clear=CWorld::GetIsLineOfSightClear(start,end,false,true,false,false,false,false,false);
  Check(clear!=expected,stage);
- CPhysical probe;probe.SetType(ENTITY_TYPE_OBJECT);probe.SetIsStatic(true);probe.SetModelIndexNoCreate(1868);
- probe.GetMatrix().SetUnity();probe.SetPosition(point+CVector(0,0,.005f));
- CColPoint contacts[MAX_COLLISION_POINTS];const int count=probe.ProcessEntityCollision(plane,contacts);
+ std::unique_ptr<CObject> probe(new CObject(1868,false));probe->SetIsStatic(true);
+ probe->GetMatrix().SetUnity();probe->SetPosition(point+CVector(0,0,.005f));
+ CColPoint contacts[MAX_COLLISION_POINTS];const int count=probe->ProcessEntityCollision(plane,contacts);
  Check((count>0)==expected,stage);
  std::printf("wing-query stage=%s expected=%d los=%d vertical=%d clear=%d contacts=%d\n",stage,expected,los,vertical,clear,count);
 }

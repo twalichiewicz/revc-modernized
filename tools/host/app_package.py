@@ -19,7 +19,25 @@ def digest(path): return hashlib.sha256(path.read_bytes()).hexdigest()
 
 
 def fingerprint(app):
-    return {name:digest(app/name) for name in (*PROTECTED,"Contents/Info.plist")}
+    names=[*PROTECTED,"Contents/Info.plist"]
+    names.extend(name for name in ("Contents/MacOS/vcLauncher","Contents/MacOS/vcPhysicsHost","Contents/Resources/PhysicsTest/aircraft.txt") if (app/name).exists())
+    names.extend(name for name in ("Contents/MacOS/vcGameplayHost","Contents/Resources/PhysicsData/aircraft.txt") if (app/name).exists())
+    private=app/"Contents/Frameworks/SourceGame"
+    if private.exists():names.extend(str(f.relative_to(app)) for f in sorted(private.glob("*.dylib")))
+    return {name:digest(app/name) for name in names}
+
+
+def matches(app,expected):
+    actual=fingerprint(app)
+    # Prior release journals contain only game/mod/plist identities. Retain
+    # their recovery capability while new journals also guard the test payload.
+    return bool(expected) and all(actual.get(name)==value for name,value in expected.items())
+
+
+def experimental_directories(app):
+    private=app/"Contents/Frameworks/PhysicsTest";resource=app/"Contents/Resources/PhysicsTest"
+    private.mkdir(parents=True,exist_ok=True);resource.mkdir(parents=True,exist_ok=True)
+    return private,resource
 
 
 def atomic_record(path,manifest):
@@ -36,7 +54,7 @@ def atomic_record(path,manifest):
 
 def install_recorded(staged,app,backup,record,manifest,validate):
     if backup.exists():raise FileExistsError(backup)
-    if fingerprint(app)!=manifest["original"]:raise RuntimeError("Installed app changed since staging")
+    if not matches(app,manifest["original"]):raise RuntimeError("Installed app changed since staging")
     intent={**manifest,"installed":str(app),"backup":str(backup),"installed_fingerprint":fingerprint(staged)}
     # Everything rollback needs is durable before the first directory rename.
     # No journal update is required after the swap, even if storage fills up.
@@ -46,7 +64,7 @@ def install_recorded(staged,app,backup,record,manifest,validate):
 
 
 def install(staged,app,backup,expected,validate,payload=None):
-    if fingerprint(app)!=expected: raise RuntimeError("Installed app changed since staging")
+    if not matches(app,expected): raise RuntimeError("Installed app changed since staging")
     if backup.exists(): raise FileExistsError(backup)
     if any(digest(staged/name)!=expected[name] for name in PROTECTED): raise RuntimeError("Staged normal game bytes changed")
     if payload and any(digest(staged/name)!=value for name,value in payload.items()): raise RuntimeError("Validated staging payload changed")
@@ -61,12 +79,12 @@ def install(staged,app,backup,expected,validate,payload=None):
 
 
 def restore(app,backup,archive,installed,original):
-    if fingerprint(backup)!=original:raise RuntimeError("Backup changed; refusing to overwrite it")
+    if not matches(backup,original):raise RuntimeError("Backup changed; refusing to overwrite it")
     if not app.exists():
         # Recovery after interruption between the two installation renames.
         backup.rename(app)
         return
-    if fingerprint(app)!=installed: raise RuntimeError("App changed; refusing to overwrite it")
+    if not matches(app,installed): raise RuntimeError("App changed; refusing to overwrite it")
     if archive.exists(): raise FileExistsError(archive)
     app.rename(archive)
     try: backup.rename(app)
@@ -82,6 +100,17 @@ def run(args):
         raise
 
 
+def check_smoke_results(output):
+    report=json.loads(Path(str(output)+".json").read_text())
+    if not (report["kind"]=="wing-strike" and report["failures"]==0 and report["accepted"]>=320 and report["contacts"]>0 and report["fragments"]>=2 and report["mounts"]>0 and report["miss_mounts"]==0 and report["hit_speed"]<5.9 and abs(report["miss_speed"]-6)<1e-6 and report["native_steps"]==0):
+        raise RuntimeError("Required physical strike/miss assertions failed")
+    intact=Path(str(output)+".intact.ppm").read_bytes()
+    damaged=output.read_bytes()
+    repaired=Path(str(output)+".repaired.ppm").read_bytes()
+    if not intact.startswith(b"P6\n") or len(intact)<10000 or intact==damaged or repaired!=intact:
+        raise RuntimeError("Rendered damage/repair capture failed")
+
+
 def validate(app,output):
     run(["codesign","--verify","--deep","--strict",app])
     launcher=app/"Contents/MacOS/vcLauncher"
@@ -90,11 +119,7 @@ def validate(app,output):
     lab=run([launcher,"--check-launcher","--physics-test"])
     if lab.splitlines()!=[str(app/"Contents/MacOS/vcPhysicsHost"),"--wing-lab",str(app/"Contents/Resources/PhysicsTest/aircraft.txt")]: raise RuntimeError("Test routing failed")
     run([launcher,"--lab-smoke",output])
-    intact=Path(str(output)+".intact.ppm").read_bytes()
-    damaged=output.read_bytes()
-    repaired=Path(str(output)+".repaired.ppm").read_bytes()
-    if not intact.startswith(b"P6\n") or len(intact)<10000 or intact==damaged or repaired!=intact:
-        raise RuntimeError("Rendered damage/repair capture failed")
+    check_smoke_results(output)
 
 
 def main():
@@ -112,12 +137,14 @@ def main():
             if build["input_sha256"][name]!=digest(ROOT/"tools/host"/name):raise RuntimeError("Rebuild the host; compiled inputs changed")
         for name,expected in build["local_inputs_sha256"].items():
             if expected!=digest(ROOT/name):raise RuntimeError("Rebuild the host; local dependency changed")
+        for name,expected in build["physics"]["local_inputs"].items():
+            if expected!=digest(ROOT/name):raise RuntimeError("Rebuild the physics adapter; local dependency changed")
         if build["binary_sha256"]!=digest(Path(build["binary"])) or build["data_sha256"]!=digest(work/"aircraft.txt"):
             raise RuntimeError("Built host/data changed after compilation")
         expected=fingerprint(app);run(["cp","-cR",app,stage])
         launcher=stage/"Contents/MacOS/vcLauncher";run(["xcrun","clang++","-std=c++17","-O2","-fobjc-arc",ROOT/"tools/host/launcher.mm","-framework","Cocoa","-framework","ApplicationServices","-o",launcher])
         host=stage/"Contents/MacOS/vcPhysicsHost";run(["cp",work/"build/src/reVC.app/Contents/MacOS/reVC",host])
-        private=stage/"Contents/Frameworks/PhysicsTest";private.mkdir()
+        private,resource=experimental_directories(stage)
         libraries=run(["otool","-L",host]).splitlines()[1:]
         for line in libraries:
             source=line.strip().split(" ",1)[0]
@@ -130,7 +157,7 @@ def main():
         # signatures; retain normal game/mod bytes exactly.
         for library in (stage/"Contents/Frameworks").glob("*.dylib"):
             if library.name!="libVCModernHUD.dylib":run(["codesign","--force","--sign","-",library])
-        resource=stage/"Contents/Resources/PhysicsTest";resource.mkdir();run(["cp",work/"aircraft.txt",resource/"aircraft.txt"])
+        run(["cp",work/"aircraft.txt",resource/"aircraft.txt"])
         info=stage/"Contents/Info.plist";data=plistlib.loads(info.read_bytes());data["CFBundleExecutable"]="vcLauncher";info.write_bytes(plistlib.dumps(data))
         run(["codesign","--force","--sign","-",host]);run(["codesign","--force","--sign","-",stage])
         validate(stage,work/"staged-smoke.ppm")

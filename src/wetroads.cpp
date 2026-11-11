@@ -476,8 +476,7 @@ void Draw()
 void Hook_RenderEverythingBarRoads()
 {
 	orig_RenderEverythingBarRoads();
-	const uint32_t site = uint32_t(reinterpret_cast<uintptr_t>(__builtin_return_address(0)) -
-	                               reinterpret_cast<uintptr_t>(hooks::ImageBase()));
+	const uint32_t site = hooks::ReturnOffset(__builtin_return_address(0));
 	if (site == kFromRenderScene)
 		Draw();
 }

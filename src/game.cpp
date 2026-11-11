@@ -7,8 +7,12 @@
 namespace game {
 
 // LC_UUID of the vanilla macVC 1.0.5217 binary.
+#ifdef VC_SOURCE_UUID_BYTES
+const uint8_t kBuildUuid[16] = {VC_SOURCE_UUID_BYTES};
+#else
 const uint8_t kBuildUuid[16] = {0x02, 0x98, 0x3A, 0x69, 0x6B, 0xD0, 0x33, 0xF7,
                                 0xB7, 0x2B, 0x2A, 0xCA, 0x8B, 0xCB, 0x3C, 0x33};
+#endif
 
 Api api;
 
@@ -31,6 +35,15 @@ void Bind(T &out, const char *name, void *handle = RTLD_MAIN_ONLY, bool required
 
 bool Resolve()
 {
+	#ifdef VC_SOURCE_UUID_BYTES
+	// The distinct source build must compile the layout assertions in SourceABI.cpp.
+	// Refuse all raw-offset consumers if that contract is absent.
+	auto sourceABI = reinterpret_cast<unsigned long long (*)()>(dlsym(RTLD_MAIN_ONLY, "VCSourceABI"));
+	if (!sourceABI || sourceABI() != 0x5643535243414241ULL) {
+		Log("game: source host ABI contract missing; staying vanilla");
+		return false;
+	}
+	#endif
 	gOk = true;
 	Bind(api.RwRenderStateSet, "_Z16RwRenderStateSet13RwRenderStatePv");
 	Bind(api.RwIm2DRenderPrimitive, "_Z21RwIm2DRenderPrimitive15RwPrimitiveTypePN2rw3gl310Im2DVertexEi");

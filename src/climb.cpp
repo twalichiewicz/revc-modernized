@@ -384,8 +384,7 @@ void Hook_SetJump(uint8_t *ped)
 	if (gInstalled && ped == api.FindPlayerPed()) {
 		if (gActive)
 			return;
-		const uint32_t site = uint32_t(reinterpret_cast<uintptr_t>(__builtin_return_address(0)) -
-		                               reinterpret_cast<uintptr_t>(hooks::ImageBase()));
+		const uint32_t site = hooks::ReturnOffset(__builtin_return_address(0));
 		const bool pressed = site == kJumpSites[0] || site == kJumpSites[1];
 		if (swim::Swimming()) { // no jumping out of the water: a climb out, or a dive
 			Ledge ledge;

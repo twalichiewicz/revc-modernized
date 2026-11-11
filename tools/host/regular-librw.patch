@@ -1,0 +1,78 @@
+diff --git a/src/gl/gl3device.cpp b/src/gl/gl3device.cpp
+index 6a4c8dd..0511811 100644
+--- a/src/gl/gl3device.cpp
++++ b/src/gl/gl3device.cpp
+@@ -113,6 +113,7 @@ static GLuint whitetex;
+ static UniformState uniformState;
+ static UniformScene uniformScene;
+ static UniformObject uniformObject;
++extern "C" int VCSourceCameraMatrices(float *proj,float *view){if(!proj||!view)return 0;memcpy(proj,uniformScene.proj,64);memcpy(view,uniformScene.view,64);return 1;}
+ 
+ #ifndef RW_GL_USE_UBOS
+ // State
+diff --git a/src/gl/gl3raster.cpp b/src/gl/gl3raster.cpp
+index b7c3941..a302c4b 100644
+--- a/src/gl/gl3raster.cpp
++++ b/src/gl/gl3raster.cpp
+@@ -1,3 +1,4 @@
++#include "../CompressedTexture.h"
+ #include <stdio.h>
+ #include <stdlib.h>
+ #include <string.h>
+@@ -36,10 +37,10 @@ getLevelSize(Raster *raster, int32 level)
+ 	switch(natras->internalFormat){
+ 	case GL_COMPRESSED_RGBA_S3TC_DXT1_EXT:
+ 	case GL_COMPRESSED_RGB_S3TC_DXT1_EXT:
++		return CompressedTextureLevelSize(w,h,level,8);
+ 	case GL_COMPRESSED_RGBA_S3TC_DXT3_EXT:
+ 	case GL_COMPRESSED_RGBA_S3TC_DXT5_EXT:
+-		minDim = 4;
+-		break;
++		return CompressedTextureLevelSize(w,h,level,16);
+ 	}
+ #endif
+ 
+diff --git a/src/gl/gl3shader.cpp b/src/gl/gl3shader.cpp
+index f361dc8..3ecea98 100644
+--- a/src/gl/gl3shader.cpp
++++ b/src/gl/gl3shader.cpp
+@@ -124,10 +124,12 @@ void
+ flushUniforms(void)
+ {
+ 	for(int i = 0; i < uniformRegistry.numUniforms; i++){
+-		// this is bad!
++		// The mod registers uniforms after native shader creation. Arrays reserve
++		// the registry capacity; resolve each newly registered name once.
+ 		if(i >= currentShader->numUniforms){
+-			printf("trying to set uniform %d %s that doesn't exist!\n", i, uniformRegistry.uniforms[i].name);
+-			continue;
++			currentShader->uniformLocations[i] = glGetUniformLocation(currentShader->program, uniformRegistry.uniforms[i].name);
++			currentShader->serialNums[i] = ~0u;
++			currentShader->numUniforms = i + 1;
+ 		}
+ 
+ 		int32 loc = currentShader->uniformLocations[i];
+@@ -308,8 +310,8 @@ Shader::create(const char **vsrc, const char **fsrc)
+ 	// query uniform locations
+ 	sh->program = program;
+ 	sh->numUniforms = uniformRegistry.numUniforms;
+-	sh->uniformLocations = rwNewT(GLint, uniformRegistry.numUniforms, MEMDUR_EVENT | ID_DRIVER);
+-	sh->serialNums = rwNewT(uint32, uniformRegistry.numUniforms, MEMDUR_EVENT | ID_DRIVER);
++	sh->uniformLocations = rwNewT(GLint, MAX_UNIFORMS, MEMDUR_EVENT | ID_DRIVER);
++	sh->serialNums = rwNewT(uint32, MAX_UNIFORMS, MEMDUR_EVENT | ID_DRIVER);
+ 	for(i = 0; i < uniformRegistry.numUniforms; i++){
+ 		sh->uniformLocations[i] = glGetUniformLocation(program,
+ 			uniformRegistry.uniforms[i].name);
+diff --git a/src/gl/rwgl3shader.h b/src/gl/rwgl3shader.h
+index 890f12b..fccf107 100644
+--- a/src/gl/rwgl3shader.h
++++ b/src/gl/rwgl3shader.h
+@@ -5,7 +5,7 @@ namespace gl3 {
+ 
+ // TODO: make this dynamic
+ enum {
+-	MAX_UNIFORMS = 40,
++	MAX_UNIFORMS = 128,
+ 	MAX_BLOCKS = 20
+ };
+ 
