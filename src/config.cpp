@@ -187,6 +187,8 @@ void Apply(const char *key, const char *value, const char *section)
 		gConfig.driverReactions = b;
 	else if (!strcasecmp(key, "NPCReactions"))
 		gConfig.npcReactions = b;
+	else if (!strcasecmp(key, "Gaze"))
+		gConfig.gaze = b;
 	else if (!strcasecmp(key, "WorldPopulation"))
 		gConfig.worldPopulation = b;
 	else if (!strcasecmp(key, "RaceArrows"))

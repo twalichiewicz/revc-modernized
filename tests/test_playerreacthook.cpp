@@ -18,6 +18,7 @@ namespace shootdodge {void AfterControl(uint8_t *){} bool Posing(){return gDodge
 namespace aimcam {bool BeforeControl(){return false;}void AfterControl(uint8_t *,bool){}void Lower(uint8_t *){}void AfterPlayerWeapon(uint8_t *,uint8_t *){}void PoseArms(uint8_t *){} bool Aiming(){return gAim;} }
 namespace fpwalk {bool BeforeControl(){return false;}void AfterControl(uint8_t *,bool){}bool BeforeWeapon(){return false;}void AfterWeapon(bool){} }
 namespace drivers {void Frame(){} }
+namespace gaze {void Frame(uint8_t *){} }
 namespace reactions {void Frame(){}void BeforePreRender(uint8_t *){}void AfterPreRender(uint8_t *){}void Hit(uint8_t *,uint8_t *,int,int){} }
 namespace achievements { void Damaged(uint8_t *, uint8_t *, int, bool) {} }
 namespace driveby {void PilotHolster(uint8_t *){}void PreRender(uint8_t *){} }

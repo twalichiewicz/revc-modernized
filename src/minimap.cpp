@@ -94,6 +94,7 @@
 #include "traffic.h"
 #include "viewmodel.h"
 #include "rumble.h"
+#include "gaze.h"
 #include "reactions.h"
 #include "reacthit.h"
 #include "scene.h"
@@ -807,6 +808,8 @@ __attribute__((constructor)) void Init()
 		Log("car glass: native bindings/hooks missing; re-run install.sh");
 	if (!drivers::Install())
 		Log("drivers: missing world bindings; native driver behavior retained");
+	if (!gaze::Install())
+		Log("gaze: native look functions missing; ambient head looks off");
 	if (!reactions::Install())
 		Log("reactions: missing physics/rig hooks; native NPC reactions retained");
 	if (!reacthit::Install())

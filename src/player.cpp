@@ -20,6 +20,7 @@
 #include "jetboardingpose.h"
 #include "log.h"
 #include "rumble.h"
+#include "gaze.h"
 #include "reactions.h"
 #include "seatgun.h"
 #include "swim.h"
@@ -49,6 +50,7 @@ void Hook_ProcessControl(uint8_t *ped)
 	fpwalk::AfterControl(ped, fpStrafed); // first person: the stick's, CS-style
 	shootdodge::AfterControl(ped); // last: diving, his speed is its
 	playerreact::AfterControl(ped);
+	gaze::Frame(ped); // after aiming has set its look: ambient looks never override it
 	drivers::Frame();
 	reactions::Frame();
 }

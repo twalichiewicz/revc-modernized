@@ -26,6 +26,7 @@ struct Config {
 	bool interactions = true;   // prompts on X / B: pick up / wave off hookers, greet / insult people
 	bool driverReactions = true; // pedestrians/drivers perceive gun threats; flee, surrender or fight
 	bool npcReactions = true;    // articulated physical hit reactions, balance and contact for ordinary on-foot NPCs
+	bool gaze = true;            // head looks: bystanders glance at Tommy and each other; his head follows the camera
 	bool worldPopulation = true; // zone/path-based virtual civilians and foot patrols, station reinforcement queues
 	bool raceArrows = true;      // racing checkpoints point toward the next checkpoint
 	bool carRadios = true;      // on foot, hear nearby car radios (and your own after getting out), muffled

@@ -31,6 +31,7 @@ PLUGIN += src/towercollision.cpp
 PLUGIN += src/jetshadow.cpp
 PLUGIN += src/jetboardingpose.cpp
 PLUGIN += src/handlingmodel.cpp src/handling.cpp src/drivelog.cpp src/headbalance.cpp
+PLUGIN += src/gazemodel.cpp src/gaze.cpp
 PLUGIN += src/glassmodel.cpp src/carglass.cpp
 PLUGIN += src/partsmodel.cpp src/carparts.cpp src/panelphysics.cpp src/panelcollision.cpp src/crashdamage.cpp
 PLUGIN += src/dentmodel.cpp src/carimpact.cpp
@@ -1072,3 +1073,10 @@ $(BUILD)/test_body_sunk_support: tests/test_body_sunk_support.cpp tools/host/Bod
 test-body-sunk-support: $(BUILD)/test_body_sunk_support
 	$(BUILD)/test_body_sunk_support
 test: test-body-sunk-support
+# Who looks at whom (#56): bystander glances and Tommy's camera-follow head.
+$(BUILD)/test_gazemodel: tests/test_gazemodel.cpp src/gazemodel.cpp src/gazemodel.h | $(BUILD)
+	$(CXX) $(CXXFLAGS) -Isrc -o $@ tests/test_gazemodel.cpp src/gazemodel.cpp
+.PHONY: test-gazemodel
+test-gazemodel: $(BUILD)/test_gazemodel
+	$(BUILD)/test_gazemodel
+test: test-gazemodel
