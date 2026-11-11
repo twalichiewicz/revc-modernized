@@ -30,6 +30,7 @@ RpGeometry *Hull(CVehicle *vehicle){if(!vehicle||!vehicle->m_rwObject)return nil
 namespace { void Capture(const char *path){
   GLint viewport[4];glGetIntegerv(GL_VIEWPORT,viewport);int w=viewport[2],h=viewport[3];std::vector<unsigned char> pixels(size_t(w)*h*3);glPixelStorei(GL_PACK_ALIGNMENT,1);glReadPixels(0,0,w,h,GL_RGB,GL_UNSIGNED_BYTE,pixels.data());FILE *out=std::fopen(path,"wb");if(out){std::fprintf(out,"P6\n%d %d\n255\n",w,h);for(int y=h-1;y>=0;--y)std::fwrite(pixels.data()+size_t(y)*w*3,1,size_t(w)*3,out);std::fclose(out);}
 } }
+void GazeSmokeTick(unsigned,const char *);
 void RegularGameSmokeCapture(const char *path){Capture(path);}
 void RegularGameSmokeTick(){
  const char *capture=std::getenv("VC_REGULAR_SMOKE");if(!capture)return;static unsigned frames=0;static int controlledRef=-1;static bool intact=false,damaged=false,repaired=false,capturedRepair=false,externalChecked=false;static unsigned repairFrame=0,pristineFrame=0;static CVector initialCOM;static float initialTurnMass=0;static bool pristineChecked=false;++frames;
@@ -41,6 +42,7 @@ void RegularGameSmokeTick(){
  const bool curb=bump||(wing&&std::string(std::getenv("VC_REGULAR_WING"))=="body-curb");
  const bool impact=wing&&std::string(std::getenv("VC_REGULAR_WING"))=="impact";
  const bool graze=wing&&std::string(std::getenv("VC_REGULAR_WING"))=="graze";
+ const bool gaze=wing&&std::string(std::getenv("VC_REGULAR_WING"))=="gaze";
  auto stamp=std::chrono::steady_clock::now();static auto previous=stamp;if(frames>201)std::fprintf(stderr,"[regular-wing-smoke] frame_interval_ms=%.3f\n",std::chrono::duration<double,std::milli>(stamp-previous).count());previous=stamp;
  if(wing&&!curb&&frames==30){auto p=FindPlayerPed();if(p){CVector airport(-1530,-1130,14);CStreaming::LoadScene(airport);CStreaming::LoadSceneCollision(airport);p->Teleport(airport);std::fprintf(stderr,"[regular-wing-smoke] ordinary save moved to airport\n");}}
  if(wing&&frames==150){
@@ -48,7 +50,7 @@ void RegularGameSmokeTick(){
   for(int e=0;e<count;++e){auto entity=entities[e];auto col=entity->GetColModel();if(!col||!entity->bUsesCollision)continue;if(entity->IsBuilding())for(int t=0;t<col->numTriangles;++t){auto tri=col->triangles[t];auto a=entity->GetMatrix()*col->vertices[tri.a].Get(),b=entity->GetMatrix()*col->vertices[tri.b].Get(),c=entity->GetMatrix()*col->vertices[tri.c].Get();auto n=CrossProduct(b-a,c-a);float area=n.Magnitude();if(area>100&&std::fabs(n.z)<area*.1f){auto center=(a+b+c)/3;std::fprintf(stderr,"[regular-wing-smoke] building model=%d triangle=%d area=%.2f centroid=%.2f %.2f %.2f points %.2f %.2f %.2f / %.2f %.2f %.2f / %.2f %.2f %.2f\n",entity->GetModelIndex(),t,area,center.x,center.y,center.z,a.x,a.y,a.z,b.x,b.y,b.z,c.x,c.y,c.z);break;}}for(int b=0;b<col->numBoxes;++b){auto box=col->boxes[b];if(box.max.z-box.min.z<9)continue;auto center=entity->GetMatrix()*((box.min+box.max)*.5f);std::fprintf(stderr,"[regular-wing-smoke] real box model=%d xyz=%.2f,%.2f,%.2f bounds=%.2f %.2f %.2f / %.2f %.2f %.2f\n",entity->GetModelIndex(),center.x,center.y,center.z,box.min.x,box.min.y,box.min.z,box.max.x,box.max.y,box.max.z);}}
   auto pool=CPools::GetVehiclePool();auto eligible=reinterpret_cast<bool(*)(const void*)>(dlsym(RTLD_DEFAULT,"VCSourceAircraftEligible"));for(int i=0;i<pool->GetSize();++i){auto v=pool->GetSlot(i);if(v&&v->GetModelIndex()==181&&eligible&&eligible(v)){std::fprintf(stderr,"[regular-wing-smoke] playable Dodo ref=%d pos=%.2f %.2f %.2f\n",CPools::GetVehicleRef(v),v->GetPosition().x,v->GetPosition().y,v->GetPosition().z);}}
  }
- if(wing&&!dodo&&!bodyBullets&&!vehicleBodies&&!curb&&frames==200){auto pool=CPools::GetVehiclePool();auto eligible=reinterpret_cast<bool(*)(const void*)>(dlsym(RTLD_DEFAULT,"VCSourceAircraftEligible"));for(int i=0;i<pool->GetSize();++i){auto v=pool->GetSlot(i);if(v&&v->GetModelIndex()==181&&eligible&&eligible(v)){
+ if(wing&&!dodo&&!bodyBullets&&!vehicleBodies&&!curb&&!gaze&&frames==200){auto pool=CPools::GetVehiclePool();auto eligible=reinterpret_cast<bool(*)(const void*)>(dlsym(RTLD_DEFAULT,"VCSourceAircraftEligible"));for(int i=0;i<pool->GetSize();++i){auto v=pool->GetSlot(i);if(v&&v->GetModelIndex()==181&&eligible&&eligible(v)){
    CVector position(-1712,(std::string(std::getenv("VC_REGULAR_WING"))=="miss")?-1332.15f:-1335.15f,18.5f);if(impact)position=CVector(-1688.61f,-1329,18.5f);CStreaming::LoadScene(position);CStreaming::LoadSceneCollision(position);auto player=FindPlayerPed();CWorld::Remove(v);v->GetMatrix().SetUnity();v->GetRight()=impact?CVector(-1,0,0):CVector(0,-1,0);v->GetForward()=impact?CVector(0,-1,0):CVector(1,0,0);v->SetPosition(position);v->m_vecMoveSpeed=impact?CVector(0,-.24f,0):CVector(.8f,0,0);v->m_vecTurnSpeed=CVector(0,0,0);v->m_vecMoveFriction=v->m_vecTurnFriction=CVector(0,0,0);v->SetStatus(STATUS_PLAYER);v->bIsBIGBuilding=false;v->bUsesCollision=true;v->bEngineOn=true;v->GetMatrix().UpdateRW();v->UpdateRwFrame();CWorld::Add(v);player->m_objective=OBJECTIVE_ENTER_CAR_AS_DRIVER;player->WarpPedIntoCar(v);controlledRef=CPools::GetVehicleRef(v);initialCOM=v->m_vecCentreOfMass;initialTurnMass=v->m_fTurnMass;v->m_vecMoveFriction=v->m_vecTurnFriction=CVector(0,0,0);if(impact){auto g=Hull(v);if(g)hullBefore.assign(g->morphTargets[0].vertices,g->morphTargets[0].vertices+g->numVertices);}std::fprintf(stderr,"[regular-wing-smoke] approach real hangar model=928 in ordinary Dodo ref=%d\n",CPools::GetVehicleRef(v));break;}}}
  if(impact&&frames==360){auto vehicle=CPools::GetVehicle(controlledRef);auto g=Hull(vehicle);float maximum=0;if(g&&g->numVertices==int(hullBefore.size()))for(int i=0;i<g->numVertices;++i){auto a=g->morphTargets[0].vertices[i],b=hullBefore[i];maximum=Max(maximum,CVector(a.x-b.x,a.y-b.y,a.z-b.z).Magnitude());}
   bool alive=vehicle&&vehicle->m_fHealth>0&&FindPlayerPed()->m_fHealth>0;std::fprintf(stderr,"[regular-wing-smoke] body impact deformation=%s survival=%s max_vertex_m=%.6f hull_health=%.2f pilot_health=%.2f\n",maximum>.002f?"PASS":"FAIL",alive?"PASS":"FAIL",maximum,vehicle?vehicle->m_fHealth:0,FindPlayerPed()->m_fHealth);Capture((std::string(capture)+".impact.ppm").c_str());}
@@ -70,6 +72,6 @@ void RegularGameSmokeTick(){
  if(dodo)DodoSmokeTick(frames,capture);
  if(bodyBullets)AircraftBodySmokeTick(frames,capture);
  if(vehicleBodies)VehicleBodySmokeTick(frames,capture);
- if(bump)VehicleBumpSmokeTick(frames,capture);else if(curb)VehicleCurbSmokeTick(frames,capture);
- if(!dodo&&!bodyBullets&&!vehicleBodies&&!curb&&frames>=(wing?660:360))RsGlobal.quit=TRUE;
+ if(bump)VehicleBumpSmokeTick(frames,capture);else if(curb)VehicleCurbSmokeTick(frames,capture);else if(gaze)GazeSmokeTick(frames,capture);
+ if(!dodo&&!bodyBullets&&!vehicleBodies&&!curb&&!gaze&&frames>=(wing?660:360))RsGlobal.quit=TRUE;
 }

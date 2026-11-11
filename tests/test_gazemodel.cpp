@@ -26,9 +26,10 @@ struct Dice {
 Seen Tommy(float x, float y, bool armed = false, bool fast = false) { return Seen{0, Point{x, y, 1.6f}, true, armed, fast}; }
 Seen Bystander(int id, float x, float y) { return Seen{id, Point{x, y, 1.6f}, false, false, false}; }
 // How many glances in `seconds`, and their durations, for one looker at the origin facing +y.
+// Glances started, and how long each continuous look lasted (ms), extensions included.
 struct Tally {
-	int glances = 0;
-	uint32_t shortest = ~0u, longest = 0;
+	int glances = 0, extensions = 0;
+	uint32_t shortest = ~0u, longest = 0, first = ~0u;
 	int target = -1;
 };
 Tally Watch(const Seen *seen, int count, float seconds, uint32_t seed = 12345)
@@ -36,17 +37,26 @@ Tally Watch(const Seen *seen, int count, float seconds, uint32_t seed = 12345)
 	Dice dice{seed};
 	Memory memory;
 	Tally tally;
-	uint32_t now = 1000;
+	uint32_t now = 1000, runStart = 0;
+	bool was = false;
 	for (float t = 0; t < seconds; t += kDt, now += uint32_t(kDt * 1000)) {
 		const Glance g = Choose(Point{0, 0, 1.6f}, 0, seen, count, memory, now, kDt, dice.Next(), dice.Next());
-		if (!g)
-			continue;
-		++tally.glances;
-		tally.target = g.target;
-		if (g.ms < tally.shortest)
-			tally.shortest = g.ms;
-		if (g.ms > tally.longest)
-			tally.longest = g.ms;
+		if (g && !g.extend) {
+			++tally.glances;
+			tally.target = g.target;
+			if (tally.first == ~0u)
+				tally.first = now - 1000;
+		} else if (g)
+			++tally.extensions;
+		const bool looking = now < memory.until;
+		if (looking && !was)
+			runStart = now;
+		if (!looking && was) {
+			const uint32_t run = now - runStart;
+			tally.shortest = run < tally.shortest ? run : tally.shortest;
+			tally.longest = run > tally.longest ? run : tally.longest;
+		}
+		was = looking;
 	}
 	return tally;
 }
@@ -63,21 +73,50 @@ int main()
 	// Nobody near: nothing to look at.
 	CHECK(Watch(nullptr, 0, 30).glances == 0);
 
-	// Tommy two metres in front: noticed within seconds, glances of 1.2-2.8 s,
-	// with a pause between them (no more than one every ~5 s on average).
+	// Tommy two metres in front: noticed within three seconds and watched while
+	// he stays in view, up to six seconds a look, with a pause between looks.
 	{
 		const Seen s[] = {Tommy(0, 2)};
 		const Tally t = Watch(s, 1, 60);
-		CHECK(t.glances >= 3 && t.glances <= 12);
+		CHECK(t.first <= 3000);
+		CHECK(t.glances >= 4 && t.glances <= 10);
 		CHECK(t.target == 0);
-		CHECK(t.shortest >= 1200 && t.longest <= 2800);
+		CHECK(t.extensions > 0);
+		CHECK(t.longest >= 5900 && t.longest <= 6100);
+		CHECK(t.shortest >= 1500);
 	}
-	// Behind at six metres he isn't seen; behind at two metres he's sensed.
+	// A bystander isn't tracked: one glance of 1.5-3.5 s at a time.
 	{
-		const Seen far[] = {Tommy(0, -6)}, near[] = {Tommy(0, -2)};
-		CHECK(Rate(Point{0, 0, 1.6f}, 0, far[0]) == 0);
-		CHECK(Rate(Point{0, 0, 1.6f}, 0, near[0]) > 0);
-		CHECK(Watch(far, 1, 60).glances == 0);
+		const Seen s[] = {Bystander(4, 0, 2)};
+		const Tally t = Watch(s, 1, 120);
+		CHECK(t.glances >= 1 && t.extensions == 0);
+		CHECK(t.shortest >= 1500 && t.longest <= 3500);
+	}
+	// Tommy steps out of view mid-look: the look isn't extended.
+	{
+		const Seen in[] = {Tommy(0, 2)}, out[] = {Tommy(0, -2)};
+		Memory memory;
+		uint32_t now = 1000;
+		Glance g;
+		for (int i = 0; i < 600 && !g; i++, now += 33)
+			g = Choose(Point{0, 0, 1.6f}, 0, in, 1, memory, now, kDt, 0.0f, 0.5f);
+		CHECK(bool(g) && !g.extend);
+		const uint32_t end = memory.until;
+		for (; now < end + 2000; now += 33)
+			CHECK(!Choose(Point{0, 0, 1.6f}, 0, out, 1, memory, now, kDt, 0.9f, 0.5f));
+		CHECK(memory.until == end);
+	}
+	// Only within the head's own reach (about 90 degrees; the game drops a look
+	// it can't reach at once, and women's and ducking peds turn the head only):
+	// 70 degrees round he's looked at, 100 degrees or behind he isn't, however close.
+	{
+		const Point eye{0, 0, 1.6f};
+		const float r = 3;
+		CHECK(Rate(eye, 0, Tommy(-std::sin(70 * kDeg) * r, std::cos(70 * kDeg) * r)) > 0);
+		CHECK(Rate(eye, 0, Tommy(-std::sin(100 * kDeg) * r, std::cos(100 * kDeg) * r)) == 0);
+		CHECK(Rate(eye, 0, Tommy(0, -2)) == 0);
+		const Seen behind[] = {Tommy(0, -1)};
+		CHECK(Watch(behind, 1, 60).glances == 0);
 	}
 	// Out of range: never, however he's dressed.
 	{
@@ -93,7 +132,8 @@ int main()
 		const Seen armed[] = {Tommy(0, 8, true)};
 		const Tally t = Watch(armed, 1, 90);
 		CHECK(t.glances >= 3);
-		CHECK(t.shortest >= 3000 && t.longest <= 6000);
+		CHECK(t.longest >= 9900 && t.longest <= 10100); // a stare, tracked up to ten seconds
+		CHECK(t.shortest >= 4000);
 	}
 	// Tommy is looked at before another bystander as close; a bystander alone
 	// is glanced at, but only within six metres and less often than Tommy.

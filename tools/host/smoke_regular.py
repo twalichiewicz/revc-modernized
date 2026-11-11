@@ -4,7 +4,7 @@ import argparse,json,os,plistlib,re,statistics,subprocess,time
 from pathlib import Path
 
 def main():
- p=argparse.ArgumentParser(description=__doc__);p.add_argument('--app',type=Path,required=True);p.add_argument('--profile',type=Path,required=True);p.add_argument('--default-profile',action='store_true');p.add_argument('--experimental-wing',action='store_true');p.add_argument('--data',type=Path,required=True);p.add_argument('--work-dir',type=Path,required=True);p.add_argument('--case',choices=['hit','miss','external','pristine','normal','dodo','impact','graze','body-ground','body-bullets','body-tail','body-vehicles','body-curb','body-bump'],default='impact');a=p.parse_args();work=a.work_dir.resolve();work.mkdir(parents=True,exist_ok=True)
+ p=argparse.ArgumentParser(description=__doc__);p.add_argument('--app',type=Path,required=True);p.add_argument('--profile',type=Path,required=True);p.add_argument('--default-profile',action='store_true');p.add_argument('--experimental-wing',action='store_true');p.add_argument('--data',type=Path,required=True);p.add_argument('--work-dir',type=Path,required=True);p.add_argument('--case',choices=['hit','miss','external','pristine','normal','dodo','impact','graze','body-ground','body-bullets','body-tail','body-vehicles','body-curb','body-bump','gaze'],default='impact');a=p.parse_args();work=a.work_dir.resolve();work.mkdir(parents=True,exist_ok=True)
  if a.case in ['hit','external','pristine','graze'] and not a.experimental_wing:raise RuntimeError('This case measures the opt-in implicit solver; pass --experimental-wing explicitly')
  if (work/'report.json').exists() or (work/'run.log').exists():raise RuntimeError('Use a fresh evidence directory')
  app=a.app.resolve();info=plistlib.loads((app/'Contents/Info.plist').read_bytes());binary=app/'Contents/MacOS'/info['CFBundleExecutable'];capture=work/'normal.ppm'
@@ -24,7 +24,7 @@ def main():
  start=time.monotonic()
  with (work/'run.log').open('w')as log:
   process=subprocess.Popen([str(binary),'-ApplePersistenceIgnoreState','YES'],cwd=a.data.resolve(),env=env,stdout=log,stderr=subprocess.STDOUT)
-  try:status=process.wait(timeout=2400 if a.case=='body-bump' else 1200 if a.case=='body-curb' else 90)
+  try:status=process.wait(timeout=2400 if a.case=='body-bump' else 1200 if a.case=='body-curb' else 240 if a.case=='gaze' else 90)
   except subprocess.TimeoutExpired:process.kill();process.wait();raise RuntimeError('Ordinary game timed out; see run.log')
  if game_log and game_log.exists():
   after=game_log.stat();offset=log_before.st_size if log_before and after.st_ino==log_before.st_ino and after.st_size>=log_before.st_size else 0
@@ -32,10 +32,10 @@ def main():
  text=(work/'run.log').read_text(errors='replace');mod=(a.profile/'vcmodernhud.log').read_text(errors='replace')
  assertions={'normal_exit':status==0,'no_memory_error':'ERROR: AddressSanitizer' not in text,'no_host_assertion':'reVC ASSERT FAILED' not in text,'mod_loaded':any(int(n)>=162 for n in re.findall(r'found table with (\d+) hooks',mod)) and 'staying vanilla' not in mod,'full_game_render':capture.exists() and capture.stat().st_size>10000,'no_native_overlap':not re.search(r'native_blocked=[1-9]',text),'no_protocol_pause':'[gameplay-wing] paused' not in text,'no_numerical_fallback':'numerical boundary handoff' not in text}
  if not a.experimental_wing:assertions['native_default_motion']='owner=coordinator' not in text
- if a.case not in ['normal','body-vehicles','body-curb','body-bump']:
+ if a.case not in ['normal','body-vehicles','body-curb','body-bump','gaze']:
   terrain=re.findall(r'terrain coverage=(PASS|FAIL) penetration=(PASS|FAIL)',text);assertions.update(terrain_collision_coverage=bool(terrain) and all(c=='PASS' for c,p in terrain),no_ground_tunneling=bool(terrain) and all(p=='PASS' for c,p in terrain))
  if binary.name=='vcLauncher':assertions['bundle_signature_intact']=subprocess.run(['codesign','--verify','--deep','--strict',str(app)],stdout=subprocess.DEVNULL,stderr=subprocess.DEVNULL).returncode==0
- if a.case not in ['normal','dodo','miss','impact','body-ground','body-bullets','body-tail','body-vehicles','body-curb','body-bump']:
+ if a.case not in ['normal','dodo','miss','impact','body-ground','body-bullets','body-tail','body-vehicles','body-curb','body-bump','gaze']:
   proofs=re.findall(r'native-query-proof[^\n]*result=(PASS|FAIL)',text);assertions.update(owner_acquired='owner=coordinator' in text,native_queries=bool(proofs) and all(x=='PASS'for x in proofs))
  if a.case in ['hit','external','graze']:assertions.update(visible_fracture='[regular-wing-smoke] visible fracture' in text,retired_repair='retired-aircraft repair result=PASS' in text,repaired_rig='repaired-rig result=PASS' in text,damage_capture=Path(str(capture)+'.damaged.ppm').exists())
  if a.case=='graze':
@@ -47,6 +47,19 @@ def main():
   assertions.update(no_fracture='[regular-wing-smoke] visible fracture' not in text,native_free_flight='owner=coordinator' not in text)
  if a.case=='body-tail':assertions.update(crash_then_tail_lifetime='crash then tail shooting retains aircraft result=PASS' in text,after_crash_exit='after real crash exit result=PASS' in text,no_downward_floor_recovery='floor recovery direction result=FAIL' not in text)
  if a.case=='body-ground':assertions.update(real_ground_wing_strike='ground wing strike result=PASS' in text)
+ if a.case=='gaze':
+  # Bystanders idle around Tommy (tools/host/GazeSmoke.cpp): the reachable ones
+  # glance at him, the game keeps each glance (none dropped at once), their heads
+  # visibly turn, a drawn pistol brings stares, and the one beyond a head's reach
+  # is never asked to look.
+  rows=re.findall(r'\[gaze-smoke\] bystander=(\d+) model=(\d+) female=(\d) reachable=(\d) alive=(\d) glances=(\d+) looked_s=(\S+) shortest_s=(\S+) longest_s=(\S+) armed_longest_s=(\S+) max_head_yaw=(\S+)',text)
+  reach=[r for r in rows if r[3]=='1'];looked=[r for r in reach if int(r[5])>0]
+  assertions.update(gaze_placed='[gaze-smoke] placed bystanders=5' in text,gaze_complete='[gaze-smoke] complete' in text and len(rows)==5,
+   gaze_glances=bool(reach) and all(int(r[5])>=1 for r in reach),
+   gaze_holds=bool(looked) and all(float(r[7])>=.8 for r in looked),
+   gaze_turns_head=bool(looked) and all(float(r[10])>=.3 for r in looked),
+   gaze_armed_stare=sum(1 for r in reach if float(r[9])>=2.5)>=2,
+   gaze_unreachable_left=bool(rows) and all(int(r[5])==0 for r in rows if r[3]=='0'))
  if a.case in ['body-curb','body-bump']:
   # The plastic push never moves material toward the body's underside.
   pushes=re.findall(r'\] yield frame=\d+ .*? local=\S+ \S+ (\S+)',text)

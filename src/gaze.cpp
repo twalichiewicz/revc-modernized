@@ -34,6 +34,8 @@ bool gPlayerDriving;     // his look is ours, so we end it
 
 // CPed fields (source host layout; asserted in tools/host/SourceABI.cpp).
 bool Looking(const uint8_t *ped) { return (ped[0x188] & 0x10) != 0; } // bIsLooking
+uint8_t *LookTarget(uint8_t *ped) { return *reinterpret_cast<uint8_t **>(ped + 0x678); }   // m_pLookTarget
+uint32_t &LookTimer(uint8_t *ped) { return *reinterpret_cast<uint32_t *>(ped + 0x690); }   // m_lookTimer
 float BodyHeading(const uint8_t *ped) { return *reinterpret_cast<const float *>(ped + 0x46c); } // m_fRotationCur
 int32_t &LookFlags(uint8_t *ped) { return *reinterpret_cast<int32_t *>(ped + 0x2e8); }         // m_pedIK.m_flags
 constexpr int32_t kHeadOnly = 2;                                                               // CPedIK::LOOKAROUND_HEAD_ONLY
@@ -169,6 +171,13 @@ void Frame(uint8_t *player)
 		if (!g)
 			continue;
 		uint8_t *target = g.target == tommy.id ? player : peds[g.target];
+		if (g.extend) {
+			// Still watching him: move the game's end of this look (SetLookTimer
+			// only starts a timer, it never extends one).
+			if (Looking(ped) && LookTarget(ped) == target)
+				LookTimer(ped) = now + g.ms;
+			continue;
+		}
 		gLookAt(ped, target, false, false);
 		api.SetLookTimer(ped, int(g.ms));
 		if (Smoke())

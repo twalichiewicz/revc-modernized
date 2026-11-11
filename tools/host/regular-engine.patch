@@ -1677,3 +1677,17 @@ index e0abb4d..28f0433 100644
  	static float GetWorldX(int x) { return x*SECTOR_SIZE_X + WORLD_MIN_X; }
  	static float GetWorldY(int y) { return y*SECTOR_SIZE_Y + WORLD_MIN_Y; }
  
+diff --git a/src/peds/Ped.cpp b/src/peds/Ped.cpp
+index aa63c32..9c7bb8d 100644
+--- a/src/peds/Ped.cpp
++++ b/src/peds/Ped.cpp
+@@ -1112,7 +1112,8 @@ CPed::MoveHeadToLook(void)
+ 
+ 	if (m_pLookTarget) {
+ 		if (m_pLookTarget->IsPed()) {
+-			((CPed*)m_pLookTarget)->m_pedIK.GetComponentPosition(lookPos, PED_MID);
++			// A person is looked at in the face, not the chest (#56).
++			((CPed*)m_pLookTarget)->m_pedIK.GetComponentPosition(lookPos, PED_HEAD);
+ 		} else {
+ 			lookPos = m_pLookTarget->GetPosition();
+ 		}

@@ -27,20 +27,26 @@ struct Seen {
 
 // One looker's state between frames (ms on the game clock).
 struct Memory {
-	uint32_t until = 0; // looking at `target` till then
-	uint32_t next = 0;  // no new glance before then
+	uint32_t until = 0;   // looking at `target` till then
+	uint32_t next = 0;    // no new glance before then
+	uint32_t started = 0; // when this look began
 	int target = -1;
 };
+// A look at Tommy is kept up while he stays in view, at most this long (ms).
+constexpr uint32_t kTrackCalm = 6000, kTrackArmed = 10000;
 
 struct Glance {
 	int target = -1;
-	uint32_t ms = 0; // how long to keep looking
+	uint32_t ms = 0;     // how long to keep looking (from now)
+	bool extend = false; // keeps the current look going: move its end, don't start another
 	explicit operator bool() const { return target >= 0; }
 };
 
 constexpr float kNotice = 12;     // m: no one further away is looked at
-constexpr float kClose = 2.5f;    // m: this close, someone is noticed from any side
-constexpr float kField = 1.92f;   // rad (110 degrees) either side of the body's heading
+// rad (80 degrees) either side of the body's heading: within the head's own
+// reach (CPedIK turns it 90 degrees; women's walks and ducking turn the head
+// only, and the game drops a look it can't reach at once).
+constexpr float kField = 1.40f;
 constexpr float kOthers = 6;      // m: other bystanders are only glanced at this close
 
 float Wrap(float angle);                     // to [-pi, pi)
@@ -49,8 +55,8 @@ float HeadingTo(Point from, Point to);       // the heading facing `to` from `fr
 // its body facing `heading`; 0 when it wouldn't look at all.
 float Rate(Point eye, float heading, const Seen &seen);
 // A bystander on foot with nothing else to do. `roll` and `roll2` are uniform
-// in [0, 1), fresh each frame; dt in seconds. Returns a new glance or nothing
-// (nothing also while one is under way, which the game keeps up).
+// in [0, 1), fresh each frame; dt in seconds. Returns a new glance, an extension
+// of a look at Tommy while he stays in view (`extend`), or nothing.
 Glance Choose(Point eye, float heading, const Seen *seen, int count, Memory &memory, uint32_t now, float dt, float roll,
 	      float roll2);
 
