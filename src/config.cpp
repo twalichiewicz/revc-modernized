@@ -189,6 +189,8 @@ void Apply(const char *key, const char *value, const char *section)
 		gConfig.npcReactions = b;
 	else if (!strcasecmp(key, "Gaze"))
 		gConfig.gaze = b;
+	else if (!strcasecmp(key, "FootPlant"))
+		gConfig.footPlant = b;
 	else if (!strcasecmp(key, "WorldPopulation"))
 		gConfig.worldPopulation = b;
 	else if (!strcasecmp(key, "RaceArrows"))

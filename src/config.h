@@ -55,6 +55,7 @@ struct Config {
 	bool climb = true;          // the jump button vaults, climbs ledges and climbs out of the water
 	bool fallDamage = true;     // falls hurt as they would (nobody lives through five storeys), armour or not
 	bool crouchWalk = true;     // crouched, he walks crouched instead of standing up
+	bool footPlant = true;      // his feet planted on kerbs, slopes and stairs (hips down, knees bent)
 	bool firstPersonMovement = true; // first person: the stick moves him at once, CS 1.6's acceleration and friction
 	float fpAccel = 5.0f, fpFriction = 4.0f; // ... how fast he gets up to speed and stops (CS's)
 	bool firstPersonLook = true; // first person: the right stick turns as modern console shooters do

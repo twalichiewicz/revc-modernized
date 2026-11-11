@@ -19,6 +19,7 @@ namespace aimcam {bool BeforeControl(){return false;}void AfterControl(uint8_t *
 namespace fpwalk {bool BeforeControl(){return false;}void AfterControl(uint8_t *,bool){}bool BeforeWeapon(){return false;}void AfterWeapon(bool){} }
 namespace drivers {void Frame(){} }
 namespace gaze {void Frame(uint8_t *){} }
+namespace footplant {float Pose(uint8_t *, body::Pose &){return 0;} }
 namespace reactions {void Frame(){}void BeforePreRender(uint8_t *){}void AfterPreRender(uint8_t *){}void Hit(uint8_t *,uint8_t *,int,int){} }
 namespace achievements { void Damaged(uint8_t *, uint8_t *, int, bool) {} }
 namespace driveby {void PilotHolster(uint8_t *){}void PreRender(uint8_t *){} }

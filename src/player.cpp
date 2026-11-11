@@ -20,6 +20,7 @@
 #include "jetboardingpose.h"
 #include "log.h"
 #include "rumble.h"
+#include "footplant.h"
 #include "gaze.h"
 #include "reactions.h"
 #include "seatgun.h"
@@ -92,6 +93,13 @@ void Hook_PreRender(uint8_t *ped)
 			body::ApplyOver(ped, pose, weight);
 		} else {
 			aimcam::PoseArms(ped);
+			// His feet on the ground under them: hips and legs over the animation.
+			if (body::Prepare(ped)) {
+				body::Pose pose;
+				const float weight = footplant::Pose(ped, pose);
+				if (weight > 0)
+					body::ApplyOver(ped, pose, weight);
+			}
 		}
 	}
 	jetboardingpose::BeforePedRender(ped);

@@ -32,6 +32,7 @@ PLUGIN += src/jetshadow.cpp
 PLUGIN += src/jetboardingpose.cpp
 PLUGIN += src/handlingmodel.cpp src/handling.cpp src/drivelog.cpp src/headbalance.cpp
 PLUGIN += src/gazemodel.cpp src/gaze.cpp
+PLUGIN += src/footplantmodel.cpp src/footplant.cpp
 PLUGIN += src/glassmodel.cpp src/carglass.cpp
 PLUGIN += src/partsmodel.cpp src/carparts.cpp src/panelphysics.cpp src/panelcollision.cpp src/crashdamage.cpp
 PLUGIN += src/dentmodel.cpp src/carimpact.cpp
@@ -1080,3 +1081,10 @@ $(BUILD)/test_gazemodel: tests/test_gazemodel.cpp src/gazemodel.cpp src/gazemode
 test-gazemodel: $(BUILD)/test_gazemodel
 	$(BUILD)/test_gazemodel
 test: test-gazemodel
+# Tommy's feet on uneven ground (#40): hips and feet following kerbs, slopes, stairs.
+$(BUILD)/test_footplantmodel: tests/test_footplantmodel.cpp src/footplantmodel.cpp src/footplantmodel.h | $(BUILD)
+	$(CXX) $(CXXFLAGS) -Isrc -o $@ tests/test_footplantmodel.cpp src/footplantmodel.cpp
+.PHONY: test-footplantmodel
+test-footplantmodel: $(BUILD)/test_footplantmodel
+	$(BUILD)/test_footplantmodel
+test: test-footplantmodel
